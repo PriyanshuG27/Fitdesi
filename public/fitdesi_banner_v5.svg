@@ -274,7 +274,7 @@
       <!-- Simulated Button -->
       <g>
         <rect class="mock-button" x="142" y="48" width="46" height="18" rx="4" fill="#FF5C00" />
-        <text class="mock-button-text" x="165" y="60" class="font-body" font-weight="700" font-size="8" fill="#FFFFFF" text-anchor="middle">START</text>
+        <text class="mock-button-text font-body" x="165" y="60" font-weight="700" font-size="8" fill="#FFFFFF" text-anchor="middle">START</text>
       </g>
     </g>
 
