@@ -131,15 +131,19 @@
     <!-- Description -->
     <text x="3" y="202" class="font-body" font-weight="400" font-size="13" fill="#888888">AI-powered recovery &amp; gym tracking for Indian gym contexts.</text>
 
-    <!-- Tags Row (Neubrutalism Outlines) -->
+    <!-- Tags Row (Neubrutalism Outlines - Modular Layout) -->
     <g transform="translate(3, 230)">
       <!-- Tag 1 -->
-      <rect x="0" y="0" width="136" height="26" rx="6" fill="#111" stroke="#FF5C00" stroke-width="1.5" />
-      <text x="12" y="17" class="font-body" font-weight="700" font-size="10" fill="#FF5C00" letter-spacing="0.5">NEUBRUTALISM UI</text>
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="126" height="26" rx="6" fill="#111" stroke="#FF5C00" stroke-width="1.5" />
+        <text x="12" y="17" class="font-body" font-weight="700" font-size="10" fill="#FF5C00" letter-spacing="0.5">NEUBRUTALISM UI</text>
+      </g>
 
       <!-- Tag 2 -->
-      <rect x="146" y="0" width="156" height="26" rx="6" fill="#111" stroke="#00D4FF" stroke-width="1.5" />
-      <text x="12" y="17" class="font-body" font-weight="700" font-size="10" fill="#00D4FF" letter-spacing="0.5">EQUIPMENT-AWARE PLAN</text>
+      <g transform="translate(136, 0)">
+        <rect x="0" y="0" width="162" height="26" rx="6" fill="#111" stroke="#00D4FF" stroke-width="1.5" />
+        <text x="12" y="17" class="font-body" font-weight="700" font-size="10" fill="#00D4FF" letter-spacing="0.5">EQUIPMENT-AWARE PLAN</text>
+      </g>
     </g>
   </g>
 
