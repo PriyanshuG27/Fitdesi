@@ -1,11 +1,11 @@
 <div align="center">
   <!-- Animated Neubrutalism App Mockup Banner -->
-  <img src="./public/fitdesi_banner.svg" alt="FitDesi Banner" width="100%" />
+  <img src="./public/fitdesi_banner_v3.svg" alt="FitDesi Banner" width="100%" />
 
   <br />
 
   <!-- Animated Glowing Gemini Badge -->
-  <img src="./public/gemini_badge.svg" alt="Powered by Gemini AI" />
+  <img src="./public/gemini_badge_v3.svg" alt="Powered by Gemini AI" />
   
   <h3>⚡ Premium Dark Athletic Gym Tracker &amp; Recovery Platform ⚡</h3>
   
