@@ -1,6 +1,6 @@
 <div align="center">
   <!-- Animated Neubrutalism App Mockup Banner -->
-  <img src="./public/fitdesi_banner_v4.svg" alt="FitDesi Banner" width="100%" />
+  <img src="./public/fitdesi_banner_v5.svg" alt="FitDesi Banner" width="100%" />
 
   <br />
 

@@ -98,6 +98,90 @@
         stroke-dashoffset: 200;
         animation: draw-path 3s ease-out forwards;
       }
+
+      /* ── HOVER INTERACTIONS (CRAZY INTERACTIVE STUFF) ───────────────────── */
+      
+      /* Scale hover elements using their exact coordinates centers as transform-origin */
+      .hover-badge {
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .badge-xp {
+        transform-origin: 467px 92px;
+      }
+      .badge-pr {
+        transform-origin: 467px 202px;
+      }
+      .badge-shield {
+        transform-origin: 740px 125px;
+      }
+
+      .hover-badge:hover {
+        transform: scale(1.1);
+        cursor: pointer;
+      }
+
+      /* Today's Mission Hover Effects */
+      .mission-card-group {
+        cursor: pointer;
+      }
+      .mission-card-frame {
+        transition: stroke 0.3s, filter 0.3s;
+      }
+      .mission-accent-line {
+        transition: stroke 0.3s;
+      }
+      .mock-button {
+        transition: fill 0.3s, filter 0.3s;
+      }
+      .mock-button-text {
+        transition: fill 0.3s;
+      }
+
+      .mission-card-group:hover .mission-card-frame {
+        stroke: #B5FF2D !important;
+        filter: drop-shadow(0 0 6px rgba(181, 255, 45, 0.4));
+      }
+      .mission-card-group:hover .mission-accent-line {
+        stroke: #B5FF2D !important;
+      }
+      .mission-card-group:hover .mock-button {
+        fill: #B5FF2D !important;
+        filter: drop-shadow(0 0 4px rgba(181, 255, 45, 0.6));
+      }
+      .mission-card-group:hover .mock-button-text {
+        fill: #080808 !important;
+      }
+
+      /* Strength Progress Hover Effects */
+      .chart-card-group {
+        cursor: pointer;
+      }
+      .chart-card-frame {
+        transition: stroke 0.3s, filter 0.3s;
+      }
+      .chart-line-glow {
+        transition: opacity 0.3s;
+      }
+
+      .chart-card-group:hover .chart-card-frame {
+        stroke: #B5FF2D !important;
+        filter: drop-shadow(0 0 6px rgba(181, 255, 45, 0.4));
+      }
+      .chart-card-group:hover .chart-line-glow {
+        opacity: 0.6 !important;
+      }
+      .chart-card-group:hover .chart-tooltip {
+        opacity: 1 !important;
+      }
+      
+      /* Brand Logo Header hover effect */
+      .brand-title-group {
+        cursor: pointer;
+      }
+      .brand-title-group:hover .brand-logo-text {
+        fill: url(#cyanLime) !important;
+      }
+    </g>
     </style>
   </defs>
 
@@ -123,7 +207,9 @@
     </g>
 
     <!-- Main Title -->
-    <text x="0" y="142" class="font-display" font-weight="900" font-size="78" fill="url(#textGrad)" letter-spacing="2">FIT<tspan fill="#F0F0F0">DESI</tspan></text>
+    <g class="brand-title-group">
+      <text x="0" y="142" class="font-display brand-logo-text" font-weight="900" font-size="78" fill="url(#textGrad)" letter-spacing="2" style="transition: fill 0.3s;">FIT<tspan fill="#F0F0F0">DESI</tspan></text>
+    </g>
     
     <!-- Tagline -->
     <text x="3" y="178" class="font-body" font-weight="700" font-size="18" fill="#E2E2E2" letter-spacing="1">TRAIN SMARTER. COME BACK STRONGER.</text>
@@ -170,32 +256,33 @@
       <text x="150" y="13" class="font-body" font-weight="700" font-size="9" fill="#F0F0F0">🔥 7</text>
     </g>
 
-    <!-- Screen Content: "Today's Mission" Neubrutalism Card -->
-    <!-- Positioned inside the phone screen -->
-    <g transform="translate(12, 60)">
+    <!-- Screen Content: "Today's Mission" Neubrutalism Card (Interactive Hover) -->
+    <g class="mission-card-group" transform="translate(12, 60)">
       <!-- Card Solid Shadow -->
       <rect x="3" y="3" width="200" height="74" rx="8" fill="#000000" />
       <!-- Card Frame -->
-      <rect x="0" y="0" width="200" height="74" rx="8" fill="#151515" stroke="#FF5C00" stroke-width="1.5" />
+      <rect class="mission-card-frame" x="0" y="0" width="200" height="74" rx="8" fill="#151515" stroke="#FF5C00" stroke-width="1.5" />
       
       <!-- Accent Line Left -->
-      <line x1="0.75" y1="8" x2="0.75" y2="66" stroke="#FF5C00" stroke-width="3" />
+      <line class="mission-accent-line" x1="0.75" y1="8" x2="0.75" y2="66" stroke="#FF5C00" stroke-width="3" />
       
       <text x="12" y="18" class="font-body" font-weight="700" font-size="8" fill="#888888" letter-spacing="0.5">TODAY'S MISSION</text>
       <text x="12" y="34" class="font-display" font-weight="900" font-size="15" fill="#F0F0F0" letter-spacing="0.5">PUSH DAY: POWER</text>
       <text x="12" y="47" class="font-body" font-weight="400" font-size="9" fill="#888888">Bench, OHP, Incline DB</text>
 
       <!-- Simulated Button -->
-      <rect x="142" y="48" width="46" height="18" rx="4" fill="#FF5C00" />
-      <text x="151" y="60" class="font-body" font-weight="700" font-size="8" fill="#FFFFFF">START</text>
+      <g>
+        <rect class="mock-button" x="142" y="48" width="46" height="18" rx="4" fill="#FF5C00" />
+        <text class="mock-button-text" x="165" y="60" class="font-body" font-weight="700" font-size="8" fill="#FFFFFF" text-anchor="middle">START</text>
+      </g>
     </g>
 
-    <!-- Screen Content: "Strength Volume" Line Chart Card -->
-    <g transform="translate(12, 148)">
+    <!-- Screen Content: "Strength Volume" Line Chart Card (Interactive Hover) -->
+    <g class="chart-card-group" transform="translate(12, 148)">
       <!-- Card Solid Shadow -->
       <rect x="3" y="3" width="200" height="92" rx="8" fill="#000000" />
       <!-- Card Frame -->
-      <rect x="0" y="0" width="200" height="92" rx="8" fill="#151515" stroke="#00D4FF" stroke-width="1.5" />
+      <rect class="chart-card-frame" x="0" y="0" width="200" height="92" rx="8" fill="#151515" stroke="#00D4FF" stroke-width="1.5" />
       
       <text x="12" y="16" class="font-body" font-weight="700" font-size="8" fill="#888888" letter-spacing="0.5">STRENGTH PROGRESS</text>
       <text x="12" y="32" class="font-mono" font-weight="700" font-size="14" fill="#00D4FF">4,820 kg <tspan font-family="'Outfit', sans-serif" font-size="8" font-weight="bold" fill="#B5FF2D">+14%</tspan></text>
@@ -204,21 +291,29 @@
       <line x1="20" y1="52" x2="180" y2="52" stroke="#222222" stroke-width="1" stroke-dasharray="2" />
       <line x1="20" y1="72" x2="180" y2="72" stroke="#222222" stroke-width="1" stroke-dasharray="2" />
 
-      <!-- Chart Glowing Line Path (Dynamic animation) -->
-      <path d="M 22,78 L 48,72 L 74,74 L 100,58 L 126,62 L 152,48 L 178,38" fill="none" stroke="#00D4FF" stroke-width="4" opacity="0.3" stroke-linecap="round" stroke-linejoin="round" style="filter: url(#glow-cyan);" />
+      <!-- Chart Glowing Line Path -->
+      <path class="chart-line-glow" d="M 22,78 L 48,72 L 74,74 L 100,58 L 126,62 L 152,48 L 178,38" fill="none" stroke="#00D4FF" stroke-width="4" opacity="0.3" stroke-linecap="round" stroke-linejoin="round" style="filter: url(#glow-cyan);" />
       <path d="M 22,78 L 48,72 L 74,74 L 100,58 L 126,62 L 152,48 L 178,38" fill="none" stroke="#00D4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animated-graph-path" />
 
       <!-- Glowing Endpoint Dot -->
       <circle cx="178" cy="38" r="3" fill="#B5FF2D" style="filter: url(#glow-cyan);" class="anim-pulse" />
+
+      <!-- Interactive Tooltip (Shown on Hover) -->
+      <g class="chart-tooltip" opacity="0" style="transition: opacity 0.3s; pointer-events: none;">
+        <!-- Tooltip box -->
+        <rect x="130" y="10" width="48" height="20" rx="4" fill="#080808" stroke="#B5FF2D" stroke-width="1" />
+        <text x="154" y="23" class="font-mono" font-weight="700" font-size="8" fill="#B5FF2D" text-anchor="middle">62.5 kg</text>
+        <!-- Connector line to chart line -->
+        <line x1="152" y1="30" x2="152" y2="48" stroke="#B5FF2D" stroke-width="1" stroke-dasharray="2" />
+      </g>
     </g>
   </g>
 
-  <!-- ── FLOATING DECORATIONS (Z-INDEX SIMULATION) ─────────────────────────── -->
-  <!-- Positioned container + child CSS floats prevent position reset bug -->
+  <!-- ── FLOATING DECORATIONS (Z-INDEX SIMULATION WITH HOVER) ──────────────── -->
   
   <!-- Floating Badge 1: "+50 XP" -->
   <g transform="translate(425, 75)">
-    <g class="anim-float-slow">
+    <g class="anim-float-slow hover-badge badge-xp">
       <rect x="0" y="0" width="85" height="34" rx="8" fill="#111111" stroke="#00D4FF" stroke-width="1.5" style="filter: drop-shadow(0 4px 10px rgba(0,212,255,0.25));" />
       <circle cx="16" cy="17" r="4.5" fill="#00D4FF" class="anim-pulse" />
       <text x="28" y="21" class="font-body" font-weight="700" font-size="11" fill="#00D4FF">+50 XP</text>
@@ -227,7 +322,7 @@
 
   <!-- Floating Badge 2: "PR BROKEN" -->
   <g transform="translate(415, 185)">
-    <g class="anim-float-medium">
+    <g class="anim-float-medium hover-badge badge-pr">
       <rect x="0" y="0" width="105" height="34" rx="8" fill="#111111" stroke="#B5FF2D" stroke-width="1.5" style="filter: drop-shadow(0 4px 10px rgba(181,255,45,0.2));" />
       <!-- Small Trophy Icon in SVG path -->
       <path d="M 12,12 L 18,12 L 18,14 Q 18,18 15,18 Q 12,18 12,14 Z" fill="#B5FF2D" />
@@ -238,7 +333,7 @@
 
   <!-- Floating Badge 3: Streak shield -->
   <g transform="translate(710, 100)">
-    <g class="anim-float-slow" style="animation-delay: -2.5s;">
+    <g class="anim-float-slow hover-badge badge-shield" style="animation-delay: -2.5s;">
       <rect x="0" y="0" width="60" height="50" rx="10" fill="#111111" stroke="#FF5C00" stroke-width="1.5" style="filter: drop-shadow(0 4px 10px rgba(255,92,0,0.15));" />
       <text x="30" y="22" class="font-body" font-weight="700" font-size="14" text-anchor="middle" fill="#FF5C00">🛡️</text>
       <text x="30" y="38" class="font-body" font-weight="700" font-size="7" text-anchor="middle" fill="#888888" letter-spacing="0.5">SHIELD</text>
