@@ -22,12 +22,18 @@ export const mockDoc = vi.fn((_db, ...pathSegments) => ({
 }));
 export const mockSetDoc = vi.fn();
 export const mockGetDoc = vi.fn();
+export const mockGetDocs = vi.fn();
+export const mockCollection = vi.fn();
+export const mockUpdateDoc = vi.fn();
+export const mockAddDoc = vi.fn();
 export const mockServerTimestamp = vi.fn(() => ({ _type: 'serverTimestamp' }));
 
 // ─── Singleton stubs (src/lib/firebase.js) ───────────────────────────────────
-export const mockAuth = { currentUser: null };
-export const mockDb = { _type: 'firestore' };
-export const mockFunctions = { _type: 'functions' };
+const mockAuth = { currentUser: null };
+const mockDb = { _type: 'firestore' };
+const mockFunctions = { _type: 'functions' };
+
+export { mockAuth, mockDb, mockFunctions };
 
 // ─── Wire up module mocks ────────────────────────────────────────────────────
 
@@ -58,8 +64,10 @@ vi.mock('firebase/firestore', () => ({
   doc: mockDoc,
   setDoc: mockSetDoc,
   getDoc: mockGetDoc,
-  getDocs: vi.fn(),
-  collection: vi.fn(),
+  updateDoc: mockUpdateDoc,
+  addDoc: mockAddDoc,
+  getDocs: mockGetDocs,
+  collection: mockCollection,
   serverTimestamp: mockServerTimestamp,
   writeBatch: vi.fn(),
   getFirestore: vi.fn(() => mockDb),
@@ -83,7 +91,11 @@ vi.mock('framer-motion', () => ({
         // Return a forwardRef component for any HTML element (motion.div, motion.span, etc.)
         const { forwardRef } = require('react');
         return forwardRef((props, ref) => {
-          const { children, initial, animate, transition, exit, whileHover, whileTap, ...rest } = props;
+          const {
+            children, initial, animate, transition, exit,
+            whileHover, whileTap, onAnimationComplete,
+            ...rest
+          } = props;
           const Component = prop;
           return require('react').createElement(Component, { ...rest, ref }, children);
         });
@@ -91,4 +103,7 @@ vi.mock('framer-motion', () => ({
     }
   ),
   AnimatePresence: ({ children }) => children,
+  // useReducedMotion must be exported so any component calling it won't crash
+  useReducedMotion: () => false,
 }));
+

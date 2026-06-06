@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './lib/firebase';
 import { useAuthStore } from './stores/authStore';
 import { useDeviceLayout } from './hooks/useDeviceLayout';
 
@@ -18,9 +19,9 @@ import { OnboardingGuard } from './components/shared/OnboardingGuard';
 import { LandingPage } from './components/shared/LandingPage';
 import { LoginPage }   from './components/shared/LoginPage';
 import { SignupPage }  from './components/shared/SignupPage';
+import { OnboardingPage } from './components/shared/OnboardingPage';
 
 // Mobile Screens
-import { MobileOnboarding }     from './components/mobile/MobileOnboarding';
 import { MobileHome }           from './components/mobile/MobileHome';
 import { MobileLogger }         from './components/mobile/MobileLogger';
 import { MobileSessionComplete } from './components/mobile/MobileSessionComplete';
@@ -30,7 +31,6 @@ import { MobileChallenges }     from './components/mobile/MobileChallenges';
 import { MobileProfile }        from './components/mobile/MobileProfile';
 
 // Desktop Screens
-import { DesktopOnboarding } from './components/desktop/DesktopOnboarding';
 import { DesktopDashboard }  from './components/desktop/DesktopDashboard';
 import { DesktopLoggerPanel } from './components/desktop/DesktopLoggerPanel';
 import { DesktopProgress }   from './components/desktop/DesktopProgress';
@@ -48,7 +48,7 @@ function AppRoutes({ layout }) {
   const LayoutShell = isMobile ? MobileApp : DesktopApp;
 
   // Onboarding component picks based on layout
-  const OnboardingScreen  = isMobile ? MobileOnboarding  : DesktopOnboarding;
+  const OnboardingScreen  = OnboardingPage;
   const HomeScreen        = isMobile ? MobileHome        : DesktopDashboard;
   const WorkoutScreen     = isMobile ? MobileLogger      : DesktopLoggerPanel;
   const CompleteScreen    = isMobile ? MobileSessionComplete : DesktopDashboard;
@@ -104,7 +104,7 @@ function AppRoutes({ layout }) {
 
 // ─── App root ─────────────────────────────────────────────────────────────────
 function App() {
-  const { setUser, setLoading } = useAuthStore();
+  const { setUser, setLoading, setProfile } = useAuthStore();
 
   // layout is detected ONCE at root — 'mobile' | 'desktop'
   // Debounced resize listener inside the hook (100ms) prevents thrash.
@@ -114,12 +114,29 @@ function App() {
   // Single onAuthStateChanged — source of truth for session persistence.
   // Firebase IndexedDB keeps the session across refreshes (no logout on F5).
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser ?? null);
-      setLoading(false);
+      if (firebaseUser) {
+        setLoading(true);
+        try {
+          const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (snap.exists()) {
+            setProfile(snap.data());
+          } else {
+            setProfile(null);
+          }
+        } catch (err) {
+          console.error('[App] Error fetching profile:', err);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [setUser, setLoading, setProfile]);
 
   return (
     // ONE BrowserRouter — both MobileApp and DesktopApp share this router context.

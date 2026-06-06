@@ -56,9 +56,17 @@ We integrated client-side SDK initializations and established key exposure safet
 * **Firestore Setup**: Configured a database instance in region `asia-south1` (Mumbai) for low latency.
 
 ### B. Dev Utility Script
-* **File Created**: [`scripts/clearTestData.js`](file:///d:/Fitdesi/scripts/clearTestData.js)
+* **File Created**: [`scripts/clearTestData.cjs`](file:///d:/Fitdesi/scripts/clearTestData.cjs) (renamed to `.cjs` for proper CommonJS execution)
   * Uses `firebase-admin` (Node.js SDK) and a secure service account key config to automate clearing test data.
   * Wipes all mock/test users from Firebase Auth and deletes their associated user profile documents from Firestore to keep emails and database size clean.
+
+### C. Sanitised Firestore Write Utilities
+* **File Created**: [`src/lib/firestoreUtils.js`](file:///d:/Fitdesi/src/lib/firestoreUtils.js)
+  * Validates and sanitises all database mutations client-side (to catch accidental data corruption early).
+  * Enforces parameter whitelisting for profiles, string trimming, string bounds (max 200 chars), numeric parsing (`isNaN` & `isFinite` checks), and list deduplication.
+  * Sanitises exercise lists: strips HTML elements (e.g. `<, >, &, ", '`) from name entries to prevent XSS injection.
+  * Utilises atomic `WriteBatch` scopes for session commits.
+  * **Automated Tests**: Developed 9 new specs in [`src/__tests__/firestoreUtils.test.jsx`](file:///d:/Fitdesi/src/__tests__/firestoreUtils.test.jsx) covering all sanitisation edge cases (validates empty UIDs, negative volume boundaries, and HTML stripping checks).
 
 ---
 
@@ -72,6 +80,20 @@ We developed core interface frames that seamlessly handle authorization state ch
   * Max-width card layout with email and password inputs (with hide/show visibility toggles).
   * Implements a persistent client-side cooldown lock backing statistics in `localStorage`. If a user fails to authenticate 3 times, a 30-second form cooldown lock triggers and persists even if they reload/refresh (F5) the browser.
 * **SignupPage**: Includes name, email, password input validation, and a dynamic 3-bar color-coded password strength meter.
+* **OnboardingPage**:
+  * Unified the mobile and desktop onboarding flows into a single responsive, premium shared layout component: [`src/components/shared/OnboardingPage.jsx`](file:///d:/Fitdesi/src/components/shared/OnboardingPage.jsx) which leverages [`src/components/shared/OnboardingLayout.jsx`](file:///d:/Fitdesi/src/components/shared/OnboardingLayout.jsx).
+  * Retained the 6-step setup process: **Identity** (User Type), **Body** (Age/Gender/Height/Weight), **Goal**, **Gym** (Frequency/Duration/Equipment categories), **Lifestyle** (Diet/Supplements), and **Health** (Medical Flags).
+  * Fully replaced all emoji indicators with clean **Lucide React** icons.
+  * Added a "Select All" helper link for the categorized gym equipment listings.
+  * Replaced standard HTML checkboxes with high-touch-target custom toggle switches for medical constraint selections.
+  * Enabled F5-safe state retention: clicking "Back" navigates through steps while naturally keeping prior selections intact.
+  * Wired the "Skip" action on the layout header to navigate directly to `/home`.
+  * Removed legacy, redundant `MobileOnboarding.jsx` and `DesktopOnboarding.jsx` layout files.
+* **`useOnboarding` Hook**:
+  * Created a custom hook in [`src/hooks/useOnboarding.js`](file:///d:/Fitdesi/src/hooks/useOnboarding.js) to manage local onboarding state (saving, error, currentStep, and step selections) without needing global context.
+  * Implements incremental Firestore writes via `updateDoc` (preserving existing user data) on each step completion using `advance()`.
+  * Validates data structure before writing (filters out invalid equipment enums and rejects mismatched strings).
+  * Implements `skip()` and `complete()`, writing accumulated state fields and setting `onboardingComplete: true` upon redirecting the user to `/home`.
 
 ### B. Strict Shell Router Guards
 * **GuestRoute**: Gates `/login` and `/signup`. Redirects authenticated users back to `/home`. Honors post-login navigation targets using router location state preservation (directs users back to the page they originally requested).
@@ -116,10 +138,14 @@ We built a robust automated test configuration under `src/__tests__/` to guarant
 * **`useAuth` Hook Coverage**: Verified login payload dispatching, Firebase error code mappings (user-friendly conversions), signup Firestore structures, and account deletion on Firestore failures (orphan prevention).
 * **Guards & Redirects Coverage**: Verified protected route redirects, guest login intercepts, and onboarding status guards.
 * **Client-Side Form Validation**: Asserted that submit buttons disable automatically on empty/invalid inputs.
+* **Onboarding & Sanitisation Coverage**:
+  * Added [`src/__tests__/onboarding.test.jsx`](file:///d:/Fitdesi/src/__tests__/onboarding.test.jsx) and [`src/__tests__/firestoreUtils.test.jsx`](file:///d:/Fitdesi/src/__tests__/firestoreUtils.test.jsx).
+  * Validated that `useOnboarding` hook updates states, triggers incremental Firestore updates, locks routing on write failure, and safely skips or completes.
+  * Verified sanitisation constraints (HTML stripping, whitelisting, list length caps, negative weights and non-positive reps rejection).
 
 ### Test Metrics
-* **Total Executed Tests**: 16 out of 16 tests passing cleanly.
-* **Command to Run**: `npm run test`
+* **Total Executed Tests**: 31 out of 31 tests passing cleanly.
+* **Command to Run**: `npm run test` or `npx vitest run src/__tests__/onboarding.test.jsx`
 
 ---
 

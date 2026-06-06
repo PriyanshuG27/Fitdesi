@@ -20,6 +20,7 @@ export default {
         'secondary-glow': 'var(--secondary-glow)',
         'accent-xp': 'var(--accent-xp)',
         'accent-lime': 'var(--accent-lime)',
+        'border': 'var(--border)',
         'border-base': 'var(--border)',
         'border-bright': 'var(--border-bright)',
         'text-primary': 'var(--text-primary)',

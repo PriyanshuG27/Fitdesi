@@ -11,6 +11,7 @@
  *
  * Actions:
  *   startSession(planDay)      — initialise session from a plan day
+ *   addExercise(exercise)      — append a new exercise with one blank set (used by ExerciseSearch)
  *   logSet(exIdx, setIdx, data)— update reps/weight/completed for a set
  *   addSet(exIdx)              — append a blank set to an exercise
  *   removeSet(exIdx, setIdx)   — remove a specific set
@@ -23,6 +24,33 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+const BODYWEIGHT_EXERCISES = [
+  'push_ups',
+  'pull_ups',
+  'dips',
+  'plank',
+  'hanging_leg_raise',
+  'russian_twists',
+  'ab_wheel_rollouts'
+];
+
+export const isBodyweightExercise = (exerciseKey, exerciseId) => {
+  const cleanKey = (exerciseKey || '').toLowerCase();
+  const cleanId = (exerciseId || '').toLowerCase();
+  return BODYWEIGHT_EXERCISES.some((key) => 
+    cleanKey === key || 
+    cleanId === key || 
+    cleanId.startsWith(key + '_')
+  );
+};
+
+export const getEstimated1RM = (weight, reps, isBW, bodyWeight = 75) => {
+  const parsedWeight = parseFloat(weight) || 0;
+  const parsedReps = parseInt(reps, 10) || 0;
+  const effectiveWeight = isBW ? (bodyWeight + parsedWeight) : parsedWeight;
+  return effectiveWeight * (1 + parsedReps / 30);
+};
+
 export const useWorkoutStore = create(
   persist(
     (set) => ({
@@ -32,16 +60,61 @@ export const useWorkoutStore = create(
       sessionLoading: false,
       sessionError:   null,
 
-      startSession: (planDay) =>
-        set({
-          activeSession:  { planDayId: planDay.id, startedAt: Date.now(), exercises: planDay.exercises },
-          exercises:      planDay.exercises.map((ex) => ({
-            exerciseId: ex.id,
-            name:       ex.name,
-            sets:       [{ reps: '', weight: '', completed: false }],
-          })),
-          elapsedSeconds: 0,
-          sessionError:   null,
+      startSession: (planDayOrMood, stomachFlag = false) => {
+        if (typeof planDayOrMood === 'object' && planDayOrMood !== null) {
+          set({
+            activeSession: {
+              planDayId: planDayOrMood.id,
+              startedAt: Date.now(),
+              exercises: planDayOrMood.exercises,
+              moodTag: 'average',
+              stomachFlag: false
+            },
+            exercises: planDayOrMood.exercises.map((ex) => {
+              const isBW = isBodyweightExercise(ex.key || ex.id, ex.id);
+              return {
+                exerciseId: ex.id,
+                name:       ex.name,
+                sets:       [{ reps: '', weight: isBW ? 'BW' : '', completed: false, done: false }],
+              };
+            }),
+            elapsedSeconds: 0,
+            sessionError:   null,
+          });
+        } else {
+          const mood = typeof planDayOrMood === 'string' ? planDayOrMood : 'average';
+          set({
+            activeSession: {
+              planDayId: 'custom',
+              startedAt: Date.now(),
+              exercises: [],
+              moodTag: mood,
+              stomachFlag: Boolean(stomachFlag)
+            },
+            exercises: [],
+            elapsedSeconds: 0,
+            sessionError:   null,
+          });
+        }
+      },
+
+      // Append a free-choice exercise picked via ExerciseSearch.
+      // A timestamp suffix on the ID means logging the same exercise twice is supported.
+      addExercise: (exercise) =>
+        set((state) => {
+          const isBW = isBodyweightExercise(exercise.key, exercise.key);
+          return {
+            exercises: [
+              ...state.exercises,
+              {
+                exerciseId:  `${exercise.key}_${Date.now()}`,
+                exerciseKey: exercise.key,
+                name:        exercise.name,
+                muscleGroup: exercise.muscleGroup,
+                sets:        [{ reps: '', weight: isBW ? 'BW' : '', completed: false, done: false }],
+              },
+            ],
+          };
         }),
 
       logSet: (exIdx, setIdx, data) =>
@@ -54,11 +127,53 @@ export const useWorkoutStore = create(
           return { exercises };
         }),
 
+      updateSet: (exerciseId, setIndex, field, value) =>
+        set((state) => {
+          const exercises = state.exercises.map((ex) => {
+            if (ex.exerciseId !== exerciseId) return ex;
+            const sets = ex.sets.map((s, j) => {
+              if (j !== setIndex) return s;
+              return { ...s, [field]: value, completed: false, done: false };
+            });
+            return { ...ex, sets };
+          });
+          return { exercises };
+        }),
+
+      markSetDone: (exerciseId, setIndex) => {
+        let success = true;
+        set((state) => {
+          const exercises = state.exercises.map((ex) => {
+            if (ex.exerciseId !== exerciseId) return ex;
+            const isBW = isBodyweightExercise(ex.exerciseKey, ex.exerciseId);
+            const sets = ex.sets.map((s, j) => {
+              if (j !== setIndex) return s;
+              const isSetBW = s.weight === 'BW';
+              const weight = isSetBW ? 0 : (parseFloat(s.weight) || 0);
+              const reps = parseInt(s.reps, 10) || 0;
+              const isWeightValid = isBW ? (isSetBW || weight >= 0) : (weight > 0);
+              if (!isWeightValid || reps <= 0) {
+                success = false;
+                return s;
+              }
+              return { ...s, completed: true, done: true };
+            });
+            return { ...ex, sets };
+          });
+          return { exercises };
+        });
+        return success;
+      },
+
       addSet: (exIdx) =>
         set((state) => {
           const exercises = state.exercises.map((ex, i) => {
             if (i !== exIdx) return ex;
-            return { ...ex, sets: [...ex.sets, { reps: '', weight: '', completed: false }] };
+            const isBW = isBodyweightExercise(ex.exerciseKey, ex.exerciseId);
+            return {
+              ...ex,
+              sets: [...ex.sets, { reps: '', weight: isBW ? 'BW' : '', completed: false, done: false }]
+            };
           });
           return { exercises };
         }),
@@ -80,6 +195,14 @@ export const useWorkoutStore = create(
 
       clearSession: () =>
         set({ activeSession: null, exercises: [], elapsedSeconds: 0, sessionLoading: false, sessionError: null }),
+
+      resetSession: () =>
+        set({ activeSession: null, exercises: [], elapsedSeconds: 0, sessionLoading: false, sessionError: null }),
+
+      removeExercise: (exerciseId) =>
+        set((state) => ({
+          exercises: state.exercises.filter((ex) => ex.exerciseId !== exerciseId)
+        })),
     }),
     {
       name: 'fitdesi-workout-session',

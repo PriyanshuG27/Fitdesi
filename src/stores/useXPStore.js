@@ -85,4 +85,20 @@ export const useXPStore = create((set, get) => ({
   },
 
   clearPending: () => set({ pendingXP: 0, leveledUp: false }),
+
+  /**
+   * rollbackXP(amount)
+   * Reverses a speculative awardXP call when the Firestore batch fails.
+   * Subtracts amount from totalXP and re-derives the level.
+   */
+  rollbackXP: (amount) => {
+    const newTotal  = Math.max(0, get().totalXP - amount);
+    const derived   = deriveLevel(newTotal);
+    set({
+      totalXP:   newTotal,
+      pendingXP: Math.max(0, get().pendingXP - amount),
+      leveledUp: false,
+      ...derived,
+    });
+  },
 }));

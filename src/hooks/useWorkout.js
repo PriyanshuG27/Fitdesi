@@ -9,27 +9,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useWorkoutStore } from '../stores/useWorkoutStore';
-import { useXPStore } from '../stores/useXPStore';
+import { useWorkoutStore, isBodyweightExercise, getEstimated1RM } from '../stores/useWorkoutStore';
 import { useUIStore } from '../stores/useUIStore';
-
-const LEVELS = [
-  { level: 1, name: 'Rookie',     threshold: 0     },
-  { level: 2, name: 'Challenger', threshold: 500   },
-  { level: 3, name: 'Hustler',    threshold: 1500  },
-  { level: 4, name: 'Warrior',    threshold: 3000  },
-  { level: 5, name: 'Elite',      threshold: 5500  },
-  { level: 6, name: 'Legend',     threshold: 10000 },
-];
-
-function deriveLevel(xp) {
-  let current = LEVELS[0];
-  for (const l of LEVELS) {
-    if (xp >= l.threshold) current = l;
-    else break;
-  }
-  return { level: current.level, levelName: current.name };
-}
+import { useXPEngine, evaluateStreak } from './useXPEngine';
 
 export function useWorkout() {
   const { user } = useAuthStore();
@@ -41,8 +23,8 @@ export function useWorkout() {
     setSessionError, 
     clearSession 
   } = useWorkoutStore();
-  
-  const { setXP } = useXPStore();
+
+  const { awardXP } = useXPEngine();
   const { addToast } = useUIStore();
 
   const saveSession = useCallback(async () => {
@@ -75,81 +57,77 @@ export function useWorkout() {
       const completedExercises = [];
 
       exercises.forEach((ex) => {
-        const completedSets = ex.sets
-          .filter((s) => s.completed)
-          .map((s) => ({
-            weight: parseFloat(s.weight) || 0,
-            reps: parseInt(s.reps, 10) || 0,
-          }));
+        const completedSets = ex.sets.filter((s) => s.completed || s.done);
 
         if (completedSets.length === 0) return;
+
+        const mappedSets = completedSets.map((s) => ({
+          weight: s.weight === 'BW' ? 0 : (parseFloat(s.weight) || 0),
+          reps: parseInt(s.reps, 10) || 0,
+        }));
 
         completedExercises.push({
           exerciseId: ex.exerciseId,
           name: ex.name,
-          sets: completedSets,
+          sets: mappedSets,
         });
 
-        // Find the best set (highest weight, then highest reps)
+        const isBW = isBodyweightExercise(ex.exerciseKey, ex.exerciseId);
+        const userBodyweight = userData.weightKg || 75;
+
+        // Find the best set using Epley 1RM
         let bestSet = completedSets[0];
-        completedSets.forEach((set) => {
-          if (set.weight > bestSet.weight) {
-            bestSet = set;
-          } else if (set.weight === bestSet.weight && set.reps > bestSet.reps) {
-            bestSet = set;
+        let bestSetWeight = bestSet.weight === 'BW' ? 0 : (parseFloat(bestSet.weight) || 0);
+        let bestSetReps = parseInt(bestSet.reps, 10) || 0;
+        let bestSet1RM = getEstimated1RM(bestSetWeight, bestSetReps, isBW, userBodyweight);
+
+        completedSets.forEach((s) => {
+          const sWeight = s.weight === 'BW' ? 0 : (parseFloat(s.weight) || 0);
+          const sReps = parseInt(s.reps, 10) || 0;
+          const s1RM = getEstimated1RM(sWeight, sReps, isBW, userBodyweight);
+          if (s1RM > bestSet1RM) {
+            bestSet = s;
+            bestSetWeight = sWeight;
+            bestSetReps = sReps;
+            bestSet1RM = s1RM;
           }
         });
 
         const existingPR = currentPRsMap[ex.exerciseId];
-        const isNewPR =
-          !existingPR ||
-          bestSet.weight > existingPR.weight ||
-          (bestSet.weight === existingPR.weight && bestSet.reps > existingPR.reps);
+        const existing1RM = existingPR
+          ? getEstimated1RM(
+              existingPR.weight === 'BW' ? 0 : (parseFloat(existingPR.weight) || 0),
+              parseInt(existingPR.reps, 10) || 0,
+              isBW,
+              userBodyweight
+            )
+          : 0;
+
+        const isNewPR = bestSet1RM > existing1RM;
 
         if (isNewPR) {
           newPRList.push({
             exerciseId: ex.exerciseId,
             name: ex.name,
-            weight: bestSet.weight,
-            reps: bestSet.reps,
+            weight: bestSetWeight,
+            reps: bestSetReps,
           });
         }
       });
 
-      // 4. Calculate Streak
-      let newStreak = currentStreak;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
+      // 4. Calculate Streak via XP engine utility
       let lastDate = null;
       if (streakLastDate) {
-        lastDate = typeof streakLastDate.toDate === 'function' 
-          ? streakLastDate.toDate() 
+        lastDate = typeof streakLastDate.toDate === 'function'
+          ? streakLastDate.toDate()
           : new Date(streakLastDate);
       }
+      const { newStreak, streakBonuses } = evaluateStreak(lastDate, currentStreak);
 
-      if (!lastDate) {
-        newStreak = 1;
-      } else {
-        const prev = new Date(lastDate);
-        prev.setHours(0, 0, 0, 0);
-        
-        const diffTime = today - prev;
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (diffDays === 1) {
-          newStreak = currentStreak + 1;
-        } else if (diffDays > 1) {
-          newStreak = 1;
-        }
-      }
-
-      // 5. Calculate XP and Level
-      const baseXP = 55; // 50 complete + 5 for logging session
-      const prXP = newPRList.length * 25;
+      // 5. Calculate XP (base + per-PR)
+      const baseXP = 55; // session_logged award
+      const prXP = newPRList.length * 25;   // pr_hit award per PR
       const xpToAdd = baseXP + prXP;
-      const newXP = currentXP + xpToAdd;
-      const { level: newLevel, levelName: newLevelName } = deriveLevel(newXP);
 
       // 6. Bundle mutations into an atomic batch write
       const batch = writeBatch(db);
@@ -196,24 +174,29 @@ export function useWorkout() {
         });
       });
 
-      // Update root user profile
+      // Update streak on the user profile (XP written separately via engine)
       batch.update(userRef, {
-        xp:             newXP,
-        level:          newLevel,
-        levelName:      newLevelName,
         streak:         newStreak,
         streakLastDate: serverTimestamp(),
       });
 
-      // Commit the entire batch atomically
+      // Commit session + PR + streak atomically
       await batch.commit();
 
-      // Sync local XP State
-      setXP(newXP, newStreak);
+      // 7. Award XP via engine (handles level derivation + xpLog + local store sync)
+      const sessionXPResult = await awardXP(user.uid, 'session_logged', xpToAdd);
+
+      // Award streak bonuses if applicable
+      for (const bonusSource of streakBonuses) {
+        await awardXP(user.uid, bonusSource);
+      }
 
       // Notification toasts
       if (newPRList.length > 0) {
         addToast(`🔥 ${newPRList.length} New Personal Record${newPRList.length > 1 ? 's' : ''}!`, 'success');
+      }
+      if (sessionXPResult?.levelUp) {
+        addToast(`🎉 Level Up! You're now Level ${sessionXPResult.newLevel} — ${sessionXPResult.newLevelName}!`, 'success');
       }
       addToast(`+${xpToAdd} XP — Session logged! 💪`, 'xp');
 
@@ -225,7 +208,7 @@ export function useWorkout() {
     } finally {
       setSessionLoading(false);
     }
-  }, [user, activeSession, exercises, elapsedSeconds, setXP, addToast, setSessionLoading, setSessionError, clearSession]);
+  }, [user, activeSession, exercises, elapsedSeconds, awardXP, addToast, setSessionLoading, setSessionError, clearSession]);
 
   const cancelSession = useCallback(() => {
     clearSession();

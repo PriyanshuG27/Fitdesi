@@ -1,0 +1,104 @@
+import React from 'react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { mockGetDoc, mockSetDoc } from '../__mocks__/firebase';
+import { usePRDetection } from '../hooks/usePRDetection';
+
+describe('usePRDetection Hook', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('first set ever for an exercise returns isPR: true', async () => {
+    // Mock getDoc resolving to document that does not exist
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => false,
+    });
+
+    const { result } = renderHook(() => usePRDetection());
+    
+    // We use a unique exercise key to bypass any cache from previous test runs
+    const exerciseKey = 'bench_press_new_pr_1';
+    const res = await result.current.checkForPR('user-123', exerciseKey, 60, 8);
+
+    expect(res.isPR).toBe(true);
+    expect(res.prevPR).toBeNull();
+    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('62.5kg after a previous PR of 60kg returns isPR: true', async () => {
+    // Mock getDoc returning existing PR of 60kg x 8 reps
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ weight: 60, reps: 8, exerciseKey: 'squat_pr_2' }),
+    });
+
+    const { result } = renderHook(() => usePRDetection());
+    const exerciseKey = 'squat_pr_2';
+    
+    const res = await result.current.checkForPR('user-123', exerciseKey, 62.5, 5);
+
+    expect(res.isPR).toBe(true);
+    expect(res.prevPR).toEqual({ weight: 60, reps: 8, exerciseKey: 'squat_pr_2' });
+    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('60kg after a previous PR of 62.5kg returns isPR: false', async () => {
+    // Mock getDoc returning existing PR of 62.5kg x 5 reps
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ weight: 62.5, reps: 5, exerciseKey: 'deadlift_pr_3' }),
+    });
+
+    const { result } = renderHook(() => usePRDetection());
+    const exerciseKey = 'deadlift_pr_3';
+
+    const res = await result.current.checkForPR('user-123', exerciseKey, 60, 8);
+
+    expect(res.isPR).toBe(false);
+    expect(res.prevPR).toEqual({ weight: 62.5, reps: 5, exerciseKey: 'deadlift_pr_3' });
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('error in Firestore read returns isPR: false (safe fallback)', async () => {
+    // Mock getDoc throwing an error
+    mockGetDoc.mockRejectedValueOnce(new Error('Firestore read failed'));
+
+    const { result } = renderHook(() => usePRDetection());
+    const exerciseKey = 'overhead_press_pr_4';
+
+    const res = await result.current.checkForPR('user-123', exerciseKey, 50, 5);
+
+    expect(res.isPR).toBe(false);
+    expect(res.prevPR).toBeNull();
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent: calling it twice with same data returns isPR: false the second time due to cache hit', async () => {
+    // First call reads from Firestore and establishes a PR of 50kg
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ weight: 45, reps: 8, exerciseKey: 'barbell_curl_pr_5' }),
+    });
+
+    const { result } = renderHook(() => usePRDetection());
+    const exerciseKey = 'barbell_curl_pr_5';
+
+    // First call: 50kg > 45kg -> isPR: true
+    const res1 = await result.current.checkForPR('user-123', exerciseKey, 50, 8);
+    expect(res1.isPR).toBe(true);
+    expect(mockGetDoc).toHaveBeenCalledTimes(1);
+    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+
+    // Reset mock setDoc to track call count
+    mockSetDoc.mockClear();
+
+    // Second call: 50kg is now cached as the current PR.
+    // 50kg is not > 50kg, so it should be false (idempotent cache hit)
+    const res2 = await result.current.checkForPR('user-123', exerciseKey, 50, 8);
+    expect(res2.isPR).toBe(false);
+    // Should NOT call getDoc again because of cache
+    expect(mockGetDoc).toHaveBeenCalledTimes(1);
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+});
