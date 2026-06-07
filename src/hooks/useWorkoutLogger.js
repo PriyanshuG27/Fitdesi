@@ -46,7 +46,7 @@ import {
 import { db } from '../lib/firebase';
 import { useWorkoutStore } from '../stores/useWorkoutStore';
 import { useXPStore } from '../stores/useXPStore';
-import { evaluateStreak, deriveLevelFromXP } from './useXPEngine';
+import { evaluateStreak, deriveLevelFromXP } from '../lib/xpHelpers';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

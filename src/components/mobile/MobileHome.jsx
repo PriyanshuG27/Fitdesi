@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, Trophy, Zap, Dumbbell, Play, RefreshCw, CalendarDays, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
@@ -8,18 +8,29 @@ import { useXPStore } from '../../stores/useXPStore';
 import { useWeeklyPlan } from '../../hooks/useWeeklyPlan';
 import { useChallenges } from '../../hooks/useChallenges';
 import { WeeklyPlanView } from './WeeklyPlanView';
-import { collection, query, orderBy, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, getDocsFromServer, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useUIStore } from '../../stores/useUIStore';
+import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
+import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
 
 export const MobileHome = () => {
   const navigate = useNavigate();
-  const { profile } = useAuthStore();
+  const location = useLocation();
+  const { profile, uid } = useAuthStore();
   const { generatePlan } = useWeeklyPlan();
   const { addToast, isStandalone, openModal } = useUIStore();
   const { planLoading, currentPlan, planDays, weekId } = usePlanStore();
   const { totalXP, level, levelName, xpToNextLevel, streak, setXP } = useXPStore();
   const { challenges, userProgress } = useChallenges();
+  const {
+    recap,
+    isRecapDay,
+    weekId: recapWeekId,
+    hasSeen,
+    markAsSeen,
+  } = useWeeklyRecap();
+  const [showRecapScreen, setShowRecapScreen] = useState(false);
 
   const [lastSession, setLastSession] = useState(null);
   const [lastSessionLoading, setLastSessionLoading] = useState(true);
@@ -36,15 +47,23 @@ export const MobileHome = () => {
 
   // Fetch last session log
   useEffect(() => {
-    if (!profile?.uid) return;
+    if (!uid) return;
     async function fetchLastSession() {
       try {
         const q = query(
-          collection(db, 'users', profile.uid, 'sessions'),
+          collection(db, 'users', uid, 'sessions'),
           orderBy('date', 'desc'),
           limit(1)
         );
-        const snap = await getDocs(q);
+        let snap;
+        try {
+          // Force fetch from server to bypass query caching and get the newly logged session instantly
+          snap = await getDocsFromServer(q);
+        } catch (serverErr) {
+          console.warn('[MobileHome] getDocsFromServer failed, falling back to cache:', serverErr);
+          // Fallback to cache if offline
+          snap = await getDocs(q);
+        }
         if (!snap.empty) {
           setLastSession({ id: snap.docs[0].id, ...snap.docs[0].data() });
         } else {
@@ -57,7 +76,7 @@ export const MobileHome = () => {
       }
     }
     fetchLastSession();
-  }, [profile?.uid]);
+  }, [uid, location.key]);
 
 
   // Calculate XP percentage inside current level
@@ -105,12 +124,12 @@ export const MobileHome = () => {
     : 0;
 
   const handleUsePowerUp = async (powerUpKey) => {
-    if (!profile?.uid || !profile?.powerUps) return;
+    if (!uid || !profile?.powerUps) return;
     const currentCount = profile.powerUps[powerUpKey] || 0;
     if (currentCount <= 0) return;
 
     try {
-      const userRef = doc(db, 'users', profile.uid);
+      const userRef = doc(db, 'users', uid);
       await updateDoc(userRef, {
         [`powerUps.${powerUpKey}`]: currentCount - 1
       });
@@ -165,6 +184,38 @@ export const MobileHome = () => {
           </div>
         </div>
       </div>
+
+      {/* ─── WEEKLY RECAP BANNER ────────────────────────────────────────────── */}
+      {isRecapDay && !hasSeen && recap && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="border-2 border-[var(--secondary)] bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex items-center justify-between cursor-pointer hover:border-[var(--text-primary)] transition-all animate-pulse"
+          onClick={() => setShowRecapScreen(true)}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📊</span>
+            <div className="flex flex-col">
+              <span className="font-display font-extrabold text-sm uppercase tracking-wide text-[var(--secondary)]">
+                Your weekly recap is ready
+              </span>
+              <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5">
+                See your stats, PRs, and download your shareable card!
+              </p>
+            </div>
+          </div>
+          <ArrowRight size={18} className="text-[var(--text-secondary)]" />
+        </motion.div>
+      )}
+
+      {/* Weekly Recap Modal */}
+      <WeeklyRecapScreen
+        isOpen={showRecapScreen}
+        onClose={() => setShowRecapScreen(false)}
+        recap={recap}
+        weekId={recapWeekId}
+        markAsSeen={markAsSeen}
+      />
 
       {/* ─── PWA INSTALL CARD ────────────────────────────────────────────────── */}
       {!isStandalone && (

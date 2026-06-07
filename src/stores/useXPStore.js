@@ -36,46 +36,26 @@
  */
 
 import { create } from 'zustand';
-
-const LEVELS = [
-  { level: 1, name: 'Rookie',     threshold: 0     },
-  { level: 2, name: 'Challenger', threshold: 500   },
-  { level: 3, name: 'Hustler',    threshold: 1500  },
-  { level: 4, name: 'Warrior',    threshold: 3000  },
-  { level: 5, name: 'Elite',      threshold: 5500  },
-  { level: 6, name: 'Legend',     threshold: 10000 },
-];
-
-function deriveLevel(xp) {
-  let current = LEVELS[0];
-  for (const l of LEVELS) {
-    if (xp >= l.threshold) current = l;
-    else break;
-  }
-  const nextIdx  = LEVELS.indexOf(current) + 1;
-  const next     = LEVELS[nextIdx];
-  const xpToNext = next ? next.threshold - xp : 0;
-  return { level: current.level, levelName: current.name, xpToNextLevel: xpToNext };
-}
+import { deriveLevelFromXP } from '../lib/xpHelpers';
 
 export const useXPStore = create((set, get) => ({
   totalXP:       0,
   level:         1,
   levelName:     'Rookie',
-  xpToNextLevel: 500,
+  xpToNextLevel: 200,
   streak:        0,
   pendingXP:     0,
   leveledUp:     false,
 
   setXP: (total, streak = 0) => {
-    const derived = deriveLevel(total);
+    const derived = deriveLevelFromXP(total);
     set({ totalXP: total, streak, ...derived });
   },
 
   awardXP: (amount) => {
     const prevLevel = get().level;
     const newTotal  = get().totalXP + amount;
-    const derived   = deriveLevel(newTotal);
+    const derived   = deriveLevelFromXP(newTotal);
     set({
       totalXP:   newTotal,
       pendingXP: get().pendingXP + amount,
@@ -93,7 +73,7 @@ export const useXPStore = create((set, get) => ({
    */
   rollbackXP: (amount) => {
     const newTotal  = Math.max(0, get().totalXP - amount);
-    const derived   = deriveLevel(newTotal);
+    const derived   = deriveLevelFromXP(newTotal);
     set({
       totalXP:   newTotal,
       pendingXP: Math.max(0, get().pendingXP - amount),

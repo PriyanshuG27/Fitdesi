@@ -42,6 +42,13 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
       return;
     }
 
+    const cacheKey = `${uid}_${exerciseKey}_${rangeDays}`;
+    if (strengthCache.has(cacheKey)) {
+      setData(strengthCache.get(cacheKey));
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     const signal = controller.signal;
 
@@ -105,6 +112,8 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
 
         // Sort ascending by date (oldest first)
         const sortedData = records.sort((a, b) => a.date.localeCompare(b.date));
+
+        strengthCache.set(cacheKey, sortedData);
 
         if (!signal.aborted) {
           setData(sortedData);

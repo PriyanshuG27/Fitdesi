@@ -11,7 +11,8 @@ import { db } from '../lib/firebase';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useWorkoutStore, isBodyweightExercise, getEstimated1RM } from '../stores/useWorkoutStore';
 import { useUIStore } from '../stores/useUIStore';
-import { useXPEngine, evaluateStreak } from './useXPEngine';
+import { useXPEngine } from './useXPEngine';
+import { evaluateStreak } from '../lib/xpHelpers';
 
 export function useWorkout() {
   const { user } = useAuthStore();

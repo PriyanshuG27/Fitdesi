@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useXPStore } from '../../stores/useXPStore';
 import { useUIStore } from '../../stores/useUIStore';
@@ -6,11 +6,16 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import { Smartphone, LogOut, Info, User, Flame, Trophy, Award } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
+import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
 
 export const MobileProfile = () => {
   const { profile } = useAuthStore();
   const { totalXP, level, levelName, streak } = useXPStore();
   const { isStandalone, openModal, addToast } = useUIStore();
+
+  const { recap, weekId: recapWeekId } = useWeeklyRecap();
+  const [showRecap, setShowRecap] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -114,6 +119,30 @@ export const MobileProfile = () => {
           </motion.button>
         )}
 
+        {/* Weekly Recap Button */}
+        {recap && (
+          <motion.button
+            onClick={() => setShowRecap(true)}
+            className="w-full p-4 border-2 border-black bg-[var(--surface)] hover:bg-[#1a1a1a] text-left rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 active:scale-[0.99] transition-all flex items-center justify-between"
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded bg-[#b5ff2d0e] border border-[var(--accent-xp)] text-[var(--accent-xp)]">
+                <Award size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-display text-sm font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                  Weekly Recap
+                </span>
+                <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5">
+                  View your training summary and shareable card
+                </span>
+              </div>
+            </div>
+            <Award size={16} className="text-[var(--text-muted)]" />
+          </motion.button>
+        )}
+
         {/* Sign Out Button */}
         <motion.button
           onClick={handleLogout}
@@ -136,6 +165,17 @@ export const MobileProfile = () => {
           <LogOut size={16} className="text-[var(--text-muted)]" />
         </motion.button>
       </div>
+
+      {/* Weekly Recap Modal */}
+      {recap && (
+        <WeeklyRecapScreen
+          isOpen={showRecap}
+          onClose={() => setShowRecap(false)}
+          recap={recap}
+          weekId={recapWeekId}
+          markAsSeen={() => {}}
+        />
+      )}
 
       {/* ─── SYSTEM INFO ─────────────────────────────────────────────────── */}
       <div className="border-2 border-[var(--border)] bg-[var(--bg-elevated)] p-4 rounded-lg flex items-start gap-3 mt-auto">

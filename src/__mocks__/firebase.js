@@ -17,9 +17,14 @@ export const mockDeleteUser = vi.fn();
 export const mockGoogleAuthProvider = vi.fn();
 
 // ─── firebase/firestore stubs ────────────────────────────────────────────────
-export const mockDoc = vi.fn((_db, ...pathSegments) => ({
-  _path: pathSegments.join('/'),
-}));
+export const mockDoc = vi.fn((_db, ...pathSegments) => {
+  const path = pathSegments.join('/');
+  const lastSegment = pathSegments[pathSegments.length - 1];
+  return {
+    _path: path,
+    id: lastSegment || 'mock-auto-id',
+  };
+});
 export const mockSetDoc = vi.fn();
 export const mockGetDoc = vi.fn();
 export const mockGetDocs = vi.fn();
@@ -27,6 +32,7 @@ export const mockCollection = vi.fn();
 export const mockUpdateDoc = vi.fn();
 export const mockAddDoc = vi.fn();
 export const mockServerTimestamp = vi.fn(() => ({ _type: 'serverTimestamp' }));
+export const mockRunTransaction = vi.fn();
 
 // ─── Singleton stubs (src/lib/firebase.js) ───────────────────────────────────
 const mockAuth = { currentUser: null };
@@ -69,6 +75,7 @@ vi.mock('firebase/firestore', () => ({
   getDocs: mockGetDocs,
   collection: mockCollection,
   serverTimestamp: mockServerTimestamp,
+  runTransaction: mockRunTransaction,
   writeBatch: vi.fn(),
   getFirestore: vi.fn(() => mockDb),
   query: vi.fn(),

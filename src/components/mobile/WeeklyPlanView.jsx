@@ -10,7 +10,7 @@ import { useUIStore } from '../../stores/useUIStore';
 export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
   const navigate = useNavigate();
   const startSession = useWorkoutStore((state) => state.startSession);
-  const { profile } = useAuthStore();
+  const { profile, uid } = useAuthStore();
   const { awardXP } = useXPEngine();
   const { addToast } = useUIStore();
   const containerRef = useRef(null);
@@ -43,11 +43,11 @@ export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
   };
 
   const handleClaimRecoveryXP = async (dayNum) => {
-    if (!profile?.uid || recoveryClaimed) return;
+    if (!uid || recoveryClaimed) return;
     setClaiming(true);
     try {
       // Award 10 XP for active recovery stretching
-      const result = await awardXP(profile.uid, 'active_recovery', 10, {
+      const result = await awardXP(uid, 'active_recovery', 10, {
         sessionId: `recovery_${Date.now()}`
       });
       if (result) {
