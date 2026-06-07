@@ -20,7 +20,11 @@ const resolvedConfig = { ...firebaseConfig };
 const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true' || (typeof navigator !== 'undefined' && navigator.webdriver);
 
 if (useEmulator) {
-  resolvedConfig.projectId = 'fitdesi-test';
+  // Only force 'fitdesi-test' for automated Playwright E2E tests.
+  // For local development, keep the project ID from env (e.g. fitdesi-74283) so it matches the local emulator project ID.
+  if (typeof navigator !== 'undefined' && navigator.webdriver) {
+    resolvedConfig.projectId = 'fitdesi-test';
+  }
 }
 
 const app = getApps().length ? getApps()[0] : initializeApp(resolvedConfig);

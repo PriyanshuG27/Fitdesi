@@ -41,7 +41,7 @@ exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, asy
     validatePlanRequest(request.data);
 
     const adminDb = getFirestore();
-    await checkRateLimit(adminDb, uid);
+    await checkRateLimit(adminDb, uid, request.data?.usePowerUp === true);
 
     const userDoc = await adminDb.doc(`users/${uid}`).get();
     if (!userDoc.exists) {
@@ -123,40 +123,104 @@ OUTPUT FORMAT:
 Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
 JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-flash-latest',
-      generationConfig: {
-        temperature: 0.2,
-      },
-    });
+    let rawText = '';
+    let successModel = '';
+    const errors = [];
 
-    const abortController = new AbortController();
-    
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        abortController.abort();
-        reject(new Error('deadline-exceeded'));
-      }, 45000);
-    });
+    // Model 1: Gemini 1.5 Flash (Primary)
+    if (GEMINI_API_KEY) {
+      try {
+        console.log('[generatePlan] Attempting Model 1: Gemini Flash...');
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-flash-latest',
+          generationConfig: {
+            temperature: 0.2,
+          },
+        });
 
-    const geminiPromise = model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }]
-    }, {
-      signal: abortController.signal
-    });
+        const abortController = new AbortController();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            abortController.abort();
+            reject(new Error('deadline-exceeded'));
+          }, 30000); // 30 second timeout for Gemini Flash
+        });
 
-    let geminiResult;
-    try {
-      geminiResult = await Promise.race([geminiPromise, timeoutPromise]);
-    } catch (err) {
-      if (err.message === 'deadline-exceeded' || err.name === 'AbortError') {
-        throw new HttpsError('deadline-exceeded', 'Plan generation timed out. Please try again.');
+        const geminiPromise = model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        }, {
+          signal: abortController.signal
+        });
+
+        const geminiResult = await Promise.race([geminiPromise, timeoutPromise]);
+        rawText = geminiResult.response.text();
+        successModel = 'gemini';
+        console.log('[generatePlan] Gemini successfully generated plan.');
+      } catch (err) {
+        console.error('[generatePlan] Gemini Flash failed:', err.message);
+        errors.push({ model: 'gemini-flash-latest', error: err.message });
       }
-      throw err;
+    } else {
+      errors.push({ model: 'gemini-flash-latest', error: 'GEMINI_API_KEY missing' });
     }
 
-    const rawText = geminiResult.response.text();
+    // Model 2: Groq Llama 3.3 70B (Fallback)
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!rawText && GROQ_API_KEY) {
+      try {
+        console.log('[generatePlan] Attempting Model 2: Groq Llama 3.3 70B...');
+        const abortController = new AbortController();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            abortController.abort();
+            reject(new Error('deadline-exceeded'));
+          }, 25000); // 25 second timeout for Groq
+        });
+
+        const groqPromise = (async () => {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${GROQ_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.2
+            }),
+            signal: abortController.signal
+          });
+
+          if (response.ok) {
+            const resData = await response.json();
+            return resData.choices?.[0]?.message?.content || '';
+          } else {
+            const errText = await response.text();
+            throw new Error(`Groq API returned status ${response.status}: ${errText}`);
+          }
+        })();
+
+        rawText = await Promise.race([groqPromise, timeoutPromise]);
+        successModel = 'groq';
+        console.log('[generatePlan] Groq successfully generated plan.');
+      } catch (err) {
+        console.error('[generatePlan] Groq Llama 3.3 70B failed:', err.message);
+        errors.push({ model: 'llama-3.3-70b-versatile', error: err.message });
+      }
+    } else if (!rawText) {
+      errors.push({ model: 'llama-3.3-70b-versatile', error: 'GROQ_API_KEY missing' });
+    }
+
+    if (!rawText) {
+      const isTimeout = errors.some(e => e.error === 'deadline-exceeded');
+      if (isTimeout) {
+        throw new HttpsError('deadline-exceeded', 'Plan generation timed out. Please try again.');
+      }
+      throw new HttpsError('internal', `Plan generation failed. All models failed: ${JSON.stringify(errors)}`);
+    }
+
     const plan = parseGeminiJSON(rawText);
     validatePlan(plan);
 

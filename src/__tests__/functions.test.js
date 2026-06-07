@@ -199,65 +199,84 @@ describe('validatePlan', () => {
 // ═════════════════════════════════════════════
 
 describe('checkRateLimit', () => {
-  // Build a minimal Firestore mock for transaction tests
-  function makeDb({ exists = false, count = 0, windowStart = Date.now() } = {}) {
+  // Build a minimal Firestore mock for user document transaction tests
+  function makeDb({ exists = true, planRefresh = 0, dailyRegenCount = 0, lastRegenDate = '' } = {}) {
     const snap = {
       exists,
-      data: () => (exists ? { count, windowStart } : undefined),
+      data: () => (exists ? {
+        powerUps: { planRefresh },
+        dailyRegenCount,
+        lastRegenDate
+      } : undefined),
     };
-    const written = { value: null };
+    const updated = { value: null };
     const tx = {
-      get:  vi.fn().mockResolvedValue(snap),
-      set:  vi.fn((ref, data) => { written.value = data; }),
+      get: vi.fn().mockResolvedValue(snap),
+      update: vi.fn((ref, data) => { updated.value = data; }),
     };
     const db = {
-      doc:            vi.fn(() => 'mock-ref'),
+      doc: vi.fn(() => 'mock-ref'),
       runTransaction: vi.fn(async (fn) => { await fn(tx); }),
-      _written:       written,
-      _tx:            tx,
+      _updated: updated,
+      _tx: tx,
     };
     return db;
   }
 
-  it('allows first call (no existing document)', async () => {
+  it('throws not-found when user profile does not exist', async () => {
     const db = makeDb({ exists: false });
-    await expect(checkRateLimit(db, 'uid-001')).resolves.not.toThrow();
-    // Should have written count=1
-    expect(db._written.value.count).toBe(1);
-  });
-
-  it('allows 3rd call (count=2 in window)', async () => {
-    const db = makeDb({ exists: true, count: 2, windowStart: Date.now() });
-    await expect(checkRateLimit(db, 'uid-002')).resolves.not.toThrow();
-    expect(db._written.value.count).toBe(3);
-  });
-
-  it('throws resource-exhausted on 4th call (count=3 in window)', async () => {
-    const db = makeDb({ exists: true, count: 3, windowStart: Date.now() });
-    await expect(checkRateLimit(db, 'uid-003')).rejects.toThrow();
+    await expect(checkRateLimit(db, 'uid-001')).rejects.toThrow();
     try {
-      await checkRateLimit(db, 'uid-003');
+      await checkRateLimit(db, 'uid-001');
     } catch (e) {
-      expect(e.code).toBe('resource-exhausted');
-      expect(e.message).toMatch(/Try again in an hour/);
+      expect(e.code).toBe('not-found');
     }
   });
 
-  it('resets count when window has expired (windowStart older than 1 hour)', async () => {
-    const oneHourAndOneMinuteAgo = Date.now() - (61 * 60 * 1000);
-    const db = makeDb({ exists: true, count: 3, windowStart: oneHourAndOneMinuteAgo });
-
-    // Should NOT throw even though count was 3, because window has expired
-    await expect(checkRateLimit(db, 'uid-004')).resolves.not.toThrow();
-
-    // After reset, count should be 1 (fresh start)
-    expect(db._written.value.count).toBe(1);
+  it('allows free regeneration (under 5 limit) and increments count', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const db = makeDb({ dailyRegenCount: 2, lastRegenDate: todayStr });
+    await expect(checkRateLimit(db, 'uid-002', false)).resolves.not.toThrow();
+    expect(db._updated.value.dailyRegenCount).toBe(3);
+    expect(db._updated.value.lastRegenDate).toBe(todayStr);
   });
 
-  it('does not reset count when window has not expired', async () => {
-    const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
-    const db = makeDb({ exists: true, count: 1, windowStart: thirtyMinutesAgo });
-    await expect(checkRateLimit(db, 'uid-005')).resolves.not.toThrow();
-    expect(db._written.value.count).toBe(2); // incremented, not reset
+  it('resets daily count when date changes', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const db = makeDb({ dailyRegenCount: 5, lastRegenDate: '2026-06-01' });
+    await expect(checkRateLimit(db, 'uid-003', false)).resolves.not.toThrow();
+    expect(db._updated.value.dailyRegenCount).toBe(1);
+    expect(db._updated.value.lastRegenDate).toBe(todayStr);
+  });
+
+  it('throws resource-exhausted when free daily limit of 5 is exceeded', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const db = makeDb({ dailyRegenCount: 5, lastRegenDate: todayStr });
+    await expect(checkRateLimit(db, 'uid-004', false)).rejects.toThrow();
+    try {
+      await checkRateLimit(db, 'uid-004', false);
+    } catch (e) {
+      expect(e.code).toBe('resource-exhausted');
+      expect(e.message).toMatch(/Daily free limit of 5 reached/);
+    }
+  });
+
+  it('allows regeneration when using a power-up even if daily limit is exceeded', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const db = makeDb({ dailyRegenCount: 5, lastRegenDate: todayStr, planRefresh: 2 });
+    await expect(checkRateLimit(db, 'uid-005', true)).resolves.not.toThrow();
+    expect(db._updated.value['powerUps.planRefresh']).toBe(1);
+  });
+
+  it('throws resource-exhausted when using power-up but user has 0 planRefresh', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const db = makeDb({ dailyRegenCount: 5, lastRegenDate: todayStr, planRefresh: 0 });
+    await expect(checkRateLimit(db, 'uid-006', true)).rejects.toThrow();
+    try {
+      await checkRateLimit(db, 'uid-006', true);
+    } catch (e) {
+      expect(e.code).toBe('resource-exhausted');
+      expect(e.message).toMatch(/No Plan Refresh power-up available/);
+    }
   });
 });

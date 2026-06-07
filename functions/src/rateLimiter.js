@@ -3,72 +3,72 @@
  *
  * Firestore-backed rate limiter for the generatePlan Cloud Function.
  *
- * Schema: rateLimit/{uid}
- *   count       {number}  — calls made in the current window
- *   windowStart {number}  — unix ms timestamp when the current window started
+ * Tracks the free daily plan regenerations directly on the user's document:
+ *   dailyRegenCount {number} - count of free regenerations done today
+ *   lastRegenDate   {string} - YYYY-MM-DD date when last free regeneration occurred
  *
  * Rules:
- *   - Window duration: 1 hour (3_600_000 ms)
- *   - Limit: 5 plan generations per window per user
- *   - When windowStart is older than 1 hour, count resets to 0 and
- *     windowStart resets to Date.now() before the new call is counted.
- *
- * Security notes:
- *   - The rateLimit collection is only accessible via the Admin SDK (Cloud Function).
- *   - Firestore Security Rules block all client reads/writes on this collection.
- *   - We use a Firestore transaction to prevent race conditions under concurrent calls.
+ *   - Limit: 5 free regenerations per calendar day (UTC-based server date).
+ *   - If the limit of 5 is exceeded, the user must use a 'planRefresh' power-up.
+ *   - We use a Firestore transaction to ensure atomic reads/writes and prevent concurrent bypass.
  */
 
 'use strict';
 
 const { HttpsError } = require('firebase-functions/v2/https');
 
-const WINDOW_MS  = 60 * 60 * 1000; // 1 hour
-const MAX_CALLS  = 3;               // calls per window
-
 /**
- * Checks and increments the rate-limit counter for the given uid.
+ * Checks the daily rate limit and/or consumes a Plan Refresh power-up.
  *
- * Uses a Firestore transaction to atomically read → decide → write,
- * preventing concurrent calls from bypassing the limit.
- *
- * @param {FirebaseFirestore.Firestore} db  — Admin Firestore instance
- * @param {string}                      uid — validated Firebase UID
+ * @param {FirebaseFirestore.Firestore} db          - Admin Firestore instance
+ * @param {string}                      uid         - validated Firebase UID
+ * @param {boolean}                     usePowerUp  - whether the user requests to consume a power-up
  * @returns {Promise<void>}
- * @throws {HttpsError} 'resource-exhausted' when the limit is reached.
+ * @throws {HttpsError}
  */
-async function checkRateLimit(db, uid) {
-  const ref = db.doc(`rateLimit/${uid}`);
+async function checkRateLimit(db, uid, usePowerUp = false) {
+  const userRef = db.doc(`users/${uid}`);
 
   await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const now  = Date.now();
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists) {
+      throw new HttpsError('not-found', 'User profile not found');
+    }
 
-    let count       = 0;
-    let windowStart = now;
+    const userData = userSnap.data();
+    const powerUps = userData.powerUps || {};
+    const planRefreshCount = powerUps.planRefresh || 0;
 
-    if (snap.exists) {
-      const data = snap.data();
-      count       = typeof data.count       === 'number' ? data.count       : 0;
-      windowStart = typeof data.windowStart === 'number' ? data.windowStart : now;
+    const todayStr = new Date().toISOString().split('T')[0];
+    let dailyRegenCount = userData.dailyRegenCount || 0;
+    let lastRegenDate = userData.lastRegenDate || '';
 
-      // Reset if the current window has expired
-      if (now - windowStart > WINDOW_MS) {
-        count       = 0;
-        windowStart = now;
+    // Reset daily count if the date has changed
+    if (lastRegenDate !== todayStr) {
+      dailyRegenCount = 0;
+      lastRegenDate = todayStr;
+    }
+
+    if (usePowerUp) {
+      if (planRefreshCount <= 0) {
+        throw new HttpsError('resource-exhausted', 'No Plan Refresh power-up available.');
       }
+      
+      // Consume a Plan Refresh power-up
+      tx.update(userRef, {
+        'powerUps.planRefresh': planRefreshCount - 1
+      });
+    } else {
+      if (dailyRegenCount >= 5) {
+        throw new HttpsError('resource-exhausted', 'Daily free limit of 5 reached. Must use a Plan Refresh power-up.');
+      }
+      
+      // Consume a free daily regeneration
+      tx.update(userRef, {
+        dailyRegenCount: dailyRegenCount + 1,
+        lastRegenDate: todayStr
+      });
     }
-
-    // Check before incrementing
-    if (count >= MAX_CALLS) {
-      throw new HttpsError(
-        'resource-exhausted',
-        'Plan generation limit reached. Try again in an hour.'
-      );
-    }
-
-    // Increment and persist
-    tx.set(ref, { count: count + 1, windowStart }, { merge: false });
   });
 }
 

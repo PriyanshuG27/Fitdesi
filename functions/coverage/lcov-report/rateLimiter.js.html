@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90% </span>
+                <span class="strong">82.6% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>18/20</span>
+                <span class='fraction'>19/23</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">70% </span>
+                <span class="strong">68.42% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>7/10</span>
+                <span class='fraction'>13/19</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90% </span>
+                <span class="strong">82.6% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>18/20</span>
+                <span class='fraction'>19/23</span>
             </div>
         
             
@@ -155,15 +155,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -176,39 +167,48 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -218,72 +218,72 @@
  *
  * Firestore-backed rate limiter for the generatePlan Cloud Function.
  *
- * Schema: rateLimit/{uid}
- *   count       {number}  — calls made in the current window
- *   windowStart {number}  — unix ms timestamp when the current window started
+ * Tracks the free daily plan regenerations directly on the user's document:
+ *   dailyRegenCount {number} - count of free regenerations done today
+ *   lastRegenDate   {string} - YYYY-MM-DD date when last free regeneration occurred
  *
  * Rules:
- *   - Window duration: 1 hour (3_600_000 ms)
- *   - Limit: 5 plan generations per window per user
- *   - When windowStart is older than 1 hour, count resets to 0 and
- *     windowStart resets to Date.now() before the new call is counted.
- *
- * Security notes:
- *   - The rateLimit collection is only accessible via the Admin SDK (Cloud Function).
- *   - Firestore Security Rules block all client reads/writes on this collection.
- *   - We use a Firestore transaction to prevent race conditions under concurrent calls.
+ *   - Limit: 5 free regenerations per calendar day (UTC-based server date).
+ *   - If the limit of 5 is exceeded, the user must use a 'planRefresh' power-up.
+ *   - We use a Firestore transaction to ensure atomic reads/writes and prevent concurrent bypass.
  */
 &nbsp;
 'use strict';
 &nbsp;
 const { HttpsError } = require('firebase-functions/v2/https');
 &nbsp;
-const WINDOW_MS  = 60 * 60 * 1000; // 1 hour
-const MAX_CALLS  = 5;               // calls per window
-&nbsp;
 /**
- * Checks and increments the rate-limit counter for the given uid.
+ * Checks the daily rate limit and/or consumes a Plan Refresh power-up.
  *
- * Uses a Firestore transaction to atomically read → decide → write,
- * preventing concurrent calls from bypassing the limit.
- *
- * @param {FirebaseFirestore.Firestore} db  — Admin Firestore instance
- * @param {string}                      uid — validated Firebase UID
+ * @param {FirebaseFirestore.Firestore} db          - Admin Firestore instance
+ * @param {string}                      uid         - validated Firebase UID
+ * @param {boolean}                     usePowerUp  - whether the user requests to consume a power-up
  * @returns {Promise&lt;void&gt;}
- * @throws {HttpsError} 'resource-exhausted' when the limit is reached.
+ * @throws {HttpsError}
  */
-async function checkRateLimit(db, uid) {
-  const ref = db.doc(`rateLimit/${uid}`);
+async function checkRateLimit(db, uid, usePowerUp = <span class="branch-0 cbranch-no" title="branch not covered" >false)</span> {
+  const userRef = db.doc(`users/${uid}`);
 &nbsp;
   await db.runTransaction(async (tx) =&gt; {
-    const snap = await tx.get(ref);
-    const now  = Date.now();
+    const userSnap = await tx.get(userRef);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (!userSnap.exists) {
+<span class="cstat-no" title="statement not covered" >      throw new HttpsError('not-found', 'User profile not found');</span>
+    }
 &nbsp;
-    let count       = 0;
-    let windowStart = now;
+    const userData = userSnap.data();
+    const powerUps = userData.powerUps || <span class="branch-1 cbranch-no" title="branch not covered" >{};</span>
+    const planRefreshCount = powerUps.planRefresh || 0;
 &nbsp;
-    if (snap.exists) {
-      const data = snap.data();
-      count       = typeof data.count       === 'number' ? data.count       : <span class="branch-1 cbranch-no" title="branch not covered" >0;</span>
-      windowStart = typeof data.windowStart === 'number' ? data.windowStart : <span class="branch-1 cbranch-no" title="branch not covered" >now;</span>
+    const todayStr = new Date().toISOString().split('T')[0];
+    let dailyRegenCount = userData.dailyRegenCount || 0;
+    let lastRegenDate = userData.lastRegenDate || '';
 &nbsp;
-      // Reset if the current window has expired
-      <span class="missing-if-branch" title="if path not taken" >I</span>if (now - windowStart &gt; WINDOW_MS) {
-<span class="cstat-no" title="statement not covered" >        count       = 0;</span>
-<span class="cstat-no" title="statement not covered" >        windowStart = now;</span>
+    // Reset daily count if the date has changed
+    if (lastRegenDate !== todayStr) {
+      dailyRegenCount = 0;
+      lastRegenDate = todayStr;
+    }
+&nbsp;
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (usePowerUp) {
+<span class="cstat-no" title="statement not covered" >      if (planRefreshCount &lt;= 0) {</span>
+<span class="cstat-no" title="statement not covered" >        throw new HttpsError('resource-exhausted', 'No Plan Refresh power-up available.');</span>
       }
+      
+      // Consume a Plan Refresh power-up
+<span class="cstat-no" title="statement not covered" >      tx.update(userRef, {</span>
+        'powerUps.planRefresh': planRefreshCount - 1
+      });
+    } else {
+      if (dailyRegenCount &gt;= 5) {
+        throw new HttpsError('resource-exhausted', 'Daily free limit of 5 reached. Must use a Plan Refresh power-up.');
+      }
+      
+      // Consume a free daily regeneration
+      tx.update(userRef, {
+        dailyRegenCount: dailyRegenCount + 1,
+        lastRegenDate: todayStr
+      });
     }
-&nbsp;
-    // Check before incrementing
-    if (count &gt;= MAX_CALLS) {
-      throw new HttpsError(
-        'resource-exhausted',
-        'Plan generation limit reached. Try again in an hour.'
-      );
-    }
-&nbsp;
-    // Increment and persist
-    tx.set(ref, { count: count + 1, windowStart }, { merge: false });
   });
 }
 &nbsp;
@@ -295,7 +295,7 @@ module.exports = { checkRateLimit };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-06T16:36:06.227Z
+                at 2026-06-07T18:51:42.702Z
             </div>
         <script src="prettify.js"></script>
         <script>

@@ -50,37 +50,52 @@ export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
     }));
   };
 
+  const getRemainingFreeRegens = () => {
+    if (!profile) return 5;
+    const lastDate = profile.lastRegenDate || '';
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (lastDate !== todayStr) {
+      return 5;
+    }
+    return Math.max(0, 5 - (profile.dailyRegenCount || 0));
+  };
+
+  const freeRegensLeft = getRemainingFreeRegens();
+
   const handleRegenerate = async () => {
     if (!uid) return;
+    const freeRegensLeftVal = getRemainingFreeRegens();
     const planRefreshCount = profile?.powerUps?.planRefresh || 0;
-    if (planRefreshCount <= 0) {
-      addToast('You need a Plan Refresh power-up to regenerate early.', 'error');
+
+    if (freeRegensLeftVal <= 0 && planRefreshCount <= 0) {
+      addToast('Requires 1 Plan Refresh power-up to regenerate.', 'error');
       return;
     }
-    try {
-      const userRef = doc(db, 'users', uid);
-      await updateDoc(userRef, {
-        powerUps: {
-          ...(profile.powerUps || {}),
-          planRefresh: planRefreshCount - 1
-        }
-      });
-      
-      // Update local profile state
-      useAuthStore.setState({
-        profile: {
-          ...profile,
-          powerUps: {
-            ...(profile.powerUps || {}),
-            planRefresh: planRefreshCount - 1
-          }
-        }
-      });
 
-      await generatePlan(requirements);
+    try {
+      const usePowerUp = freeRegensLeftVal <= 0;
+      if (usePowerUp) {
+        const userRef = doc(db, 'users', uid);
+        await updateDoc(userRef, {
+          'powerUps.planRefresh': planRefreshCount - 1
+        });
+        
+        // Update local profile state
+        useAuthStore.setState({
+          profile: {
+            ...profile,
+            powerUps: {
+              ...(profile.powerUps || {}),
+              planRefresh: planRefreshCount - 1
+            }
+          }
+        });
+      }
+
+      await generatePlan(requirements, usePowerUp);
     } catch (err) {
-      console.error('Failed to consume Plan Refresh:', err);
-      addToast('Failed to consume Plan Refresh.', 'error');
+      console.error('Failed to regenerate plan:', err);
+      addToast('Failed to regenerate plan.', 'error');
     }
   };
 
@@ -329,17 +344,19 @@ export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
         />
         <motion.button
           onClick={handleRegenerate}
-          disabled={planLoading || (profile?.powerUps?.planRefresh || 0) <= 0}
-          className="w-full py-2.5 bg-[var(--primary)] text-black font-display font-extrabold tracking-widest text-xs uppercase rounded border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+          disabled={planLoading || (freeRegensLeft <= 0 && (profile?.powerUps?.planRefresh || 0) <= 0)}
+          className="w-full py-2.5 bg-black text-[var(--accent-xp)] font-display font-extrabold tracking-widest text-xs uppercase rounded border border-black shadow-[3px_3px_0px_var(--accent-xp)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5"
           whileTap={{ scale: 0.97 }}
         >
           {planLoading ? (
             <span>Regenerating...</span>
+          ) : freeRegensLeft > 0 ? (
+            <span>Regenerate ({freeRegensLeft} Free Left)</span>
           ) : (
             <span>Regenerate (Costs 1 Plan Refresh)</span>
           )}
         </motion.button>
-        {(!profile?.powerUps?.planRefresh || profile.powerUps.planRefresh <= 0) && (
+        {freeRegensLeft <= 0 && (!profile?.powerUps?.planRefresh || profile.powerUps.planRefresh <= 0) && (
           <p className="text-[10px] text-red-500 font-mono text-center mt-2 uppercase tracking-wide">
             ⚠️ Requires 1 Plan Refresh Power-up (You have ×0)
           </p>

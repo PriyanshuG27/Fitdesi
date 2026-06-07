@@ -49,14 +49,14 @@ export function useWeeklyPlan() {
     }
   }, [user?.uid, currentPlan, getCurrentPlan]);
 
-  const generatePlan = useCallback(async (personalRequirements = '') => {
+  const generatePlan = useCallback(async (personalRequirements = '', usePowerUp = false) => {
     if (!user) return;
     setPlanLoading(true);
     setPlanError(null);
 
     try {
       const fn = httpsCallable(functions, 'generatePlan');
-      const payload = { weekId };
+      const payload = { weekId, usePowerUp };
       if (personalRequirements) {
         payload.personalRequirements = personalRequirements;
       }
@@ -68,7 +68,7 @@ export function useWeeklyPlan() {
         addToast('New weekly plan generated! 🏋️', 'success');
       }
     } catch (err) {
-      const msg = ERROR_MAP[err.code] ?? 'Plan generation failed. Please try again.';
+      const msg = err.message || ERROR_MAP[err.code] || 'Plan generation failed. Please try again.';
       setPlanError(msg);
       addToast(msg, 'error');
     } finally {

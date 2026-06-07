@@ -61,7 +61,31 @@ export const MobileHome = () => {
   const location = useLocation();
   const { profile, uid } = useAuthStore();
   const { generatePlan } = useWeeklyPlan();
-  const { addToast, isStandalone, openModal } = useUIStore();
+  const { 
+    addToast, 
+    isStandalone, 
+    openModal,
+    pwaInstallable,
+    pwaDeferredPrompt,
+    clearPwaDeferredPrompt
+  } = useUIStore();
+
+  const handleInstallClick = async (e) => {
+    e.stopPropagation();
+    if (pwaInstallable && pwaDeferredPrompt) {
+      try {
+        pwaDeferredPrompt.prompt();
+        const { outcome } = await pwaDeferredPrompt.userChoice;
+        console.log(`[PWA] Install prompt outcome: ${outcome}`);
+        clearPwaDeferredPrompt();
+      } catch (err) {
+        console.error('[PWA] Error triggering native prompt:', err);
+        openModal('pwaInstall');
+      }
+    } else {
+      openModal('pwaInstall');
+    }
+  };
   const { planLoading, currentPlan, planDays, weekId } = usePlanStore();
   const { totalXP, level, levelName, xpToNextLevel, streak, setXP } = useXPStore();
   const { challenges, userProgress } = useChallenges();
@@ -305,7 +329,7 @@ export const MobileHome = () => {
             </div>
           </div>
           <button
-            onClick={() => openModal('pwaInstall')}
+            onClick={handleInstallClick}
             className="w-full py-2.5 bg-black text-[var(--accent-xp)] font-display font-extrabold tracking-widest text-xs uppercase rounded border border-black shadow-[3px_3px_0px_var(--accent-xp)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-1.5"
           >
             <span>INSTALL ON DEVICE</span>
@@ -643,11 +667,12 @@ export const MobileHome = () => {
                       <span className="font-mono text-xs text-[var(--secondary)] font-bold">×{profile?.powerUps?.planRefresh || 0}</span>
                     </div>
                     <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                      Allows you to regenerate your weekly plan early.
+                      Allows you to regenerate your weekly plan when you exceed the 5 free daily regenerations limit.
                     </span>
                     <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
                       <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
                       <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
+                        • 5 free regenerations reset daily.<br />
                         • Complete a Comeback or Streak challenge.
                       </span>
                     </div>

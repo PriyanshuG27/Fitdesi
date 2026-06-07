@@ -108,10 +108,9 @@ exports.generateChallenge = onCall({ region: 'asia-south2', timeoutSeconds: 60 }
     let favTitle = `${favMuscle} Champion`;
     let favDesc = `Log ${favMuscleSets} sets of ${favMuscle} to dominate your favorite lifts.`;
 
-    // 6. Groq Copywriter Call if API Key is available
-    if (GROQ_API_KEY) {
-      try {
-        const prompt = `You are an elite fitness gamification designer. Generate two personalized challenges for a user with the goal '${userGoal}' and level '${userType}':
+    // 6. Groq / Gemini Copywriter Call
+    let copywriteJSON = null;
+    const prompt = `You are an elite fitness gamification designer. Generate two personalized challenges for a user with the goal '${userGoal}' and level '${userType}':
 1. A Weak Point Challenge for their lagging muscle group: ${weakPoint}. Target: Complete ${weakPointSets} sets of ${weakPoint} over ${durationDays} days.
 2. A Favorite Muscle Group Challenge for their favorite muscle group: ${favMuscle}. Target: Complete ${favMuscleSets} sets of ${favMuscle} over ${durationDays} days.
 
@@ -129,6 +128,10 @@ JSON format:
   }
 }`;
 
+    // Model 1: Groq Llama 3.3 70B (Primary)
+    if (GROQ_API_KEY) {
+      try {
+        console.log('[generateChallenge] Attempting Model 1: Groq Llama 3.3 70B...');
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -136,7 +139,7 @@ JSON format:
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'llama-3.1-8b-instant',
+            model: 'llama-3.3-70b-versatile',
             messages: [{ role: 'user', content: prompt }],
             response_format: { type: 'json_object' },
             temperature: 0.7
@@ -146,22 +149,53 @@ JSON format:
         if (response.ok) {
           const resData = await response.json();
           const contentText = resData.choices?.[0]?.message?.content || '{}';
-          const groqJSON = JSON.parse(contentText);
-          
-          if (groqJSON.weak_point && groqJSON.weak_point.title && groqJSON.weak_point.description) {
-            wpTitle = groqJSON.weak_point.title.trim();
-            wpDesc = groqJSON.weak_point.description.trim();
-          }
-          if (groqJSON.favorite && groqJSON.favorite.title && groqJSON.favorite.description) {
-            favTitle = groqJSON.favorite.title.trim();
-            favDesc = groqJSON.favorite.description.trim();
-          }
+          copywriteJSON = JSON.parse(contentText);
+          console.log('[generateChallenge] Groq Llama 3.3 70B succeeded.');
         } else {
-          console.warn('[generateChallenge] Groq API returned status:', response.status);
+          const errText = await response.text();
+          console.warn(`[generateChallenge] Groq API returned status ${response.status}: ${errText}`);
         }
       } catch (groqErr) {
-        console.error('[generateChallenge] Groq API call failed, using fallback:', groqErr);
+        console.error('[generateChallenge] Groq API call failed, trying fallback:', groqErr.message);
       }
+    }
+
+    // Model 2: Gemini 1.5 Flash (Fallback)
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!copywriteJSON && GEMINI_API_KEY) {
+      try {
+        console.log('[generateChallenge] Attempting Model 2: Gemini Flash...');
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-flash-latest',
+          generationConfig: {
+            temperature: 0.7,
+            responseMimeType: 'application/json'
+          },
+        });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        });
+        const text = result.response.text().trim();
+        copywriteJSON = JSON.parse(text);
+        console.log('[generateChallenge] Gemini Flash succeeded.');
+      } catch (geminiErr) {
+        console.error('[generateChallenge] Gemini Flash fallback failed:', geminiErr.message);
+      }
+    }
+
+    if (copywriteJSON) {
+      if (copywriteJSON.weak_point && copywriteJSON.weak_point.title && copywriteJSON.weak_point.description) {
+        wpTitle = copywriteJSON.weak_point.title.trim();
+        wpDesc = copywriteJSON.weak_point.description.trim();
+      }
+      if (copywriteJSON.favorite && copywriteJSON.favorite.title && copywriteJSON.favorite.description) {
+        favTitle = copywriteJSON.favorite.title.trim();
+        favDesc = copywriteJSON.favorite.description.trim();
+      }
+    } else {
+      console.log('[generateChallenge] Both APIs failed. Using local copywriter templates.');
     }
 
     const templatesCol = adminDb.collection(`users/${uid}/personalTemplates`);

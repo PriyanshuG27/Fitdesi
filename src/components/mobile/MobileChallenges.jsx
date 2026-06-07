@@ -106,6 +106,7 @@ export const MobileChallenges = () => {
   const [cameraVerified, setCameraVerified] = useState(false);
   const [cameraImage, setCameraImage] = useState(null);
   const [verifyingImage, setVerifyingImage] = useState(false);
+  const [verificationAttempts, setVerificationAttempts] = useState(0);
 
   // Overdrive Hour Calculation
   const currentHour = new Date().getHours();
@@ -165,17 +166,30 @@ export const MobileChallenges = () => {
           const res = await verifyGymImageFn({ image: imageData });
           if (res.data?.success && res.data?.verified) {
             setCameraVerified(true);
+            setVerificationAttempts(0);
             addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
           } else {
             setCameraVerified(false);
             setCameraImage(null);
-            addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
+            const nextAttempts = verificationAttempts + 1;
+            setVerificationAttempts(nextAttempts);
+            if (nextAttempts >= 2) {
+              addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
+            } else {
+              addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
+            }
           }
         } catch (err) {
           console.error('[MobileChallenges] Gym verification error:', err);
           setCameraVerified(false);
           setCameraImage(null);
-          addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
+          const nextAttempts = verificationAttempts + 1;
+          setVerificationAttempts(nextAttempts);
+          if (nextAttempts >= 2) {
+            addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
+          } else {
+            addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
+          }
         } finally {
           setVerifyingImage(false);
         }

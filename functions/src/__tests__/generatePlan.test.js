@@ -58,7 +58,17 @@ describe('generatePlan Cloud Function', () => {
       doc: mockDoc,
       collection: mockCollection,
       runTransaction: jest.fn(async (cb) => {
-        const tx = { get: jest.fn().mockResolvedValue({ exists: false }), set: jest.fn() };
+        const tx = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            data: () => ({
+              dailyRegenCount: 0,
+              lastRegenDate: '',
+              powerUps: { planRefresh: 0 }
+            })
+          }),
+          update: jest.fn()
+        };
         await cb(tx);
       })
     };
@@ -85,15 +95,23 @@ describe('generatePlan Cloud Function', () => {
 
   it('2. Rate limit exceeded -> throws HttpsError resource-exhausted', async () => {
     mockDb.runTransaction.mockImplementationOnce(async (cb) => {
+      const todayStr = new Date().toISOString().split('T')[0];
       const tx = {
-        get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ count: 5, windowStart: Date.now() }) }),
-        set: jest.fn()
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({
+            dailyRegenCount: 5,
+            lastRegenDate: todayStr,
+            powerUps: { planRefresh: 0 }
+          })
+        }),
+        update: jest.fn()
       };
       await cb(tx);
     });
 
     await expect(generatePlan({ auth: { uid: 'user123' }, data: { weekId: '2026-W01' } }))
-      .rejects.toThrow(new HttpsError('resource-exhausted', 'Plan generation limit reached. Try again in an hour.'));
+      .rejects.toThrow(new HttpsError('resource-exhausted', 'Daily free limit of 5 reached. Must use a Plan Refresh power-up.'));
   });
 
   it('3. Gemini returns invalid JSON -> throws HttpsError internal with safe message', async () => {
@@ -157,5 +175,38 @@ describe('generatePlan Cloud Function', () => {
     await expect(promise).rejects.toThrow(new HttpsError('deadline-exceeded', 'Plan generation timed out. Please try again.'));
     
     setTimeoutSpy.mockRestore();
+  });
+
+  it('8. Gemini fails, fallback to Groq Llama 3.3 70B successfully', async () => {
+    process.env.GROQ_API_KEY = 'mock-groq-key';
+    GoogleGenerativeAI.prototype.getGenerativeModel().generateContent.mockRejectedValueOnce(
+      new Error('Gemini quota exceeded')
+    );
+
+    const validPlanJSON = JSON.stringify({
+      days: Array.from({ length: 7 }).map((_, i) => ({
+        day: i + 1,
+        focus: i === 6 ? 'Rest' : 'Full Body',
+        exercises: i === 6 ? [] : [{ name: 'Squat', sets: 3, reps: '10', targetWeight: 20 }]
+      }))
+    });
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: validPlanJSON
+            }
+          }
+        ]
+      })
+    });
+
+    const result = await generatePlan({ auth: { uid: 'user123' }, data: { weekId: '2026-W01' } });
+    
+    expect(result).toEqual({ success: true, weekId: '2026-W01' });
+    expect(global.fetch).toHaveBeenCalled();
   });
 });
