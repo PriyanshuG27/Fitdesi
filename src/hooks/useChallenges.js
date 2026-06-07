@@ -18,6 +18,7 @@ import {
   limit,
   runTransaction,
   serverTimestamp,
+  onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -71,236 +72,250 @@ export function useChallenges() {
   }, [challenges]);
 
   // Load challenges from Firestore
+  // loadChallenges is now a no-op because real-time listener (onSnapshot) handles queries automatically
   const loadChallenges = useCallback(async (uid) => {
-    if (!uid) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const q = query(
-        collection(db, 'challenges'),
-        where('participants', 'array-contains', uid)
-      );
-      const snap = await getDocs(q);
-      const userChallenges = [];
-      const progressMap = {};
-
-      snap.docs.forEach((docSnap) => {
-        const id = docSnap.id;
-        const data = docSnap.data();
-
-        // Skip optimistically deleted or abandoned challenges
-        if (deletedChallengeIds.has(id) || data.status === 'abandoned') {
-          return;
-        }
-
-        const start = data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate || Date.now());
-        let durationDays = 56;
-        if (data.type === 'comeback') durationDays = 84;
-        if (data.type === 'weak_point') durationDays = data.durationDays || 28;
-        const end = data.endDate?.toDate ? data.endDate.toDate() : new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
-        const diffMs = end.getTime() - Date.now();
-        const weeksRemaining = Math.max(0, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)));
-
-        const progressPercent = calculateProgressPct({ ...data, id }, uid);
-
-        let currentMission = '';
-        const userProg = data.progress?.[uid] || {};
-        if (data.type === 'comeback') {
-          currentMission = `Week ${userProg.currentWeek || 1}: Complete 3 workouts (Total: ${userProg.completedSessions || 0}/36)`;
-        } else if (data.type === 'streak') {
-          const currentWeek = userProg.currentWeek || 1;
-          const weekCount = userProg.weeklyCount?.[currentWeek - 1] || 0;
-          currentMission = `Week ${currentWeek}: Log 3 workouts (Week count: ${weekCount}/3)`;
-        } else if (data.type === 'weak_point') {
-          const targetSets = data.goal?.targetSets || 15;
-          const completed = userProg.completedSets || 0;
-          currentMission = `Complete ${targetSets} sets of ${data.goal?.muscleGroup || 'Core'} (Progress: ${completed}/${targetSets})`;
-        }
-
-        const mappedChallenge = {
-          id,
-          ...data,
-          subtype: data.subtype || 'campaign',
-          name: data.type === 'comeback'
-            ? 'Comeback Challenge'
-            : data.type === 'streak'
-            ? 'Streak Challenge'
-            : (data.name || 'Weak Point Challenge'),
-          description: data.type === 'comeback'
-            ? 'Train 3x/week for 12 weeks to build your base'
-            : data.type === 'streak'
-            ? 'Train 3x/week for 8 weeks consecutively'
-            : (data.description || 'Target specific weak points'),
-          durationDays,
-          weeksRemaining,
-          progressPct: progressPercent,
-          currentMission,
-        };
-
-        userChallenges.push(mappedChallenge);
-
-        const diffDays = Math.floor((Date.now() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-        const currentDay = Math.min(durationDays, Math.max(1, diffDays));
-        progressMap[id] = {
-          joinedAt: start,
-          currentDay,
-          completed: data.status === 'completed',
-          currentWeek: userProg.currentWeek || 1,
-        };
-      });
-
-      // Check last session date and compute average hour from last 5 sessions
-      const sessionsRef = collection(db, 'users', uid, 'sessions');
-      const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(5));
-      const sessSnap = await getDocs(sessQuery);
-      let lastSessionDate = null;
-      let calculatedAvgHour = 18;
-
-      if (!sessSnap.empty) {
-        const latestDoc = sessSnap.docs[0];
-        const latestData = latestDoc.data();
-        lastSessionDate = latestData.date?.toDate ? latestData.date.toDate() : new Date(latestData.date || Date.now());
-
-        const hours = sessSnap.docs.map(d => {
-          const sData = d.data();
-          const date = sData.date?.toDate ? sData.date.toDate() : new Date(sData.date || Date.now());
-          return date.getHours();
-        });
-        calculatedAvgHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
-      }
-      setAvgWorkoutHour(calculatedAvgHour);
-
-      if (lastSessionDate) {
-        const diffMs = Date.now() - lastSessionDate.getTime();
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
-        if (diffDays > 4) {
-          const hasReignition = userChallenges.some(
-            c => c.type === 'weak_point' && c.subtype === 'quest' && c.name === 'Re-ignition' && c.status === 'active'
-          );
-          if (!hasReignition) {
-            const newQuestRef = doc(collection(db, 'challenges'));
-            const questDoc = {
-              type: 'weak_point',
-              subtype: 'quest',
-              name: 'Re-ignition',
-              description: 'Log 1 workout within 48 hours to get back on track! 🔥',
-              creatorUid: uid,
-              participants: [uid],
-              startDate: serverTimestamp(),
-              endDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
-              status: 'active',
-              goal: { targetSets: 1, muscleGroup: 'any' },
-              rewardXP: 100,
-              progress: {
-                [uid]: { completedSets: 0, badgeEarned: false }
-              }
-            };
-            await setDoc(newQuestRef, questDoc);
-
-            userChallenges.push({
-              id: newQuestRef.id,
-              ...questDoc,
-              subtype: 'quest',
-              durationDays: 2,
-              weeksRemaining: 1,
-              progressPct: 0,
-              currentMission: 'Complete 1 set of any workout (Progress: 0/1)',
-            });
-          }
-        }
-      }
-
-      // Load personalized templates from Firestore subcollection users/{uid}/personalTemplates
-      const personalTemplatesCol = collection(db, 'users', uid, 'personalTemplates');
-      const personalTemplatesSnap = await getDocs(personalTemplatesCol);
-      const personalTemplates = [];
-
-      personalTemplatesSnap.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const muscle = (data.goal?.muscleGroup || 'Core').toLowerCase();
-        const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
-        if (!isDup) {
-          personalTemplates.push({
-            id: docSnap.id,
-            ...data,
-            durationDays: data.durationDays || 28,
-          });
-        } else {
-          // Asynchronously clean up the duplicate document from Firestore
-          const dupRef = doc(db, 'users', uid, 'personalTemplates', docSnap.id);
-          deleteDoc(dupRef).catch(err => console.error('[useChallenges] Failed to clean duplicate template:', err));
-        }
-      });
-
-      // If personalTemplates is empty AND user doesn't already have an active weak_point challenge,
-      // call the Cloud Function to generate new challenge templates!
-      const hasWeakPoint = userChallenges.some(c => c.type === 'weak_point' && c.status === 'active');
-      if (personalTemplates.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
-        isGeneratingChallenges = true;
-        try {
-          const { httpsCallable } = await import('firebase/functions');
-          const { functions } = await import('../lib/firebase');
-          const generateChallengeFn = httpsCallable(functions, 'generateChallenge');
-          const res = await generateChallengeFn();
-          if (res.data && Array.isArray(res.data)) {
-            res.data.forEach(tpl => {
-              const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();
-              const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
-              if (!isDup) {
-                personalTemplates.push({
-                  id: tpl.id,
-                  ...tpl,
-                  durationDays: tpl.durationDays || 28,
-                });
-              }
-            });
-          }
-        } catch (fnErr) {
-          console.error('[useChallenges] Failed to generate challenge via Cloud Function:', fnErr);
-        } finally {
-          isGeneratingChallenges = false;
-        }
-      }
-
-      const templates = [...personalTemplates];
-      const joinedTypes = userChallenges.map((c) => c.type);
-      if (!joinedTypes.includes('comeback') && profile?.userType === 'Comeback') {
-        templates.push({
-          id: 'comeback',
-          type: 'comeback',
-          name: 'Comeback Challenge',
-          description: 'Train 3x/week for 12 weeks to build your base',
-          durationDays: 84,
-        });
-      }
-      if (!joinedTypes.includes('streak')) {
-        templates.push({
-          id: 'streak',
-          type: 'streak',
-          name: 'Streak Challenge',
-          description: 'Train 3x/week for 8 weeks consecutively',
-          durationDays: 56,
-        });
-      }
-
-      setChallenges([...userChallenges, ...templates]);
-      setUserProgress(progressMap);
-    } catch (err) {
-      console.error('Error loading challenges:', err);
-      setError('Failed to load challenges.');
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.userType, deletedChallengeIds]);
+    // no-op
+  }, []);
 
   useEffect(() => {
-    if (user?.uid) {
-      loadChallenges(user.uid);
-    } else {
+    if (!user?.uid) {
       setChallenges([]);
       setUserProgress({});
+      return;
     }
-  }, [user?.uid, profile?.userType, loadChallenges]);
+
+    setLoading(true);
+    setError(null);
+
+    const q = query(
+      collection(db, 'challenges'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, async (snap) => {
+      try {
+        const userChallenges = [];
+        const progressMap = {};
+
+        const docs = snap?.docs || [];
+        for (const docSnap of docs) {
+          const id = docSnap.id;
+          const data = docSnap.data();
+
+          // Skip optimistically deleted or abandoned challenges
+          if (deletedChallengeIds.has(id) || data.status === 'abandoned') {
+            continue;
+          }
+
+          const start = data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate || Date.now());
+          let durationDays = data.durationDays;
+          if (!durationDays) {
+            if (data.type === 'comeback') durationDays = 84;
+            else if (data.type === 'streak') durationDays = 56;
+            else if (data.type === 'weak_point') durationDays = 28;
+            else durationDays = 28;
+          }
+          const end = data.endDate?.toDate ? data.endDate.toDate() : new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
+          const diffMs = end.getTime() - Date.now();
+          const weeksRemaining = Math.max(0, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)));
+
+          const progressPercent = calculateProgressPct({ ...data, id }, user.uid);
+
+          let currentMission = '';
+          const userProg = data.progress?.[user.uid] || {};
+          if (data.type === 'comeback') {
+            currentMission = `Week ${userProg.currentWeek || 1}: Complete 3 workouts (Total: ${userProg.completedSessions || 0}/36)`;
+          } else if (data.type === 'streak') {
+            const currentWeek = userProg.currentWeek || 1;
+            const weekCount = userProg.weeklyCount?.[currentWeek - 1] || 0;
+            currentMission = `Week ${currentWeek}: Log 3 workouts (Week count: ${weekCount}/3)`;
+          } else if (data.type === 'weak_point') {
+            const targetSets = data.goal?.targetSets || 15;
+            const completed = userProg.completedSets || 0;
+            currentMission = `Complete ${targetSets} sets of ${data.goal?.muscleGroup || 'Core'} (Progress: ${completed}/${targetSets})`;
+          }
+
+          const mappedChallenge = {
+            id,
+            ...data,
+            subtype: data.subtype || 'campaign',
+            name: data.type === 'comeback'
+              ? 'Comeback Challenge'
+              : data.type === 'streak'
+              ? 'Streak Challenge'
+              : (data.name || 'Weak Point Challenge'),
+            description: data.type === 'comeback'
+              ? 'Train 3x/week for 12 weeks to build your base'
+              : data.type === 'streak'
+              ? 'Train 3x/week for 8 weeks consecutively'
+              : (data.description || 'Target specific weak points'),
+            durationDays,
+            weeksRemaining,
+            progressPct: progressPercent,
+            currentMission,
+          };
+
+          userChallenges.push(mappedChallenge);
+
+          const diffDays = Math.floor((Date.now() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+          const currentDay = Math.min(durationDays, Math.max(1, diffDays));
+          progressMap[id] = {
+            joinedAt: start,
+            currentDay,
+            completed: data.status === 'completed',
+            currentWeek: userProg.currentWeek || 1,
+          };
+        }
+
+        // Check last session date and compute average hour from last 5 sessions
+        const sessionsRef = collection(db, 'users', user.uid, 'sessions');
+        const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(5));
+        const sessSnap = await getDocs(sessQuery);
+        let lastSessionDate = null;
+        let calculatedAvgHour = 18;
+
+        if (!sessSnap.empty) {
+          const latestDoc = sessSnap.docs[0];
+          const latestData = latestDoc.data();
+          lastSessionDate = latestData.date?.toDate ? latestData.date.toDate() : new Date(latestData.date || Date.now());
+
+          const hours = sessSnap.docs.map(d => {
+            const sData = d.data();
+            const date = sData.date?.toDate ? sData.date.toDate() : new Date(sData.date || Date.now());
+            return date.getHours();
+          });
+          calculatedAvgHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
+        }
+        setAvgWorkoutHour(calculatedAvgHour);
+
+        if (lastSessionDate) {
+          const diffMs = Date.now() - lastSessionDate.getTime();
+          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+          if (diffDays > 4) {
+            const hasReignition = userChallenges.some(
+              c => c.type === 'weak_point' && c.subtype === 'quest' && c.name === 'Re-ignition' && c.status === 'active'
+            );
+            if (!hasReignition) {
+              const newQuestRef = doc(collection(db, 'challenges'));
+              const questDoc = {
+                type: 'weak_point',
+                subtype: 'quest',
+                name: 'Re-ignition',
+                description: 'Log 1 workout within 48 hours to get back on track! 🔥',
+                creatorUid: user.uid,
+                participants: [user.uid],
+                startDate: serverTimestamp(),
+                endDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
+                status: 'active',
+                durationDays: 2,
+                goal: { targetSets: 1, muscleGroup: 'any' },
+                rewardXP: 100,
+                progress: {
+                  [user.uid]: { completedSets: 0, badgeEarned: false }
+                }
+              };
+              await setDoc(newQuestRef, questDoc);
+
+              userChallenges.push({
+                id: newQuestRef.id,
+                ...questDoc,
+                subtype: 'quest',
+                durationDays: 2,
+                weeksRemaining: 1,
+                progressPct: 0,
+                currentMission: 'Complete 1 set of any workout (Progress: 0/1)',
+              });
+            }
+          }
+        }
+
+        // Load personalized templates from Firestore subcollection users/{uid}/personalTemplates
+        const personalTemplatesCol = collection(db, 'users', user.uid, 'personalTemplates');
+        const personalTemplatesSnap = await getDocs(personalTemplatesCol);
+        const personalTemplates = [];
+
+        personalTemplatesSnap.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          const muscle = (data.goal?.muscleGroup || 'Core').toLowerCase();
+          const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
+          if (!isDup) {
+            personalTemplates.push({
+              id: docSnap.id,
+              ...data,
+              durationDays: data.durationDays || 28,
+            });
+          } else {
+            const dupRef = doc(db, 'users', user.uid, 'personalTemplates', docSnap.id);
+            deleteDoc(dupRef).catch(err => console.error('[useChallenges] Failed to clean duplicate template:', err));
+          }
+        });
+
+        // Trigger Cloud Function generation if empty and no active weak point challenge
+        const hasWeakPoint = userChallenges.some(c => c.type === 'weak_point' && c.status === 'active');
+        if (personalTemplates.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
+          isGeneratingChallenges = true;
+          try {
+            const { httpsCallable } = await import('firebase/functions');
+            const { functions } = await import('../lib/firebase');
+            const generateChallengeFn = httpsCallable(functions, 'generateChallenge');
+            const res = await generateChallengeFn();
+            if (res.data && Array.isArray(res.data)) {
+              res.data.forEach(tpl => {
+                const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();
+                const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
+                if (!isDup) {
+                  personalTemplates.push({
+                    id: tpl.id,
+                    ...tpl,
+                    durationDays: tpl.durationDays || 28,
+                  });
+                }
+              });
+            }
+          } catch (fnErr) {
+            console.error('[useChallenges] Failed to generate challenge via Cloud Function:', fnErr);
+          } finally {
+            isGeneratingChallenges = false;
+          }
+        }
+
+        const templates = [...personalTemplates];
+        const joinedTypes = userChallenges.map((c) => c.type);
+        if (!joinedTypes.includes('comeback') && profile?.userType === 'Comeback') {
+          templates.push({
+            id: 'comeback',
+            type: 'comeback',
+            name: 'Comeback Challenge',
+            description: 'Train 3x/week for 12 weeks to build your base',
+            durationDays: 84,
+          });
+        }
+        if (!joinedTypes.includes('streak')) {
+          templates.push({
+            id: 'streak',
+            type: 'streak',
+            name: 'Streak Challenge',
+            description: 'Train 3x/week for 8 weeks consecutively',
+            durationDays: 56,
+          });
+        }
+
+        setChallenges([...userChallenges, ...templates]);
+        setUserProgress(progressMap);
+      } catch (err) {
+        console.error('Error loading challenges:', err);
+        setError('Failed to load challenges.');
+      } finally {
+        setLoading(false);
+      }
+    }, (err) => {
+      console.error('onSnapshot error in useChallenges:', err);
+      setError('Failed to load challenges.');
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid, profile?.userType, deletedChallengeIds]);
 
   // startChallenge(uid, type)
   const startChallenge = useCallback(async (uid, type) => {
@@ -334,18 +349,21 @@ export function useChallenges() {
     if (type === 'comeback') {
       challengeDoc.endDate = new Date(Date.now() + 84 * 24 * 60 * 60 * 1000);
       challengeDoc.goal = { durationWeeks: 12, startCapacityPct: 40 };
+      challengeDoc.durationDays = 84;
       challengeDoc.progress = {
         [uid]: { currentWeek: 1, completedSessions: 0, badgeEarned: false }
       };
     } else if (type === 'streak') {
       challengeDoc.endDate = new Date(Date.now() + 56 * 24 * 60 * 60 * 1000);
       challengeDoc.goal = { workoutsPerWeek: 3, durationWeeks: 8 };
+      challengeDoc.durationDays = 56;
       challengeDoc.progress = {
         [uid]: { currentWeek: 1, weeklyCount: [0, 0, 0, 0, 0, 0, 0, 0], badgeEarned: false }
       };
     } else if (type === 'weak_point') {
       challengeDoc.endDate = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000);
       challengeDoc.goal = { targetSets: 15, muscleGroup: 'Core' };
+      challengeDoc.durationDays = 28;
       challengeDoc.progress = {
         [uid]: { completedSets: 0, badgeEarned: false }
       };
@@ -371,9 +389,13 @@ export function useChallenges() {
       const id = docSnap.id;
 
       const start = data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate || Date.now());
-      let durationDays = 56;
-      if (data.type === 'comeback') durationDays = 84;
-      if (data.type === 'weak_point') durationDays = data.durationDays || 28;
+      let durationDays = data.durationDays;
+      if (!durationDays) {
+        if (data.type === 'comeback') durationDays = 84;
+        else if (data.type === 'streak') durationDays = 56;
+        else if (data.type === 'weak_point') durationDays = 28;
+        else durationDays = 28;
+      }
       const end = data.endDate?.toDate ? data.endDate.toDate() : new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
       const diffMs = end.getTime() - Date.now();
       const weeksRemaining = Math.max(0, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)));
@@ -444,12 +466,14 @@ export function useChallenges() {
     }
 
     let loggedMuscleGroups = [];
+    let isSameDaySession = false;
     try {
       const sessionsRef = collection(db, 'users', uid, 'sessions');
-      const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(1));
+      const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(2));
       const sessSnap = await getDocs(sessQuery);
-      if (!sessSnap.empty) {
-        const latestSessDoc = sessSnap.docs[0];
+      const docs = sessSnap.docs || [];
+      if (docs.length > 0) {
+        const latestSessDoc = docs[0];
         const exercisesRef = collection(db, 'users', uid, 'sessions', latestSessDoc.id, 'exercises');
         const exSnap = await getDocs(exercisesRef);
         loggedMuscleGroups = exSnap.docs.map(exDoc => {
@@ -460,6 +484,20 @@ export function useChallenges() {
             count: doneSets.length
           };
         });
+
+        if (docs.length >= 2) {
+          const date0 = docs[0].data().date;
+          const date1 = docs[1].data().date;
+          if (date0 && date1) {
+            const d0 = date0.toDate ? date0.toDate() : new Date(date0);
+            const d1 = date1.toDate ? date1.toDate() : new Date(date1);
+            if (!isNaN(d0.getTime()) && !isNaN(d1.getTime())) {
+              isSameDaySession = d0.getFullYear() === d1.getFullYear() &&
+                                 d0.getMonth() === d1.getMonth() &&
+                                 d0.getDate() === d1.getDate();
+            }
+          }
+        }
       }
     } catch (queryErr) {
       console.error('[useChallenges] Error fetching latest session for progress update:', queryErr);
@@ -493,12 +531,16 @@ export function useChallenges() {
       const userProg = { ...(data.progress?.[uid] || {}) };
 
       if (data.type === 'comeback') {
-        userProg.completedSessions = (userProg.completedSessions || 0) + 1;
+        if (!isSameDaySession) {
+          userProg.completedSessions = (userProg.completedSessions || 0) + 1;
+        }
         userProg.currentWeek = currentWeek;
       } else if (data.type === 'streak') {
-        const weeklyCount = [...(userProg.weeklyCount || [0, 0, 0, 0, 0, 0, 0, 0])];
-        weeklyCount[currentWeek - 1] = (weeklyCount[currentWeek - 1] || 0) + 1;
-        userProg.weeklyCount = weeklyCount;
+        if (!isSameDaySession) {
+          const weeklyCount = [...(userProg.weeklyCount || [0, 0, 0, 0, 0, 0, 0, 0])];
+          weeklyCount[currentWeek - 1] = (weeklyCount[currentWeek - 1] || 0) + 1;
+          userProg.weeklyCount = weeklyCount;
+        }
         userProg.currentWeek = currentWeek;
       } else if (data.type === 'weak_point') {
         const targetGroup = (data.goal?.muscleGroup || '').toLowerCase();
@@ -547,18 +589,22 @@ export function useChallenges() {
           shouldAwardXP = true;
           xpAmount = data.rewardXP || 500;
 
-          // Award power-up rewards in profile (skip for wagers)
+           // Award power-up rewards in profile (skip for wagers)
           const userData = userSnap.exists() ? userSnap.data() : {};
           const powerUps = userData.powerUps || {};
           let streakShield = powerUps.streakShield || 0;
           let xpBooster = powerUps.xpBooster || 0;
+          let challengeSkip = powerUps.challengeSkip || 0;
+          let planRefresh = powerUps.planRefresh || 0;
 
           if (data.subtype !== 'wager') {
             if (data.type === 'weak_point' || data.type === 'comeback') {
               streakShield += 1;
+              challengeSkip += 1;
             }
             if (data.type === 'streak' || data.type === 'comeback') {
               xpBooster += 1;
+              planRefresh += 1;
             }
           }
 
@@ -567,6 +613,8 @@ export function useChallenges() {
               ...powerUps,
               streakShield,
               xpBooster,
+              challengeSkip,
+              planRefresh,
             }
           };
           if (data.type === 'comeback') {
@@ -618,6 +666,7 @@ export function useChallenges() {
           participants: [user.uid],
           startDate: serverTimestamp(),
           status: 'active',
+          durationDays: templateData.durationDays || 28,
           endDate: new Date(Date.now() + (templateData.durationDays || 28) * 24 * 60 * 60 * 1000),
           goal: templateData.goal,
           progress: {
@@ -691,6 +740,7 @@ export function useChallenges() {
         startDate: serverTimestamp(),
         endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         status: 'active',
+        durationDays: 7,
         goal: { workoutsPerWeek: 3, durationWeeks: 1 },
         wagerAmount: amount,
         rewardXP: amount * 2,
@@ -800,6 +850,120 @@ export function useChallenges() {
     }
   }, [user?.uid, loadChallenges, addToast]);
 
+  // useChallengeSkip(challengeId)
+  const useChallengeSkip = useCallback(async (challengeId) => {
+    if (!user?.uid || !challengeId) return;
+
+    const userRef = doc(db, 'users', user.uid);
+    const challengeRef = doc(db, 'challenges', challengeId);
+
+    let shouldAwardXP = false;
+    let xpAmount = 500;
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error('User profile not found');
+        }
+        const userData = userSnap.data();
+        const powerUps = userData.powerUps || {};
+        const challengeSkipCount = powerUps.challengeSkip || 0;
+        if (challengeSkipCount <= 0) {
+          throw new Error('No Challenge Skips remaining');
+        }
+
+        const challSnap = await transaction.get(challengeRef);
+        if (!challSnap.exists()) {
+          throw new Error('Challenge not found');
+        }
+        const data = challSnap.data();
+        if (data.status !== 'active') {
+          throw new Error('Challenge is not active');
+        }
+
+        const userProg = { ...(data.progress?.[user.uid] || {}) };
+        
+        // Calculate currentWeek
+        const start = data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate);
+        const diffTime = Date.now() - start.getTime();
+        const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000));
+        const durationWeeks = data.goal?.durationWeeks || (data.type === 'comeback' ? 12 : 8);
+        const currentWeek = Math.min(durationWeeks, Math.max(1, Math.floor(diffDays / 7) + 1));
+
+        if (data.type === 'comeback') {
+          userProg.completedSessions = (userProg.completedSessions || 0) + 1;
+          userProg.currentWeek = currentWeek;
+        } else if (data.type === 'streak') {
+          const weeklyCount = [...(userProg.weeklyCount || [0, 0, 0, 0, 0, 0, 0, 0])];
+          weeklyCount[currentWeek - 1] = (weeklyCount[currentWeek - 1] || 0) + 1;
+          userProg.weeklyCount = weeklyCount;
+          userProg.currentWeek = currentWeek;
+        } else if (data.type === 'weak_point') {
+          userProg.completedSets = (userProg.completedSets || 0) + 3;
+        }
+
+        let isComplete = false;
+        if (data.type === 'comeback') {
+          isComplete = userProg.completedSessions >= 3 * durationWeeks;
+        } else if (data.type === 'streak') {
+          isComplete = userProg.weeklyCount.every((count) => count >= 3);
+        } else if (data.type === 'weak_point') {
+          const targetSets = data.goal?.targetSets || 15;
+          isComplete = (userProg.completedSets || 0) >= targetSets;
+        }
+
+        const updates = {
+          [`progress.${user.uid}`]: userProg,
+        };
+
+        if (isComplete) {
+          updates.status = 'completed';
+          userProg.badgeEarned = true;
+          if (!data.progress?.[user.uid]?.badgeEarned) {
+            shouldAwardXP = true;
+            xpAmount = data.rewardXP || 500;
+          }
+        }
+
+        // Deduct 1 Challenge Skip
+        transaction.update(userRef, {
+          powerUps: {
+            ...powerUps,
+            challengeSkip: challengeSkipCount - 1
+          }
+        });
+
+        // Update challenge document
+        transaction.update(challengeRef, updates);
+      });
+
+      // Update local profile state
+      const currentProfile = useAuthStore.getState().profile;
+      if (currentProfile) {
+        useAuthStore.getState().setProfile({
+          ...currentProfile,
+          powerUps: {
+            ...(currentProfile.powerUps || {}),
+            challengeSkip: Math.max(0, (currentProfile.powerUps?.challengeSkip || 1) - 1)
+          }
+        });
+      }
+
+      // Post-transaction completion check to award rewards
+      if (shouldAwardXP) {
+        await awardXP(user.uid, 'challenge_complete', xpAmount, { challengeId });
+      }
+
+      addToast('Challenge Skip consumed! Progress updated! ⏭️', 'success');
+      await loadChallenges(user.uid);
+    } catch (err) {
+      console.error('[useChallenges] Error using challenge skip:', err);
+      addToast(err.message || 'Failed to use Challenge Skip.', 'error');
+      throw err;
+    }
+  }, [user?.uid, addToast, loadChallenges, awardXP]);
+
   return {
     challenges: challenges.filter((c) => !deletedChallengeIds.has(c.id)),
     userProgress,
@@ -813,5 +977,6 @@ export function useChallenges() {
     joinChallenge,
     createWager,
     leaveChallenge,
+    useChallengeSkip,
   };
 }

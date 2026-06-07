@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Flame,
@@ -14,8 +15,11 @@ import {
   Lock,
   Unlock,
   Sparkles,
-  Trash2
+  Trash2,
+  FastForward
 } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../lib/firebase';
 import { useChallenges } from '../../hooks/useChallenges';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/useUIStore';
@@ -33,8 +37,26 @@ const getRemainingCooldownText = (until) => {
   return `Locked for ${mins}m remaining`;
 };
 
+const getRemainingTimeText = (challenge) => {
+  if (!challenge.endDate) return `${challenge.weeksRemaining || 0} wks left`;
+  const end = challenge.endDate.toDate ? challenge.endDate.toDate() : new Date(challenge.endDate);
+  const diffMs = end.getTime() - Date.now();
+  if (diffMs <= 0) return 'Expired';
+  
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  if (diffHours < 24) {
+    return `${diffHours}h left`;
+  }
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) {
+    return `${diffDays}d left`;
+  }
+  return `${challenge.weeksRemaining || 0} wks left`;
+};
+
 export const MobileChallenges = () => {
-  const { challenges, loading, error, joinChallenge, createWager, avgWorkoutHour, leaveChallenge } = useChallenges();
+  const navigate = useNavigate();
+  const { challenges, loading, error, joinChallenge, createWager, avgWorkoutHour, leaveChallenge, useChallengeSkip } = useChallenges();
   const [joiningId, setJoiningId] = useState(null);
   const [challengeToDelete, setChallengeToDelete] = useState(null);
 
@@ -46,6 +68,14 @@ export const MobileChallenges = () => {
 
   const handleLeave = (id) => {
     setChallengeToDelete(id);
+  };
+
+  const handleUseChallengeSkip = async (challengeId) => {
+    try {
+      await useChallengeSkip(challengeId);
+    } catch (err) {
+      console.error('[MobileChallenges] Failed to skip challenge progress:', err);
+    }
   };
 
   const confirmDelete = async () => {
@@ -65,7 +95,7 @@ export const MobileChallenges = () => {
 
   // Skill points calculations
   const skills = profile?.skills || {};
-  const spentPoints = (skills.ironWill ? 1 : 0) + (skills.adrenalineRush ? 1 : 0) + (skills.recoveryProtocol ? 1 : 0);
+  const spentPoints = (skills.ironWill ? 4 : 0) + (skills.adrenalineRush ? 4 : 0) + (skills.recoveryProtocol ? 4 : 0);
   const remainingPoints = Math.max(0, level - spentPoints);
 
   // Wager Selection State
@@ -75,6 +105,7 @@ export const MobileChallenges = () => {
   // Overdrive Camera Verification State
   const [cameraVerified, setCameraVerified] = useState(false);
   const [cameraImage, setCameraImage] = useState(null);
+  const [verifyingImage, setVerifyingImage] = useState(false);
 
   // Overdrive Hour Calculation
   const currentHour = new Date().getHours();
@@ -86,6 +117,7 @@ export const MobileChallenges = () => {
 
   const activeCampaigns = activeChallenges.filter((c) => (c.subtype || 'campaign') === 'campaign');
   const activeQuests = activeChallenges.filter((c) => c.subtype === 'quest');
+  const activeWager = activeChallenges.find((c) => c.subtype === 'wager');
 
   const handleJoin = async (id) => {
     setJoiningId(id);
@@ -123,10 +155,30 @@ export const MobileChallenges = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setCameraImage(reader.result);
-        setCameraVerified(true);
-        addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
+      reader.onloadend = async () => {
+        const imageData = reader.result;
+        setCameraImage(imageData);
+        setVerifyingImage(true);
+        addToast('Verifying image with Gemini AI... 🔍', 'info');
+        try {
+          const verifyGymImageFn = httpsCallable(functions, 'verifyGymImage');
+          const res = await verifyGymImageFn({ image: imageData });
+          if (res.data?.success && res.data?.verified) {
+            setCameraVerified(true);
+            addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
+          } else {
+            setCameraVerified(false);
+            setCameraImage(null);
+            addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
+          }
+        } catch (err) {
+          console.error('[MobileChallenges] Gym verification error:', err);
+          setCameraVerified(false);
+          setCameraImage(null);
+          addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
+        } finally {
+          setVerifyingImage(false);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -144,12 +196,13 @@ export const MobileChallenges = () => {
       exercises: []
     });
     setMobileTab('workout');
+    navigate('/workout');
     addToast('Overdrive active: 1.5x XP Multiplier enabled! ⚡', 'success');
   };
 
   const handleUnlockSkill = async (skillKey) => {
     if (!user?.uid || !profile) return;
-    if (remainingPoints < 1) {
+    if (remainingPoints < 4) {
       addToast('No Skill Points available!', 'error');
       return;
     }
@@ -212,6 +265,7 @@ export const MobileChallenges = () => {
       ]
     });
     setMobileTab('workout');
+    navigate('/workout');
   };
 
   return (
@@ -276,21 +330,30 @@ export const MobileChallenges = () => {
                   <>
                     {!cameraVerified ? (
                       <div>
-                        <label
-                          htmlFor="overdrive-camera"
-                          className="w-full py-2 border-2 border-black bg-indigo-600 hover:bg-indigo-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-2 cursor-pointer"
-                        >
-                          <Camera size={14} />
-                          <span>Verify Gym Presence</span>
-                        </label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          id="overdrive-camera"
-                          className="hidden"
-                          onChange={handleCameraChange}
-                        />
+                        {verifyingImage ? (
+                          <div className="w-full py-2 border-2 border-black bg-indigo-950 text-indigo-400 font-display font-extrabold text-xs uppercase tracking-wider text-center flex justify-center items-center gap-2 cursor-not-allowed opacity-75">
+                            <span className="h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying Presence...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <label
+                              htmlFor="overdrive-camera"
+                              className="w-full py-2 border-2 border-black bg-indigo-600 hover:bg-indigo-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-2 cursor-pointer"
+                            >
+                              <Camera size={14} />
+                              <span>Verify Gym Presence</span>
+                            </label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              id="overdrive-camera"
+                              className="hidden"
+                              onChange={handleCameraChange}
+                            />
+                          </>
+                        )}
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2">
@@ -344,40 +407,83 @@ export const MobileChallenges = () => {
                 <Flame size={24} className="text-orange-500" />
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 relative z-10">
-                <div className="flex gap-2">
-                  {[50, 100, 200].map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setSelectedWager(amount)}
-                      className={`flex-1 py-1.5 border-2 border-black font-mono font-bold text-xs shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ${
-                        selectedWager === amount
-                          ? 'bg-orange-500 text-white shadow-none translate-x-0.5 translate-y-0.5'
-                          : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] hover:bg-orange-500/10'
-                      }`}
-                    >
-                      {amount} XP
-                    </button>
-                  ))}
-                </div>
+              {activeWager ? (
+                <div className="mt-4 flex flex-col gap-3 relative z-10 border-2 border-orange-500/40 bg-orange-950/15 p-3.5 rounded-lg shadow-[2px_2px_0px_rgba(249,115,22,0.15)]">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-orange-400 font-extrabold uppercase tracking-wide">
+                    <span>ACTIVE XP WAGER: {activeWager.wagerAmount || 50} XP</span>
+                    <span className="bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded text-[8px]">
+                      {getRemainingTimeText(activeWager)}
+                    </span>
+                  </div>
+                  
+                  {/* Progress details */}
+                  <div className="mt-1 flex flex-col gap-2">
+                    <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
+                      <span>WORKOUT PROGRESS</span>
+                      <span className="text-white font-bold font-dm">
+                        {(() => {
+                          const prog = activeWager.progress?.[user?.uid] || {};
+                          const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
+                          return `${sum}/3`;
+                        })()} workouts
+                      </span>
+                    </div>
+                    
+                    {/* Neubrutalist Progress Bar */}
+                    <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
+                      <div
+                        className="h-full bg-orange-500 transition-all duration-500 ease-out"
+                        style={{
+                          width: `${(() => {
+                            const prog = activeWager.progress?.[user?.uid] || {};
+                            const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
+                            return Math.min(100, Math.round((sum / 3) * 100));
+                          })()}%`
+                        }}
+                      />
+                    </div>
+                  </div>
 
-                <button
-                  onClick={handlePlaceWager}
-                  disabled={wagerLoading || xp < selectedWager}
-                  className="w-full py-2.5 border-2 border-black bg-orange-600 hover:bg-orange-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                >
-                  {wagerLoading ? (
-                    <span>Placing Wager...</span>
-                  ) : xp < selectedWager ? (
-                    <span>INSUFFICIENT XP BALANCE</span>
-                  ) : (
-                    <>
-                      <span>Wager {selectedWager} XP</span>
-                      <ArrowRight size={12} />
-                    </>
-                  )}
-                </button>
-              </div>
+                  <p className="text-[9px] text-[var(--text-muted)] font-sans mt-0.5 leading-snug">
+                    Complete your remaining workouts before expiration to claim a +{(activeWager.wagerAmount || 50) * 2} XP payout!
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-col gap-3 relative z-10">
+                  <div className="flex gap-2">
+                    {[50, 100, 200].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setSelectedWager(amount)}
+                        className={`flex-1 py-1.5 border-2 border-black font-mono font-bold text-xs shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ${
+                          selectedWager === amount
+                            ? 'bg-orange-500 text-white shadow-none translate-x-0.5 translate-y-0.5'
+                            : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] hover:bg-orange-500/10'
+                        }`}
+                      >
+                        {amount} XP
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={handlePlaceWager}
+                    disabled={wagerLoading || xp < selectedWager}
+                    className="w-full py-2.5 border-2 border-black bg-orange-600 hover:bg-orange-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                  >
+                    {wagerLoading ? (
+                      <span>Placing Wager...</span>
+                    ) : xp < selectedWager ? (
+                      <span>INSUFFICIENT XP BALANCE</span>
+                    ) : (
+                      <>
+                        <span>Wager {selectedWager} XP</span>
+                        <ArrowRight size={12} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Fitness Skill Tree Section */}
@@ -423,7 +529,7 @@ export const MobileChallenges = () => {
                 ].map((node) => {
                   const Icon = node.icon;
                   const isUnlocked = !!skills[node.key];
-                  const canUnlock = remainingPoints >= 1 && !isUnlocked;
+                  const canUnlock = remainingPoints >= 4 && !isUnlocked;
 
                   return (
                     <div
@@ -449,7 +555,7 @@ export const MobileChallenges = () => {
                             </span>
                           ) : (
                             <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--text-secondary)] px-1.5 py-0.5 border border-[var(--border)] bg-[var(--surface)] rounded">
-                              1 SP COST
+                              4 SP COST
                             </span>
                           )}
                         </div>
@@ -470,12 +576,12 @@ export const MobileChallenges = () => {
                             {canUnlock ? (
                               <>
                                 <Unlock size={10} />
-                                <span>Unlock Perk (-1 SP)</span>
+                                <span>Unlock Perk (-4 SP)</span>
                               </>
                             ) : (
                               <>
                                 <Lock size={10} />
-                                <span>LOCKED (REQUIRES 1 SP)</span>
+                                <span>LOCKED (REQUIRES 4 SP)</span>
                               </>
                             )}
                           </button>
@@ -549,16 +655,26 @@ export const MobileChallenges = () => {
                               </span>
                               <span className="flex items-center gap-1 text-[var(--text-muted)]">
                                 <CalendarDays size={10} />
-                                {challenge.weeksRemaining} wks left
+                                {getRemainingTimeText(challenge)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Challenge footer option to abandon */}
+                          {/* Challenge footer options */}
                           <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
-                            <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
-                              ID: {challenge.id.slice(0, 8)}
-                            </span>
+                            <div className="flex gap-3 items-center">
+                              <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
+                                ID: {challenge.id.slice(0, 8)}
+                              </span>
+                              <button
+                                onClick={() => handleUseChallengeSkip(challenge.id)}
+                                disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
+                                className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
+                              >
+                                <FastForward size={10} />
+                                <span>Skip Day (Costs 1 ⏭️)</span>
+                              </button>
+                            </div>
                             <button
                               onClick={() => handleLeave(challenge.id)}
                               className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
@@ -652,16 +768,26 @@ export const MobileChallenges = () => {
                               </span>
                               <span className="flex items-center gap-1 text-[var(--text-muted)]">
                                 <CalendarDays size={10} />
-                                {challenge.weeksRemaining} wks left
+                                {getRemainingTimeText(challenge)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Challenge footer option to abandon */}
+                          {/* Challenge footer options */}
                           <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
-                            <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
-                              ID: {challenge.id.slice(0, 8)}
-                            </span>
+                            <div className="flex gap-3 items-center">
+                              <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
+                                ID: {challenge.id.slice(0, 8)}
+                              </span>
+                              <button
+                                onClick={() => handleUseChallengeSkip(challenge.id)}
+                                disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
+                                className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
+                              >
+                                <FastForward size={10} />
+                                <span>Skip Day (Costs 1 ⏭️)</span>
+                              </button>
+                            </div>
                             <button
                               onClick={() => handleLeave(challenge.id)}
                               className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
@@ -671,32 +797,7 @@ export const MobileChallenges = () => {
                             </button>
                           </div>
 
-                          {/* Boss Fight section */}
-                          {isFinalStage && (
-                            <div className="mt-4 border-2 border-dashed border-[#ff4a4a] bg-[#ff4a4a]/10 p-3 rounded-lg flex flex-col gap-2 relative overflow-hidden animate-pulse">
-                              <div className="flex justify-between items-center">
-                                <div>
-                                  <span className="text-[10px] font-mono font-bold text-[#ff4a4a] uppercase tracking-widest block">
-                                    ⚡ BOSS FIGHT UNLOCKED
-                                  </span>
-                                  <h4 className="font-display text-sm font-bold text-white uppercase tracking-wide font-barlow mt-0.5">
-                                    Boss: {challenge.name} Finale
-                                  </h4>
-                                </div>
-                                <Flame size={16} className="text-[#ff4a4a] animate-bounce" />
-                              </div>
-                              <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-snug">
-                                Unlock the final AMRAP set to failure to conquer this challenge and claim a +200 XP premium bonus!
-                              </p>
-                              <button
-                                onClick={() => handleStartBossFight(challenge)}
-                                className="w-full mt-1 py-1.5 border border-black bg-[#ff4a4a] hover:bg-red-600 text-white font-display font-extrabold text-[10px] uppercase tracking-wider shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer"
-                              >
-                                <span>Start Boss Workout</span>
-                                <ArrowRight size={10} />
-                              </button>
-                            </div>
-                          )}
+                          {/* No Boss Fight for single-stage Quests */}
                         </motion.div>
                       );
                     })}
@@ -827,11 +928,15 @@ export const MobileChallenges = () => {
                     </div>
                     <div className="flex flex-col min-w-0 w-full">
                       <span className="font-display text-xs font-bold uppercase tracking-wide truncate text-white font-barlow">
-                        {challenge.name === 'Comeback Challenge' ? 'Comeback' : 'Streak'}
+                        {challenge.type === 'comeback'
+                          ? 'Comeback'
+                          : challenge.type === 'streak'
+                          ? (challenge.subtype === 'wager' ? 'Wager' : 'Streak')
+                          : (challenge.subtype === 'quest' ? 'Quest' : 'Weak Point')}
                       </span>
                       <span className="text-[8px] font-mono text-[var(--accent-xp)] uppercase tracking-wider mt-0.5 flex items-center justify-center gap-0.5 font-dm">
                         <CheckCircle2 size={8} />
-                        Claimed +500 XP
+                        Claimed +{challenge.rewardXP || 500} XP
                       </span>
                     </div>
                   </motion.div>

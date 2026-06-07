@@ -29,6 +29,10 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     // iPhone 14 Pro viewport — matches the mobile layout breakpoint
     ...devices['iPhone 14 Pro'],
+    defaultBrowserType: 'chromium',
+    launchOptions: {
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    },
     // Emulator env — overrides any production values
     extraHTTPHeaders: {},
     // Record trace on first retry for easier CI debugging
@@ -47,7 +51,7 @@ export default defineConfig({
       name: 'chromium-mobile',
       use: {
         ...devices['iPhone 14 Pro'],
-        channel: 'chromium',
+        defaultBrowserType: 'chromium',
       },
     },
   ],

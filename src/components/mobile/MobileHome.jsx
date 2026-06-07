@@ -14,6 +14,48 @@ import { useUIStore } from '../../stores/useUIStore';
 import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
 import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
 
+const BoosterTimer = ({ until }) => {
+  const [timeLeft, setTimeLeft] = useState(until - Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = until - Date.now();
+      if (diff <= 0) {
+        clearInterval(timer);
+        setTimeLeft(0);
+      } else {
+        setTimeLeft(diff);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [until]);
+
+  if (timeLeft <= 0) return null;
+
+  const hours = String(Math.floor(timeLeft / (1000 * 60 * 60))).padStart(2, '0');
+  const mins = String(Math.floor((timeLeft / (1000 * 60)) % 60)).padStart(2, '0');
+  const secs = String(Math.floor((timeLeft / 1000) % 60)).padStart(2, '0');
+
+  return (
+    <div className="flex items-center justify-between border-2 border-amber-500 bg-amber-950/15 p-3 rounded-lg shadow-[3px_3px_0px_rgba(245,158,11,0.15)] select-none">
+      <div className="flex items-center gap-2">
+        <span className="text-lg animate-pulse">⚡</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-mono text-amber-400 font-extrabold uppercase tracking-wider leading-none">
+            XP BOOSTER ACTIVE (2x XP)
+          </span>
+          <span className="text-[9px] text-[var(--text-secondary)] font-sans mt-1">
+            Earn double XP for all logged exercises.
+          </span>
+        </div>
+      </div>
+      <div className="font-mono text-sm font-bold text-amber-400 bg-amber-950/30 border border-amber-500/20 px-2 py-0.5 rounded">
+        {hours}h {mins}m {secs}s
+      </div>
+    </div>
+  );
+};
+
 export const MobileHome = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -130,9 +172,22 @@ export const MobileHome = () => {
 
     try {
       const userRef = doc(db, 'users', uid);
+      const activeUntil = Date.now() + 2 * 60 * 60 * 1000;
+      
       await updateDoc(userRef, {
-        [`powerUps.${powerUpKey}`]: currentCount - 1
+        [`powerUps.${powerUpKey}`]: currentCount - 1,
+        xpBoosterUntil: activeUntil
       });
+      
+      useAuthStore.getState().setProfile({
+        ...profile,
+        powerUps: {
+          ...profile.powerUps,
+          [powerUpKey]: currentCount - 1
+        },
+        xpBoosterUntil: activeUntil
+      });
+
       addToast(`⚡ XP Booster activated! Double XP for the next 2 hours!`, 'success');
       setShowInventory(false);
     } catch (err) {
@@ -143,6 +198,14 @@ export const MobileHome = () => {
 
   return (
     <div className="flex flex-col gap-6 p-4 min-h-[100dvh] bg-[var(--bg-base)] text-[var(--text-primary)] pb-28">
+      {(() => {
+        const boosterUntil = profile?.xpBoosterUntil
+          ? (typeof profile.xpBoosterUntil.toDate === 'function' ? profile.xpBoosterUntil.toDate().getTime() : new Date(profile.xpBoosterUntil).getTime())
+          : 0;
+        const isBoosterActive = boosterUntil > Date.now();
+        if (!isBoosterActive) return null;
+        return <BoosterTimer until={boosterUntil} />;
+      })()}
       {/* ─── TACTILE HEADER (HUD) ────────────────────────────────────────────── */}
       <div className="flex justify-between items-center border-b-2 border-[var(--border)] pb-4 mt-2">
         <div className="flex flex-col">
@@ -227,8 +290,11 @@ export const MobileHome = () => {
           <div className="absolute top-2.5 right-2.5 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--primary)] border border-[var(--primary)] bg-[#ff5c000e] rounded">
             PWA
           </div>
-          <div className="flex gap-3">
-            <span className="text-2xl shrink-0">📱</span>
+          <div className="flex gap-3 items-center">
+            {/* App Icon */}
+            <div className="w-12 h-12 bg-[var(--primary)] text-black rounded-2xl border-2 border-black flex items-center justify-center font-display font-black text-xl shadow-[2px_2px_0px_rgba(0,0,0,0.2)] shrink-0 select-none">
+              FD
+            </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-sm uppercase tracking-wide">
                 FitDesi Native Experience
@@ -509,6 +575,13 @@ export const MobileHome = () => {
                     <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
                       Prevents your workout streak from breaking if you miss a day. Activates automatically.
                     </span>
+                    <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
+                      <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
+                      <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
+                        • Complete a Comeback or Weak Point challenge.<br />
+                        • 50% chance drop upon completing a Boss Fight.
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -531,6 +604,13 @@ export const MobileHome = () => {
                         Activate Booster
                       </button>
                     )}
+                    <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
+                      <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
+                      <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
+                        • Complete a Comeback or Streak challenge.<br />
+                        • 50% chance drop upon completing a Boss Fight.
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -545,6 +625,12 @@ export const MobileHome = () => {
                     <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
                       Instantly skips a challenge day (for backup recovery).
                     </span>
+                    <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
+                      <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
+                      <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
+                        • Complete a Comeback or Weak Point challenge.
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -559,6 +645,12 @@ export const MobileHome = () => {
                     <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
                       Allows you to regenerate your weekly plan early.
                     </span>
+                    <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
+                      <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
+                      <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
+                        • Complete a Comeback or Streak challenge.
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

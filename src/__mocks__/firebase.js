@@ -34,6 +34,12 @@ export const mockAddDoc = vi.fn();
 export const mockServerTimestamp = vi.fn(() => ({ _type: 'serverTimestamp' }));
 export const mockRunTransaction = vi.fn();
 export const mockDeleteDoc = vi.fn();
+export const mockOnSnapshot = vi.fn((queryRef, callback) => {
+  Promise.resolve(mockGetDocs()).then((snap) => {
+    callback(snap);
+  }).catch(() => {});
+  return () => {};
+});
 
 // ─── Singleton stubs (src/lib/firebase.js) ───────────────────────────────────
 const mockAuth = { currentUser: null };
@@ -78,6 +84,7 @@ vi.mock('firebase/firestore', () => ({
   collection: mockCollection,
   serverTimestamp: mockServerTimestamp,
   runTransaction: mockRunTransaction,
+  onSnapshot: mockOnSnapshot,
   writeBatch: vi.fn(),
   getFirestore: vi.fn(() => mockDb),
   query: vi.fn(),

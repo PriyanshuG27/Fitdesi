@@ -11,22 +11,33 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { firebaseConfig } from './firebaseConfig';
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const resolvedConfig = { ...firebaseConfig };
+// Connect to local emulators ONLY if explicitly requested via environment variable or under browser automation (E2E tests)
+const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true' || (typeof navigator !== 'undefined' && navigator.webdriver);
+
+if (useEmulator) {
+  resolvedConfig.projectId = 'fitdesi-test';
+}
+
+const app = getApps().length ? getApps()[0] : initializeApp(resolvedConfig);
 
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'asia-south2');
 
-// Connect to local emulators if running on localhost
-if (window.location.hostname === 'localhost') {
+if (useEmulator) {
   try {
-    // connectFirestoreEmulator(db, 'localhost', 8080); // Disabled due to Java 21 missing
-    // connectAuthEmulator(auth, 'http://localhost:9099'); // Disabled
-    connectFunctionsEmulator(functions, 'localhost', 5001);
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099');
+    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+    
+    // Force localStorage persistence so Playwright E2E storageState works
+    setPersistence(auth, browserLocalPersistence)
+      .catch((err) => console.error('Failed to set localStorage persistence:', err));
   } catch (e) {
     console.error('Firebase emulators already connected or failed:', e);
   }

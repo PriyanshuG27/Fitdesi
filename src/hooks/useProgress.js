@@ -5,6 +5,10 @@ import { db } from '../lib/firebase';
 // Module-level cache for strength data
 const strengthCache = new Map();
 
+export function clearStrengthCache() {
+  strengthCache.clear();
+}
+
 // Helper to format Date to YYYY-MM-DD
 const formatDate = (dateObj) => {
   const y = dateObj.getFullYear();

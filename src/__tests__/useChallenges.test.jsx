@@ -182,6 +182,63 @@ describe('useChallenges Hook', () => {
       });
     });
 
+    it('does not increment comeback progress if another session was logged on the same calendar day', async () => {
+      const sameDay = new Date();
+      mockGetDocs
+        .mockResolvedValueOnce({ empty: true, docs: [] }) // 1st: mount challenges
+        .mockResolvedValueOnce({ // 2nd: sessions query
+          empty: false,
+          docs: [
+            {
+              id: 'session-2',
+              data: () => ({ date: sameDay }),
+              ref: { collection: () => ({ get: () => Promise.resolve({ docs: [] }) }) }
+            },
+            {
+              id: 'session-1',
+              data: () => ({ date: sameDay }),
+              ref: { collection: () => ({ get: () => Promise.resolve({ docs: [] }) }) }
+            }
+          ]
+        });
+
+      const mockTx = {
+        get: vi.fn().mockResolvedValue({
+          exists: () => true,
+          data: () => ({
+            type: 'comeback',
+            status: 'active',
+            startDate: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+            goal: { durationWeeks: 12 },
+            progress: {
+              'user-123': { currentWeek: 1, completedSessions: 2, badgeEarned: false }
+            }
+          }),
+        }),
+        update: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.updateProgress('user-123', 'valid_challenge_123', sameDay);
+      });
+
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.update).toHaveBeenCalledTimes(1);
+
+      const updatePayload = mockTx.update.mock.calls[0][1];
+      expect(updatePayload['progress.user-123']).toEqual({
+        currentWeek: 1,
+        completedSessions: 2,
+        badgeEarned: false,
+      });
+    });
+
     it('awards 500 XP exactly once upon comeback challenge completion (idempotent)', async () => {
       // Case 1: First completion (badgeEarned: false transitioning to true)
       const mockTx1 = {
@@ -334,6 +391,79 @@ describe('useChallenges Hook', () => {
           await result.current.updateProgress('user-123', 'valid_challenge_123', new Date());
         })
       ).rejects.toThrow('Challenge is not active');
+    });
+  });
+
+  describe('useChallengeSkip', () => {
+    it('consumes a challenge skip and increments comeback progress', async () => {
+      // Mock getDocs to return active challenges
+      mockGetDocs.mockResolvedValueOnce({
+        empty: false,
+        docs: [
+          {
+            id: 'valid_challenge_123',
+            data: () => ({
+              type: 'comeback',
+              status: 'active',
+              startDate: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+              goal: { durationWeeks: 12 },
+              progress: {
+                'user-123': { currentWeek: 1, completedSessions: 2, badgeEarned: false }
+              }
+            })
+          }
+        ]
+      });
+
+      const mockTx = {
+        get: vi.fn().mockImplementation((ref) => {
+          if (ref._path.includes('users/user-123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({
+                powerUps: { challengeSkip: 2 }
+              })
+            });
+          }
+          if (ref._path.includes('challenges/valid_challenge_123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({
+                type: 'comeback',
+                status: 'active',
+                startDate: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+                goal: { durationWeeks: 12 },
+                progress: {
+                  'user-123': { currentWeek: 1, completedSessions: 2, badgeEarned: false }
+                }
+              })
+            });
+          }
+          return Promise.resolve({ exists: () => false });
+        }),
+        update: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.useChallengeSkip('valid_challenge_123');
+      });
+
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.update).toHaveBeenCalledTimes(2);
+
+      // Verify user document update (deducted skip)
+      const userUpdate = mockTx.update.mock.calls[0][1];
+      expect(userUpdate.powerUps.challengeSkip).toBe(1);
+
+      // Verify challenge document update (incremented session)
+      const challengeUpdate = mockTx.update.mock.calls[1][1];
+      expect(challengeUpdate['progress.user-123'].completedSessions).toBe(3);
     });
   });
 });

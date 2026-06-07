@@ -187,8 +187,8 @@ describe('Challenges System TDD', () => {
     expect(result.current.getProgressPercent(completeObj, 'test-uid')).toBe(100);
   });
 
-  it('7. leaveChallenge() calls deleteDoc, sets cooldown on user document, and updates local auth state', async () => {
-    const { mockDeleteDoc, mockGetDoc, mockSetDoc } = await import('../__mocks__/firebase');
+  it('7. leaveChallenge() marks challenge abandoned, sets cooldown on user document, and updates local auth state', async () => {
+    const { mockGetDoc, mockSetDoc } = await import('../__mocks__/firebase');
     
     mockGetDoc
       .mockResolvedValueOnce({
@@ -218,7 +218,11 @@ describe('Challenges System TDD', () => {
     });
 
     expect(mockGetDoc).toHaveBeenCalledTimes(2);
-    expect(mockDeleteDoc).toHaveBeenCalled();
+    expect(mockSetDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ _path: 'challenges/mock-challenge-id' }),
+      { status: 'abandoned' },
+      { merge: true }
+    );
     expect(mockSetDoc).toHaveBeenCalledWith(
       expect.objectContaining({ _path: 'users/test-uid' }),
       expect.objectContaining({

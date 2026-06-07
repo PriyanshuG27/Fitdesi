@@ -26,6 +26,7 @@ const SetRowComponent = ({
   isPR = false,
   exerciseIndex = 0,
   isBodyweight = false,
+  isDurationBased = false,
   onDelete = null,
 }) => {
   const shouldReduceMotion = useReducedMotion();
@@ -174,7 +175,10 @@ const SetRowComponent = ({
   const parsedWeight = parseFloat(localWeight) || 0;
   const parsedReps = parseInt(localReps, 10) || 0;
   // Done button only activates if (isBodyweight is true and weight is BW/0/weighted) or (weight > 0) AND reps > 0
-  const isDoneActive = (isBodyweight ? (localWeight === 'BW' || parsedWeight >= 0) : (parsedWeight > 0)) && parsedReps > 0;
+  // For duration-based exercises, only reps (minutes) must be > 0
+  const isDoneActive = isDurationBased 
+    ? (parsedReps > 0) 
+    : ((isBodyweight ? (localWeight === 'BW' || parsedWeight >= 0) : (parsedWeight > 0)) && parsedReps > 0);
 
   return (
     <motion.div
@@ -189,117 +193,124 @@ const SetRowComponent = ({
         {setIndex + 1}
       </div>
 
-      {/* Column 2: Weight Control Capsule */}
-      <div
-        className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 w-[96px] shrink-0 transition-all duration-200 ${
-          isWeightFocused
-            ? 'border-[var(--primary)] shadow-[0_0_8px_var(--primary-glow)] bg-black/30'
-            : 'border-[var(--border)] hover:border-[var(--border-bright)]'
-        }`}
-      >
-        <motion.button
-          type="button"
-          onClick={handleWeightDecrement}
-          onFocus={() => setIsWeightFocused(true)}
-          onBlur={() => setIsWeightFocused(false)}
-          aria-label="Decrease weight by 2.5 kilograms"
-          className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
-          {...buttonTapProps}
+      {/* Column 2: Weight Control Capsule (hidden for duration-based) */}
+      {!isDurationBased && (
+        <div
+          className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 w-[96px] shrink-0 transition-all duration-200 ${
+            isWeightFocused
+              ? 'border-[var(--primary)] shadow-[0_0_8px_var(--primary-glow)] bg-black/30'
+              : 'border-[var(--border)] hover:border-[var(--border-bright)]'
+          }`}
         >
-          <Minus size={11} strokeWidth={2.5} />
-        </motion.button>
+          <motion.button
+            type="button"
+            onClick={handleWeightDecrement}
+            onFocus={() => setIsWeightFocused(true)}
+            onBlur={() => setIsWeightFocused(false)}
+            aria-label="Decrease weight by 2.5 kilograms"
+            className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
+            {...buttonTapProps}
+          >
+            <Minus size={11} strokeWidth={2.5} />
+          </motion.button>
 
-        <input
-          type="text"
-          inputMode="decimal"
-          value={localWeight}
-          onChange={handleWeightChange}
-          onFocus={() => setIsWeightFocused(true)}
-          onBlur={() => {
-            handleWeightBlur();
-            setIsWeightFocused(false);
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="0"
-          aria-label={`Weight for set ${setIndex + 1}`}
-          data-testid={`weight-${exerciseIndex}-${setIndex}`}
-          className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
-          style={{
-            minWidth: '36px',
-            width: '36px',
-            border: 'none',
-            background: 'transparent',
-            outline: 'none',
-            boxShadow: 'none',
-            padding: 0,
-          }}
-        />
+          <input
+            type="text"
+            inputMode="decimal"
+            value={localWeight}
+            onChange={handleWeightChange}
+            onFocus={() => setIsWeightFocused(true)}
+            onBlur={() => {
+              handleWeightBlur();
+              setIsWeightFocused(false);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="0"
+            aria-label={`Weight for set ${setIndex + 1}`}
+            data-testid={`weight-${exerciseIndex}-${setIndex}`}
+            className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
+            style={{
+              minWidth: '36px',
+              width: '36px',
+              border: 'none',
+              background: 'transparent',
+              outline: 'none',
+              boxShadow: 'none',
+              padding: 0,
+            }}
+          />
 
-        <motion.button
-          type="button"
-          onClick={handleWeightIncrement}
-          onFocus={() => setIsWeightFocused(true)}
-          onBlur={() => setIsWeightFocused(false)}
-          aria-label="Increase weight by 2.5 kilograms"
-          className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
-          {...buttonTapProps}
-        >
-          <Plus size={11} strokeWidth={2.5} />
-        </motion.button>
-      </div>
+          <motion.button
+            type="button"
+            onClick={handleWeightIncrement}
+            onFocus={() => setIsWeightFocused(true)}
+            onBlur={() => setIsWeightFocused(false)}
+            aria-label="Increase weight by 2.5 kilograms"
+            className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
+            {...buttonTapProps}
+          >
+            <Plus size={11} strokeWidth={2.5} />
+          </motion.button>
+        </div>
+      )}
 
-      {/* Column 3: Reps Control Capsule */}
+      {/* Column 3: Reps/Minutes Control Capsule */}
       <div
-        className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 w-[88px] shrink-0 transition-all duration-200 ${
+        className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 shrink-0 transition-all duration-200 ${
           isRepsFocused
             ? 'border-[var(--secondary)] shadow-[0_0_8px_var(--secondary-glow)] bg-black/30'
             : 'border-[var(--border)] hover:border-[var(--border-bright)]'
-        }`}
+        } ${isDurationBased ? 'w-[184px] px-2' : 'w-[88px]'}`}
       >
         <motion.button
           type="button"
           onClick={handleRepsDecrement}
           onFocus={() => setIsRepsFocused(true)}
           onBlur={() => setIsRepsFocused(false)}
-          aria-label="Decrease reps by 1"
+          aria-label={isDurationBased ? "Decrease minutes by 1" : "Decrease reps by 1"}
           className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
           {...buttonTapProps}
         >
           <Minus size={11} strokeWidth={2.5} />
         </motion.button>
 
-        <input
-          type="text"
-          inputMode="numeric"
-          value={localReps}
-          onChange={handleRepsChange}
-          onFocus={() => setIsRepsFocused(true)}
-          onBlur={() => {
-            handleRepsBlur();
-            setIsRepsFocused(false);
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="0"
-          aria-label={`Reps for set ${setIndex + 1}`}
-          data-testid={`reps-${exerciseIndex}-${setIndex}`}
-          className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
-          style={{
-            minWidth: '32px',
-            width: '32px',
-            border: 'none',
-            background: 'transparent',
-            outline: 'none',
-            boxShadow: 'none',
-            padding: 0,
-          }}
-        />
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={localReps}
+            onChange={handleRepsChange}
+            onFocus={() => setIsRepsFocused(true)}
+            onBlur={() => {
+              handleRepsBlur();
+              setIsRepsFocused(false);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="0"
+            aria-label={isDurationBased ? `Minutes for set ${setIndex + 1}` : `Reps for set ${setIndex + 1}`}
+            data-testid={`reps-${exerciseIndex}-${setIndex}`}
+            className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
+            style={{
+              minWidth: isDurationBased ? '40px' : '32px',
+              width: isDurationBased ? '40px' : '32px',
+              border: 'none',
+              background: 'transparent',
+              outline: 'none',
+              boxShadow: 'none',
+              padding: 0,
+            }}
+          />
+          {isDurationBased && (
+            <span className="text-xs font-mono text-[var(--text-secondary)] select-none">mins</span>
+          )}
+        </div>
 
         <motion.button
           type="button"
           onClick={handleRepsIncrement}
           onFocus={() => setIsRepsFocused(true)}
           onBlur={() => setIsRepsFocused(false)}
-          aria-label="Increase reps by 1"
+          aria-label={isDurationBased ? "Increase minutes by 1" : "Increase reps by 1"}
           className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
           {...buttonTapProps}
         >
@@ -346,7 +357,7 @@ const SetRowComponent = ({
 
         {/* PR Badge slot */}
         <div className="w-10 flex justify-center">
-          {isPR ? (
+          {isPR && !isDurationBased ? (
             <span className="font-mono text-[9px] text-[var(--accent-xp)] border border-[var(--accent-xp)]/30 bg-[var(--accent-xp)]/10 shadow-[0_0_8px_var(--accent-xp-glow)] px-1.5 py-0.5 rounded font-extrabold select-none tracking-wider shrink-0 uppercase leading-none">
               PR
             </span>

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Dumbbell, Calendar, Coffee, Play, CheckCircle2, Circle, Sparkles } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useWorkoutStore } from '../../stores/useWorkoutStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useXPEngine } from '../../hooks/useXPEngine';
@@ -46,6 +48,40 @@ export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
       ...prev,
       [key]: !prev[key],
     }));
+  };
+
+  const handleRegenerate = async () => {
+    if (!uid) return;
+    const planRefreshCount = profile?.powerUps?.planRefresh || 0;
+    if (planRefreshCount <= 0) {
+      addToast('You need a Plan Refresh power-up to regenerate early.', 'error');
+      return;
+    }
+    try {
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
+        powerUps: {
+          ...(profile.powerUps || {}),
+          planRefresh: planRefreshCount - 1
+        }
+      });
+      
+      // Update local profile state
+      useAuthStore.setState({
+        profile: {
+          ...profile,
+          powerUps: {
+            ...(profile.powerUps || {}),
+            planRefresh: planRefreshCount - 1
+          }
+        }
+      });
+
+      await generatePlan(requirements);
+    } catch (err) {
+      console.error('Failed to consume Plan Refresh:', err);
+      addToast('Failed to consume Plan Refresh.', 'error');
+    }
   };
 
   const handleClaimRecoveryXP = async (dayNum) => {
@@ -292,19 +328,22 @@ export const WeeklyPlanView = ({ planDays = [], weekId = '' }) => {
           className="w-full bg-[var(--bg-base)] text-[var(--text-primary)] text-xs font-sans p-3 rounded border border-[var(--border)] focus:outline-none focus:border-[var(--primary)] resize-none h-20 mb-3"
         />
         <motion.button
-          onClick={() => {
-            if (!planLoading) generatePlan(requirements);
-          }}
-          disabled={planLoading}
+          onClick={handleRegenerate}
+          disabled={planLoading || (profile?.powerUps?.planRefresh || 0) <= 0}
           className="w-full py-2.5 bg-[var(--primary)] text-black font-display font-extrabold tracking-widest text-xs uppercase rounded border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
           whileTap={{ scale: 0.97 }}
         >
           {planLoading ? (
             <span>Regenerating...</span>
           ) : (
-            <span>Regenerate with instructions</span>
+            <span>Regenerate (Costs 1 Plan Refresh)</span>
           )}
         </motion.button>
+        {(!profile?.powerUps?.planRefresh || profile.powerUps.planRefresh <= 0) && (
+          <p className="text-[10px] text-red-500 font-mono text-center mt-2 uppercase tracking-wide">
+            ⚠️ Requires 1 Plan Refresh Power-up (You have ×0)
+          </p>
+        )}
       </div>
     </div>
   );

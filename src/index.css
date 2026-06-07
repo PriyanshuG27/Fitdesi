@@ -58,3 +58,8 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--bg-elevated);
 }
+
+/* Hide Firebase emulator warning banner in tests / dev */
+.firebase-emulator-warning {
+  display: none !important;
+}

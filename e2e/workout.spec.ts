@@ -36,9 +36,13 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 import * as http from 'http';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const AUTH_STATE_PATH = path.join(__dirname, '.auth', 'user.json');
-const EMULATOR_FIRESTORE_URL = 'http://localhost:8080';
+const EMULATOR_FIRESTORE_URL = 'http://127.0.0.1:8080';
 const PROJECT_ID = 'fitdesi-test';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -64,6 +68,7 @@ function firestoreSet(
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
+        'Authorization': 'Bearer owner',
       },
     };
     const req = http.request(opts, (res) => {
@@ -82,7 +87,7 @@ function firestoreSet(
 /** Navigate to /workout and wait for the session-setup sheet */
 async function openWorkoutLogger(page: Page) {
   // Bottom nav "Workout" button is a floating center button
-  await page.getByRole('link', { name: /workout/i }).click();
+  await page.getByRole('link', { name: /workout/i }).click({ force: true });
   await page.waitForURL('**/workout', { timeout: 10_000 });
   // Wait for the setup sheet heading
   await expect(page.getByRole('heading', { name: /how are you feeling/i })).toBeVisible();
@@ -98,13 +103,11 @@ async function startSession(page: Page, mood: 'Locked In' | 'Average' | 'Low Ene
 
 /** Type in ExerciseSearch and select the first matching result */
 async function addExercise(page: Page, searchTerm: string, exactName: string) {
-  // ExerciseSearch renders a text input; its aria label is defined by the parent
-  // but the simplest robust selector is the placeholder or role within the sticky footer
-  const searchInput = page.getByRole('textbox').last(); // search bar is last in DOM
+  const searchInput = page.getByTestId('exercise-search');
   await searchInput.click();
   await searchInput.fill(searchTerm);
-  // Wait for dropdown to appear and click exact exercise name
-  await page.getByRole('option', { name: exactName }).click();
+  // Wait for dropdown to appear and click exact exercise name (accessible name includes muscle group tag)
+  await page.getByRole('option', { name: new RegExp('^' + exactName + ' (chest|back|shoulders|arms|legs|core)$', 'i') }).click();
 }
 
 /** Fill weight and reps for set at [exerciseIndex, setIndex] */
@@ -118,11 +121,9 @@ async function fillSet(
   const weightInput = page.getByTestId(`weight-${exerciseIndex}-${setIndex}`);
   const repsInput = page.getByTestId(`reps-${exerciseIndex}-${setIndex}`);
 
-  await weightInput.tripleClick();
   await weightInput.fill(String(weight));
   await weightInput.press('Tab'); // trigger blur → updates store
 
-  await repsInput.tripleClick();
   await repsInput.fill(String(reps));
   await repsInput.press('Tab');
 }

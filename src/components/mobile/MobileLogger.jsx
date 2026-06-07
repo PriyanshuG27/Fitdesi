@@ -29,6 +29,7 @@ export const MobileLogger = () => {
     addSet,
     removeSet,
     removeExercise,
+    isOverdrive,
   } = useWorkoutStore();
 
   const {
@@ -373,6 +374,25 @@ export const MobileLogger = () => {
 
           {/* MAIN SCROLL AREA */}
           <main className="flex-1 overflow-y-auto px-4 py-4 pb-36">
+            {isOverdrive && (
+              <div className="mb-4 flex items-center justify-center gap-2 px-3 py-2 border-2 border-indigo-500 bg-indigo-950/40 text-indigo-400 text-xs font-mono font-bold uppercase rounded-xl select-none animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.2)]">
+                <Zap size={14} className="fill-indigo-400" />
+                <span>Overdrive Hour Active (+1.5x XP)</span>
+              </div>
+            )}
+            {(() => {
+              const boosterUntil = profile?.xpBoosterUntil
+                ? (typeof profile.xpBoosterUntil.toDate === 'function' ? profile.xpBoosterUntil.toDate().getTime() : new Date(profile.xpBoosterUntil).getTime())
+                : 0;
+              const isBoosterActive = boosterUntil > Date.now();
+              if (!isBoosterActive) return null;
+              return (
+                <div className="mb-4 flex items-center justify-center gap-2 px-3 py-2 border-2 border-amber-500 bg-amber-950/40 text-amber-400 text-xs font-mono font-bold uppercase rounded-xl select-none shadow-[0_0_12px_rgba(245,158,11,0.2)] animate-pulse">
+                  <Zap size={14} className="fill-amber-400 text-amber-400" />
+                  <span>XP Booster Active (2x XP)</span>
+                </div>
+              );
+            })()}
             {exercises.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[40vh] text-center p-6 border border-dashed border-[var(--border)] rounded-2xl select-none">
                 <span className="text-[var(--text-secondary)] font-body text-sm">
@@ -414,8 +434,14 @@ export const MobileLogger = () => {
                   {ex.sets.length > 0 && (
                     <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-bold text-[var(--text-secondary)]/50 uppercase tracking-widest select-none">
                       <div className="w-6 text-left">Set</div>
-                      <div className="w-[96px] text-center">Weight</div>
-                      <div className="w-[88px] text-center">Reps</div>
+                      {ex.muscleGroup?.toLowerCase() === 'stretching' ? (
+                        <div className="w-[184px] text-center">Minutes</div>
+                      ) : (
+                        <>
+                          <div className="w-[96px] text-center">Weight</div>
+                          <div className="w-[88px] text-center">Reps</div>
+                        </>
+                      )}
                       <div className="w-[104px] flex items-center justify-between pl-2">
                         <span className="w-8 text-left">Done</span>
                         <span className="w-10 text-center">PR</span>
@@ -434,6 +460,7 @@ export const MobileLogger = () => {
                         set={s}
                         exerciseIndex={exIndex}
                         isBodyweight={isBodyweightExercise(ex.exerciseKey, ex.exerciseId)}
+                        isDurationBased={ex.muscleGroup?.toLowerCase() === 'stretching'}
                         onUpdate={handleUpdateSet}
                         onDone={handleMarkSetDone}
                         isPR={checkIfSetIsPR(ex.exerciseId, s)}

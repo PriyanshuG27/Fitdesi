@@ -39,6 +39,10 @@ test.describe('Auth journeys', () => {
   // TEST 1: Full signup + onboarding (6-step flow)
   // ─────────────────────────────────────────────────────────────────────────
   test('1 · Full signup + onboarding flow → lands on /home', async ({ page }) => {
+    // Print browser console logs and errors to help debug
+    page.on('console', msg => console.log('[TEST1 CONSOLE]', msg.text()));
+    page.on('pageerror', err => console.error('[TEST1 ERROR]', err.message));
+
     const email = uniqueEmail('signup');
 
     // ── 1. Landing → click "Get Started" ──────────────────────────────────
@@ -48,7 +52,7 @@ test.describe('Auth journeys', () => {
     await page.waitForURL('**/signup');
 
     // ── 2. Fill signup form ────────────────────────────────────────────────
-    await page.fill('#name', 'E2E Auth User');
+    await page.fill('#name', 'Auth TestUser');
     await page.fill('#email', email);
     await page.fill('#password', TEST_PASSWORD);
 
@@ -63,11 +67,10 @@ test.describe('Auth journeys', () => {
     await page.getByRole('button', { name: /comeback/i }).click();
 
     // Advance — OnboardingLayout has a Continue button that becomes active after selection
-    await page.getByRole('button', { name: /continue/i }).click();
 
     // ── 5. Step 1: Body details ────────────────────────────────────────────
     await expect(page.getByRole('heading', { name: /your body, your baseline/i })).toBeVisible();
-    await page.getByRole('button', { name: /male/i }).click();
+    await page.getByRole('button', { name: /^male$/i }).click();
     await page.fill('#onboarding-age', '24');
     await page.fill('#onboarding-height', '175');
     await page.fill('#onboarding-weight', '72');
@@ -125,8 +128,7 @@ test.describe('Auth journeys', () => {
     await page.waitForURL('**/onboarding**', { timeout: 15_000 });
     // Complete minimum onboarding to set onboardingComplete = true
     await page.getByRole('button', { name: /comeback/i }).click();
-    await page.getByRole('button', { name: /continue/i }).click();
-    await page.getByRole('button', { name: /male/i }).click();
+    await page.getByRole('button', { name: /^male$/i }).click();
     await page.fill('#onboarding-age', '28');
     await page.fill('#onboarding-height', '178');
     await page.fill('#onboarding-weight', '80');
@@ -153,7 +155,7 @@ test.describe('Auth journeys', () => {
 
     // ── Navigate to /login ────────────────────────────────────────────────
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /fitdesi/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /fitdesi/i })).toBeVisible();
 
     // ── Fill login form ───────────────────────────────────────────────────
     await page.fill('#email', email);
@@ -211,13 +213,12 @@ test.describe('Auth journeys', () => {
     await page.waitForURL('**/onboarding**', { timeout: 15_000 });
     // Minimal onboarding
     await page.getByRole('button', { name: /comeback/i }).click();
-    await page.getByRole('button', { name: /continue/i }).click();
-    await page.getByRole('button', { name: /male/i }).click();
+    await page.getByRole('button', { name: /^male$/i }).click();
     await page.fill('#onboarding-age', '22');
     await page.fill('#onboarding-height', '170');
     await page.fill('#onboarding-weight', '65');
     await page.getByRole('button', { name: /continue/i }).click();
-    await page.getByRole('button', { name: /strength/i }).click();
+    await page.getByRole('button', { name: /strength/i }).filter({ hasText: 'Lift heavier' }).click();
     await page.getByRole('button', { name: /continue/i }).click();
     await page.getByRole('button', { name: '3x' }).click();
     await page.getByRole('button', { name: '45 min' }).click();

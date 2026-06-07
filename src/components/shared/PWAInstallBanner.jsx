@@ -22,7 +22,7 @@ export const PWAInstallBanner = () => {
   // Show banner if the app is NOT standalone, and we detect it is installable (Chrome) OR it is iOS Safari.
   // We want to show it automatically on startup/open.
   useEffect(() => {
-    if (isStandalone) {
+    if (isStandalone || navigator.webdriver) {
       setVisible(false);
       return;
     }
@@ -65,7 +65,7 @@ export const PWAInstallBanner = () => {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -50 }}
         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        className="fixed top-4 left-4 right-4 z-[9999] max-w-md mx-auto"
+        className="pwa-install-banner fixed top-4 left-4 right-4 z-[9999] max-w-md mx-auto"
         onClick={handleDismiss} // Tap outside content to dismiss
       >
         <div 

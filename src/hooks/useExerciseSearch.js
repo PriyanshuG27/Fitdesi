@@ -73,6 +73,9 @@ function matchesQuery(exercise, cleanQuery) {
   if (!cleanQuery) return true; // empty query → show all eligible
   const nameLower = exercise.name.toLowerCase();
   if (nameLower.includes(cleanQuery)) return true;
+  if (exercise.muscleGroup && exercise.muscleGroup.toLowerCase().includes(cleanQuery)) {
+    return true;
+  }
   if (exercise.aliases && exercise.aliases.some((a) => a.toLowerCase().includes(cleanQuery))) {
     return true;
   }

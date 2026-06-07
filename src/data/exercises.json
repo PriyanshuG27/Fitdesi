@@ -40,6 +40,14 @@
     "aliases": ["cable flyes", "cable crossovers", "chest fly"]
   },
   {
+    "key": "pec_deck_fly",
+    "name": "Pec Deck Fly",
+    "muscleGroup": "chest",
+    "equipmentRequired": ["cables"],
+    "medicallyRestricted": ["shoulder_impingement"],
+    "aliases": ["pec dec", "pec deck", "machine chest fly", "butterfly flyes", "pec fly"]
+  },
+  {
     "key": "push_ups",
     "name": "Push-Ups",
     "muscleGroup": "chest",
@@ -342,5 +350,13 @@
     "equipmentRequired": ["cables"],
     "medicallyRestricted": [],
     "aliases": ["cable crunch", "kneeling cable crunch"]
+  },
+  {
+    "key": "stretching",
+    "name": "Stretching",
+    "muscleGroup": "Stretching",
+    "equipmentRequired": [],
+    "medicallyRestricted": [],
+    "aliases": ["stretch", "flexibility", "mobility"]
   }
 ]

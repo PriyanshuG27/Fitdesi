@@ -50,6 +50,7 @@ import { useXPStore } from '../stores/useXPStore';
 import { useUIStore } from '../stores/useUIStore';
 import { evaluateStreak, deriveLevelFromXP } from '../lib/xpHelpers';
 import { useChallenges } from './useChallenges';
+import { clearStrengthCache } from './useProgress';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -246,8 +247,14 @@ export function useWorkoutLogger() {
     const isOverdrive = session.isOverdrive || false;
     const overdriveMultiplier = isOverdrive ? 1.5 : 1.0;
 
+    const boosterUntil = userData.xpBoosterUntil
+      ? (typeof userData.xpBoosterUntil.toDate === 'function' ? userData.xpBoosterUntil.toDate().getTime() : new Date(userData.xpBoosterUntil).getTime())
+      : 0;
+    const isBoosterActive = boosterUntil > Date.now();
+    const boosterMultiplier = isBoosterActive ? 2.0 : 1.0;
+
     const currentXP  = typeof userData.xp === 'number' ? userData.xp : 0;
-    const xpEarned   = Math.round((BASE_SESSION_XP + newPRs.length * currentPR_XP + bossBonusXP) * overdriveMultiplier);
+    const xpEarned   = Math.round((BASE_SESSION_XP + newPRs.length * currentPR_XP + bossBonusXP) * overdriveMultiplier * boosterMultiplier);
     const newXP      = currentXP + xpEarned;
     const prevDerived = deriveLevelFromXP(currentXP);
     const newDerived  = deriveLevelFromXP(newXP);
@@ -266,6 +273,7 @@ export function useWorkoutLogger() {
       xpEarned,
       prCount:         newPRs.length,
       isOverdrive,
+      isXPBoosterActive: isBoosterActive,
     };
 
     return {
@@ -377,6 +385,7 @@ export function useWorkoutLogger() {
       // SUCCESS — clear cache, reset session, return summary
       pendingBatchRef.current = null;
       retryCountRef.current   = 0;
+      clearStrengthCache();
       useWorkoutStore.getState().resetSession();
 
       // Roll chance for Flash Quest (increases to 20% if Recovery Protocol is unlocked)
@@ -394,6 +403,7 @@ export function useWorkoutLogger() {
             startDate: serverTimestamp(),
             endDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
             status: 'active',
+            durationDays: 2,
             goal: { targetSets: 1, muscleGroup: 'Stretching' },
             rewardXP: 50,
             progress: {

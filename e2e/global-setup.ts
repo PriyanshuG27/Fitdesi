@@ -21,9 +21,13 @@ import { chromium, FullConfig } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
+import { fileURLToPath } from 'url';
 
-const EMULATOR_AUTH_URL = 'http://localhost:9099';
-const EMULATOR_FIRESTORE_URL = 'http://localhost:8080';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const EMULATOR_AUTH_URL = 'http://127.0.0.1:9099';
+const EMULATOR_FIRESTORE_URL = 'http://127.0.0.1:8080';
 const PROJECT_ID = 'fitdesi-test';
 const AUTH_STATE_PATH = path.join(__dirname, '.auth', 'user.json');
 
@@ -108,19 +112,25 @@ export default async function globalSetup(config: FullConfig) {
   //    We log in via the UI (which hits the emulator) and save cookies/localStorage.
   fs.mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
   const context = await browser.newContext({
     baseURL: config.projects[0].use.baseURL as string,
     extraHTTPHeaders: {},
   });
   const page = await context.newPage();
 
+  // Print browser console logs and errors to help debug
+  page.on('console', msg => console.log('[PAGE CONSOLE]', msg.text()));
+  page.on('pageerror', err => console.error('[PAGE ERROR]', err.message));
+
   console.log('[E2E Setup] Creating pre-authenticated session...');
 
   try {
     // Navigate to signup and create the workout test user
     await page.goto('/signup');
-    await page.fill('#name', 'E2E TestUser');
+    await page.fill('#name', 'Onboarded TestUser');
     await page.fill('#email', 'e2e-workout@fitdesi.test');
     await page.fill('#password', 'Test1234!');
     await page.click('button[type="submit"]');
@@ -132,7 +142,7 @@ export default async function globalSetup(config: FullConfig) {
     // Step 0: User type
     await page.getByRole('button', { name: /comeback/i }).click();
     // Step 1: Body details — fill required fields and continue
-    await page.getByRole('button', { name: /male/i }).click();
+    await page.getByRole('button', { name: /^male$/i }).click();
     await page.fill('#onboarding-age', '25');
     await page.fill('#onboarding-height', '175');
     await page.fill('#onboarding-weight', '75');

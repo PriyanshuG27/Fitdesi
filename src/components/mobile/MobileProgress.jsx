@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, BarChart2, Calendar, ArrowUpRight, ArrowDownRight, Dumbbell, RefreshCw, X, Share2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-import { useStrengthData, useVolumeData, usePRList } from '../../hooks/useProgress';
+import { useStrengthData, useVolumeData, usePRList, clearStrengthCache } from '../../hooks/useProgress';
 import { StrengthChart } from '../shared/StrengthChart';
 import { VolumeChart } from '../shared/VolumeChart';
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
@@ -31,6 +31,13 @@ export const MobileProgress = () => {
   const { addToast } = useUIStore();
 
   const [activeTab, setActiveTab] = useState('Strength');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleRefresh = () => {
+    clearStrengthCache();
+    setRefreshTrigger((prev) => prev + 1);
+    refreshPRs();
+  };
   
   // Muscle group and exercise selection states
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState('chest');
@@ -41,7 +48,7 @@ export const MobileProgress = () => {
   // Selected PR state for celebration modal
   const [selectedPR, setSelectedPR] = useState(null);
 
-  const { data: strengthData, loading: strengthLoading } = useStrengthData(uid, selectedExercise, strengthRange);
+  const { data: strengthData, loading: strengthLoading } = useStrengthData(uid, selectedExercise, strengthRange, refreshTrigger);
   const { data: volumeData, loading: volumeLoading } = useVolumeData(uid, 12);
 
   // Muscle volume distribution state
@@ -259,7 +266,7 @@ export const MobileProgress = () => {
           Telemetry
         </h1>
         <button
-          onClick={refreshPRs}
+          onClick={handleRefresh}
           className="p-2 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
         >
           <RefreshCw size={14} />
