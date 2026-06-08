@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { House, TrendingUp, Calendar, Dumbbell, User, LogOut, Flame } from 'lucide-react';
+import { House, Activity, LayoutGrid, Sparkles, Trophy, User, LogOut, Flame } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 export const DesktopSidebar = () => {
@@ -14,11 +14,12 @@ export const DesktopSidebar = () => {
   };
 
   const navItems = [
-    { path: '/home', label: 'Home', Icon: House },
-    { path: '/progress', label: 'Progress', Icon: TrendingUp },
-    { path: '/plan', label: 'Weekly Plan', Icon: Calendar },
-    { path: '/challenges', label: 'Challenges', Icon: Dumbbell },
-    { path: '/profile', label: 'Profile Settings', Icon: User },
+    { path: '/home', label: 'Dashboard', Icon: House },
+    { path: '/challenges', label: 'Fantasy Squads', Icon: Trophy },
+    { path: '/recap', label: 'Recap Cinema', Icon: Activity },
+    { path: '/plan', label: 'Overload Sandbox', Icon: LayoutGrid },
+    { path: '/poster', label: 'Poster Studio', Icon: Sparkles },
+    { path: '/profile', label: 'Profile & Settings', Icon: User },
   ];
 
   return (

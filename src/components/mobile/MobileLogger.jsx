@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Zap, Minus, BatteryLow, Plus, Trash2 } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useWorkoutStore, isBodyweightExercise, getEstimated1RM } from '../../stores/useWorkoutStore';
@@ -14,6 +14,7 @@ import { ExerciseSearch } from '../shared/ExerciseSearch';
 import { MobileSessionComplete } from './MobileSessionComplete';
 import { parseWorkoutText } from '../../utils/nlpParser';
 import { playRestTimerBeep } from '../../utils/audioBeep';
+import { NeubrutalistCalendar } from '../shared/NeubrutalistCalendar';
 
 export const MobileLogger = () => {
   const navigate = useNavigate();
@@ -65,6 +66,46 @@ export const MobileLogger = () => {
   const [prsMap, setPrsMap] = useState({});
 
   const isActive = !!activeSession;
+
+  // Past sessions for repeating workouts calendar
+  const [pastSessions, setPastSessions] = useState([]);
+  const [loadingPastSessions, setLoadingPastSessions] = useState(true);
+
+  // Fetch past session metadata (parent documents only) on mount when session is not active
+  useEffect(() => {
+    if (!user || isActive) return;
+    const fetchPastSessions = async () => {
+      setLoadingPastSessions(true);
+      try {
+        const sessionsRef = collection(db, 'users', user.uid, 'sessions');
+        // Retrieve last 60 workouts to populate the calendar
+        const q = query(sessionsRef, orderBy('date', 'desc'), limit(60));
+        const snap = await getDocs(q);
+        const temp = [];
+        for (const docSnap of snap.docs) {
+          const sessData = docSnap.data();
+          const rawDate = sessData.date;
+          let resolvedDate = new Date();
+          if (rawDate) {
+            if (rawDate.toDate) resolvedDate = rawDate.toDate();
+            else if (rawDate.seconds) resolvedDate = new Date(rawDate.seconds * 1000);
+            else resolvedDate = new Date(rawDate);
+          }
+          temp.push({
+            id: docSnap.id,
+            ...sessData,
+            date: resolvedDate,
+          });
+        }
+        setPastSessions(temp);
+      } catch (err) {
+        console.error('[MobileLogger] Error fetching past sessions:', err);
+      } finally {
+        setLoadingPastSessions(false);
+      }
+    };
+    fetchPastSessions();
+  }, [user, isActive]);
 
   // Fetch lifetime Personal Records on mount to display badges next to sets
   useEffect(() => {
@@ -297,6 +338,39 @@ export const MobileLogger = () => {
     setParsedNLPResult(result);
   };
 
+  const handleRepeatWorkout = async (pastSess) => {
+    try {
+      // 1. Fetch the full exercises subcollection of this past session
+      const exSnap = await getDocs(collection(db, 'users', user.uid, 'sessions', pastSess.id, 'exercises'));
+      const exercisesList = exSnap.docs.map(exDoc => exDoc.data());
+      
+      // 2. Start session
+      startSession(pastSess.moodTag || 'average', pastSess.stomachFlag || false);
+      
+      // 3. Populate exercises
+      exercisesList.forEach(ex => {
+        const cleanSets = (ex.sets || []).map(s => ({
+          reps: s.reps ? String(s.reps) : '',
+          weight: s.weight === 'BW' ? 'BW' : (s.weight !== undefined ? String(s.weight) : ''),
+          completed: false,
+          done: false
+        }));
+        
+        addExercise({
+          key: ex.exerciseKey,
+          name: ex.name,
+          muscleGroup: ex.muscleGroup,
+          sets: cleanSets
+        });
+      });
+      
+      toast(`Loaded workout from ${pastSess.dateString || 'past session'}!`, 'success');
+    } catch (err) {
+      console.error('[MobileLogger] Failed to repeat workout:', err);
+      toast('Failed to load past session exercises.', 'error');
+    }
+  };
+
   const handleStartSession = () => {
     startSession(selectedMood, stomachFlag);
   };
@@ -379,41 +453,43 @@ export const MobileLogger = () => {
       {/* ── SECTION 1: SESSION SETUP SHEET (shown when !isActive) ──────────────── */}
       <AnimatePresence>
         {!isActive && (
-          <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/80">
+          <div className="absolute inset-0 z-40 flex flex-col bg-[var(--bg-oled)] overflow-y-auto px-4 py-6 pb-20 select-none">
             {/* Visual Aurora mesh blob gradient in background */}
             <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-[var(--primary)]/10 blur-[80px] pointer-events-none select-none" />
             <div className="absolute top-[40%] left-1/3 w-64 h-64 rounded-full bg-[var(--secondary)]/10 blur-[90px] pointer-events-none select-none" />
 
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none pb-[35dvh]">
-              <h2 className="font-display text-4xl font-extrabold uppercase text-white tracking-widest drop-shadow-[0_0_12px_var(--primary-glow)]">
+            <div className="text-center mb-5 shrink-0">
+              <h2 className="font-display text-3xl font-extrabold uppercase text-white tracking-widest drop-shadow-[0_0_12px_var(--primary-glow)]">
                 Ready to train?
               </h2>
-              <p className="text-[var(--text-secondary)] font-body text-sm mt-2 max-w-xs">
-                Log your workout sets, track progress, and level up your stats.
+              <p className="text-[var(--text-secondary)] font-body text-xs mt-1">
+                Log your sets, repeat a past workout, or start custom.
               </p>
             </div>
 
-            {/* Bottom Setup Sheet */}
-            <motion.div
-              variants={sheetVariants}
-              initial="hidden"
-              animate="visible"
-              exit="hidden"
-              className="relative w-full bg-[var(--bg-surface)] border-t border-[var(--border-bright)] rounded-t-3xl p-6 z-50 shrink-0"
-              style={{
-                boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.5)',
-                paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
-              }}
-            >
-              {/* Sheet Drag Handle Visual Indicator */}
-              <div className="w-12 h-1 bg-[var(--border-bright)] rounded-full mx-auto mb-6" />
+            {/* Calendar Section */}
+            <div className="mb-5 z-10 shrink-0">
+              {loadingPastSessions ? (
+                <div className="border-2 border-black border-dashed bg-[var(--surface)] py-12 text-center font-mono text-xs text-[var(--text-secondary)] uppercase animate-pulse rounded-2xl">
+                  ⚙️ Syncing workout calendar...
+                </div>
+              ) : (
+                <NeubrutalistCalendar
+                  sessions={pastSessions}
+                  onSelectSession={handleRepeatWorkout}
+                  isMobile={true}
+                />
+              )}
+            </div>
 
-              <h3 className="font-display font-bold text-2xl uppercase tracking-wide text-[var(--text-primary)] mb-4">
-                How are you feeling?
+            {/* Custom Session Setup Card */}
+            <div className="relative bg-[var(--bg-surface)] border-2 border-black rounded-2xl p-5 z-10 shadow-[4px_4px_0px_black] flex flex-col gap-4 mb-8 shrink-0">
+              <h3 className="font-display font-bold text-base uppercase tracking-wide text-white">
+                Start Custom Session
               </h3>
 
               {/* Mood Selector Grid */}
-              <div className="grid grid-cols-3 gap-2.5 mb-6">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { tag: 'locked_in', label: 'Locked In', Icon: Zap },
                   { tag: 'average', label: 'Average', Icon: Minus },
@@ -425,15 +501,15 @@ export const MobileLogger = () => {
                       key={tag}
                       type="button"
                       onClick={() => setSelectedMood(tag)}
-                      className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all cursor-pointer select-none ${
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all cursor-pointer select-none ${
                         isSelected
-                          ? 'border-[var(--primary)] text-[var(--primary)] bg-[var(--primary-glow)] shadow-[4px_4px_0px_rgba(255,92,0,0.15)]'
+                          ? 'border-[var(--primary)] text-[var(--primary)] bg-[var(--primary-glow)] shadow-[2px_2px_0px_rgba(255,92,0,0.15)]'
                           : 'border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-input)] hover:border-[var(--border-bright)]'
                       }`}
-                      style={{ minHeight: '88px', minWidth: '44px' }}
+                      style={{ minHeight: '76px' }}
                     >
-                      <Icon size={22} className="mb-2" />
-                      <span className="font-body text-xs font-semibold tracking-wider">
+                      <Icon size={18} className="mb-1" />
+                      <span className="font-body text-[10px] font-semibold tracking-wider">
                         {label}
                       </span>
                     </button>
@@ -442,41 +518,39 @@ export const MobileLogger = () => {
               </div>
 
               {/* Stomach Flag Toggle */}
-              <div className="mb-6">
-                <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1 select-none">
-                  <input
-                    type="checkbox"
-                    checked={stomachFlag}
-                    onChange={(e) => setStomachFlag(e.target.checked)}
-                    className="sr-only"
-                  />
+              <label className="flex items-center gap-3 cursor-pointer min-h-[40px] py-1 select-none">
+                <input
+                  type="checkbox"
+                  checked={stomachFlag}
+                  onChange={(e) => setStomachFlag(e.target.checked)}
+                  className="sr-only"
+                />
+                <div
+                  className={`w-11 h-6 rounded-full p-1 transition-colors duration-200 border border-[var(--border-bright)] ${
+                    stomachFlag ? 'bg-[var(--primary)]' : 'bg-[var(--bg-input)]'
+                  }`}
+                >
                   <div
-                    className={`w-11 h-6 rounded-full p-1 transition-colors duration-200 border border-[var(--border-bright)] ${
-                      stomachFlag ? 'bg-[var(--primary)]' : 'bg-[var(--bg-input)]'
+                    className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                      stomachFlag ? 'translate-x-5' : 'translate-x-0'
                     }`}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
-                        stomachFlag ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </div>
-                  <span className="font-body text-sm font-medium text-[var(--text-primary)]">
-                    Body feeling off?
-                  </span>
-                </label>
-              </div>
+                  />
+                </div>
+                <span className="font-body text-xs font-medium text-[var(--text-primary)]">
+                  Body feeling off? (Enable safe mode deload)
+                </span>
+              </label>
 
-              {/* Let's Go Primary CTA */}
+              {/* Start Button */}
               <button
                 type="button"
                 onClick={handleStartSession}
-                className="w-full h-12 bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white font-body font-bold text-sm tracking-widest uppercase rounded-xl flex items-center justify-center transition-colors cursor-pointer select-none shadow-[0_4px_12px_var(--primary-glow)]"
-                style={{ minHeight: '44px' }}
+                className="w-full h-11 bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white font-body font-bold text-xs tracking-widest uppercase rounded-xl flex items-center justify-center transition-colors cursor-pointer select-none shadow-[0_4px_12px_var(--primary-glow)]"
               >
-                Let's Go →
+                Start Session →
               </button>
-            </motion.div>
+            </div>
+
           </div>
         )}
       </AnimatePresence>

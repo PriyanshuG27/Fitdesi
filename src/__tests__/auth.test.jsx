@@ -183,7 +183,7 @@ describe('useAuth — signup()', () => {
     });
     mockUpdateProfile.mockResolvedValueOnce(undefined);
     mockSendEmailVerification.mockResolvedValueOnce(undefined);
-    mockSetDoc.mockResolvedValueOnce(undefined);
+    mockSetDoc.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useAuth(), { wrapper: hookWrapper });
 
@@ -191,9 +191,9 @@ describe('useAuth — signup()', () => {
       await result.current.signup('Test User', 'new@fitdesi.com', 'password123');
     });
 
-    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+    expect(mockSetDoc).toHaveBeenCalledTimes(2);
 
-    // Get the second argument (the data object) from the setDoc call
+    // Get the second argument (the data object) from the first setDoc call
     const docData = mockSetDoc.mock.calls[0][1];
 
     // Verify critical fields

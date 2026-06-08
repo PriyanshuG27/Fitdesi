@@ -130,15 +130,15 @@ describe('MobileLogger — Session Setup Sheet', () => {
   it('renders setup sheet when no active session', () => {
     renderLogger();
     expect(screen.getByText('Ready to train?')).toBeInTheDocument();
-    expect(screen.getByText('How are you feeling?')).toBeInTheDocument();
-    expect(screen.getByText("Let's Go →")).toBeInTheDocument();
+    expect(screen.getByText('Start Custom Session')).toBeInTheDocument();
+    expect(screen.getByText("Start Session →")).toBeInTheDocument();
   });
 
   it('selects mood and tapping Let\'s Go calls startSession with correct moodTag', () => {
     renderLogger();
 
     fireEvent.click(screen.getByText('Locked In'));
-    fireEvent.click(screen.getByText("Let's Go →"));
+    fireEvent.click(screen.getByText("Start Session →"));
 
     const state = useWorkoutStore.getState();
     expect(state.activeSession).not.toBeNull();
@@ -149,8 +149,8 @@ describe('MobileLogger — Session Setup Sheet', () => {
     renderLogger();
 
     // The label wraps the hidden checkbox; clicking it toggles the flag
-    fireEvent.click(screen.getByText('Body feeling off?'));
-    fireEvent.click(screen.getByText("Let's Go →"));
+    fireEvent.click(screen.getByText(/Body feeling off\?/i));
+    fireEvent.click(screen.getByText("Start Session →"));
 
     const state = useWorkoutStore.getState();
     expect(state.activeSession.stomachFlag).toBe(true);

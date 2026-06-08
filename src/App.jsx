@@ -37,9 +37,10 @@ const MobileProfile = React.lazy(() => import('./components/mobile/MobileProfile
 import { DesktopDashboard }  from './components/desktop/DesktopDashboard';
 import { DesktopLoggerPanel } from './components/desktop/DesktopLoggerPanel';
 
-const DesktopProgress = React.lazy(() => import('./components/desktop/DesktopProgress'));
-const DesktopPlan = React.lazy(() => import('./components/desktop/DesktopPlan'));
-const DesktopChallenges = React.lazy(() => import('./components/desktop/DesktopChallenges'));
+const RoutineSandbox = React.lazy(() => import('./components/desktop/RoutineSandbox').then(m => ({ default: m.RoutineSandbox })));
+const SquadMatchmaker = React.lazy(() => import('./components/desktop/SquadMatchmaker').then(m => ({ default: m.SquadMatchmaker })));
+const DesktopLogEditor = React.lazy(() => import('./components/desktop/DesktopLogEditor').then(m => ({ default: m.DesktopLogEditor })));
+const PosterStudio = React.lazy(() => import('./components/desktop/PosterStudio').then(m => ({ default: m.PosterStudio })));
 const DesktopProfile = React.lazy(() => import('./components/desktop/DesktopProfile'));
 
 // ─── Inner router tree — reads layout from parent ────────────────────────────
@@ -56,9 +57,9 @@ function AppRoutes({ layout }) {
   const HomeScreen        = isMobile ? MobileHome        : DesktopDashboard;
   const WorkoutScreen     = isMobile ? MobileLogger      : DesktopLoggerPanel;
   const CompleteScreen    = isMobile ? MobileSessionComplete : DesktopDashboard;
-  const ProgressScreen    = isMobile ? MobileProgress    : DesktopProgress;
-  const PlanScreen        = isMobile ? MobilePlan        : DesktopPlan;
-  const ChallengesScreen  = isMobile ? MobileChallenges  : DesktopChallenges;
+  const ProgressScreen    = MobileProgress;
+  const PlanScreen        = isMobile ? MobilePlan        : RoutineSandbox;
+  const ChallengesScreen  = isMobile ? MobileChallenges  : SquadMatchmaker;
   const ProfileScreen     = isMobile ? MobileProfile     : DesktopProfile;
 
   return (
@@ -99,6 +100,12 @@ function AppRoutes({ layout }) {
           <Route path="/plan"             element={<PlanScreen />} />
           <Route path="/challenges"       element={<ChallengesScreen />} />
           <Route path="/profile"          element={<ProfileScreen />} />
+          {!isMobile && (
+            <>
+              <Route path="/recap"          element={<DesktopLogEditor />} />
+              <Route path="/poster"         element={<PosterStudio />} />
+            </>
+          )}
         </Route>
 
         {/* ── Catch-all ────────────────────────────────────────────────────── */}

@@ -61,10 +61,16 @@ export function useAuth() {
       const userRef = doc(db, 'users', firebaseUser.uid);
       const snap = await getDoc(userRef);
       if (!snap.exists()) {
+        const cleanName = (firebaseUser.displayName || 'FitDesi').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+        const padName = cleanName.padEnd(4, 'X');
+        const randomDigits = Math.floor(100 + Math.random() * 900);
+        const code = `FIT-${padName}${randomDigits}`;
+
         await setDoc(userRef, {
           uid:              firebaseUser.uid,
           name:             firebaseUser.displayName || '',
           email:            firebaseUser.email || '',
+          squadCode:        code,
           userType:         null,
           onboardingComplete: false,
           xp:               0,
@@ -82,6 +88,19 @@ export function useAuth() {
           },
           badges:           [],
           createdAt:        serverTimestamp(),
+        });
+
+        // Write to public squad_codes collection
+        const codeRef = doc(db, 'squad_codes', code);
+        await setDoc(codeRef, {
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || 'Anonymous Bro',
+          xp: 0,
+          level: 1,
+          streak: 0,
+          volume: 0,
+          squadCode: code,
+          updatedAt: new Date()
         });
       }
       // onAuthStateChanged handles the rest
@@ -113,11 +132,17 @@ export function useAuth() {
       // 3. Send email verification
       await sendEmailVerification(newUser);
 
+      const cleanName = name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+      const padName = cleanName.padEnd(4, 'X');
+      const randomDigits = Math.floor(100 + Math.random() * 900);
+      const code = `FIT-${padName}${randomDigits}`;
+
       // 4. Write initial Firestore profile document
       await setDoc(doc(db, 'users', newUser.uid), {
         uid:                newUser.uid,
         name,
         email,
+        squadCode:          code,
         // Auth
         userType:           null,
         onboardingComplete: false,
@@ -152,6 +177,19 @@ export function useAuth() {
         },
         badges:             [],
         createdAt:          serverTimestamp(),
+      });
+
+      // Write to public squad_codes collection
+      const codeRef = doc(db, 'squad_codes', code);
+      await setDoc(codeRef, {
+        uid: newUser.uid,
+        name,
+        xp: 0,
+        level: 1,
+        streak: 0,
+        volume: 0,
+        squadCode: code,
+        updatedAt: new Date()
       });
 
       // onAuthStateChanged handles setUser + setLoading
