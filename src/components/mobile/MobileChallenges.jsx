@@ -18,13 +18,13 @@ import {
   Trash2,
   FastForward
 } from 'lucide-react';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../lib/firebase';
+import { callFitDesiAPI } from '../../lib/apiClient';
 import { useChallenges } from '../../hooks/useChallenges';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { useWorkoutStore } from '../../stores/useWorkoutStore';
 import { deriveLevelFromXP } from '../../lib/xpHelpers';
+import { compressGymImage } from '../../utils/imageCompressor';
 
 const getRemainingCooldownText = (until) => {
   const diffMs = until - Date.now();
@@ -152,49 +152,52 @@ export const MobileChallenges = () => {
     }
   };
 
-  const handleCameraChange = (e) => {
+  const handleCameraChange = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const imageData = reader.result;
-        setCameraImage(imageData);
-        setVerifyingImage(true);
-        addToast('Verifying image with Gemini AI... 🔍', 'info');
-        try {
-          const verifyGymImageFn = httpsCallable(functions, 'verifyGymImage');
-          const res = await verifyGymImageFn({ image: imageData });
-          if (res.data?.success && res.data?.verified) {
-            setCameraVerified(true);
-            setVerificationAttempts(0);
-            addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
-          } else {
-            setCameraVerified(false);
-            setCameraImage(null);
-            const nextAttempts = verificationAttempts + 1;
-            setVerificationAttempts(nextAttempts);
-            if (nextAttempts >= 2) {
-              addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
-            } else {
-              addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
-            }
-          }
-        } catch (err) {
-          console.error('[MobileChallenges] Gym verification error:', err);
-          setCameraVerified(false);
-          setCameraImage(null);
-          const nextAttempts = verificationAttempts + 1;
-          setVerificationAttempts(nextAttempts);
-          if (nextAttempts >= 2) {
-            addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
-          } else {
-            addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
-          }
-        } finally {
-          setVerifyingImage(false);
+    if (!file) return;
+
+    setVerifyingImage(true);
+    addToast('Verifying image with Gemini AI... 🔍', 'info');
+    try {
+      // 1. Intercept file and compress locally on device
+      // Drops a heavy phone photo down to ~150KB-200KB base64 string
+      const cleanBase64Payload = await compressGymImage(file, 1024, 0.7);
+      
+      // Store compressed data URL format locally for preview
+      const previewDataUrl = `data:image/jpeg;base64,${cleanBase64Payload}`;
+      setCameraImage(previewDataUrl);
+
+      // 2. Dispatch clean base64 payload to Render Express backend
+      const res = await callFitDesiAPI('verifyGymImage', { image: cleanBase64Payload });
+      
+      if (res.data?.success && res.data?.verified) {
+        setCameraVerified(true);
+        setVerificationAttempts(0);
+        addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
+      } else {
+        setCameraVerified(false);
+        setCameraImage(null);
+        const nextAttempts = verificationAttempts + 1;
+        setVerificationAttempts(nextAttempts);
+        if (nextAttempts >= 2) {
+          addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
+        } else {
+          addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
         }
-      };
-      reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      console.error('[MobileChallenges] Gym verification error:', err);
+      setCameraVerified(false);
+      setCameraImage(null);
+      const nextAttempts = verificationAttempts + 1;
+      setVerificationAttempts(nextAttempts);
+      if (nextAttempts >= 2) {
+        addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
+      } else {
+        addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
+      }
+    } finally {
+      setVerifyingImage(false);
     }
   };
 

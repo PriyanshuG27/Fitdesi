@@ -23,6 +23,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useAuthStore } from './authStore';
 
 const BODYWEIGHT_EXERCISES = [
   'push_ups',
@@ -64,6 +65,9 @@ export const useWorkoutStore = create(
       setOverdrive: (val) => set({ isOverdrive: val }),
 
       startSession: (planDayOrMood, stomachFlag = false) => {
+        const profile = useAuthStore.getState().profile;
+        const restTimes = profile?.latestRestTimesMap || {};
+
         if (typeof planDayOrMood === 'object' && planDayOrMood !== null) {
           const planDayId = planDayOrMood.id ?? planDayOrMood.day ?? 'custom';
           set((state) => ({
@@ -77,7 +81,8 @@ export const useWorkoutStore = create(
             },
             exercises: planDayOrMood.exercises.map((ex) => {
               const exId = ex.id ?? ex.exerciseKey ?? ex.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-              const isBW = isBodyweightExercise(ex.key || exId, exId);
+              const exKey = ex.key || exId;
+              const isBW = isBodyweightExercise(exKey, exId);
               
               // If sets count is specified, pre-populate that many sets with target details.
               const setsCount = typeof ex.sets === 'number' ? ex.sets : 3;
@@ -95,8 +100,11 @@ export const useWorkoutStore = create(
 
               return {
                 exerciseId: exId,
+                exerciseKey: exKey,
                 name:       ex.name,
+                muscleGroup: ex.muscleGroup,
                 sets,
+                restTimer:  restTimes[exKey] || 90,
               };
             }),
             elapsedSeconds: 0,
@@ -120,20 +128,25 @@ export const useWorkoutStore = create(
         }
       },
 
-      // Append a free-choice exercise picked via ExerciseSearch.
+      // Append a free-choice exercise picked via ExerciseSearch or NLP parser.
       // A timestamp suffix on the ID means logging the same exercise twice is supported.
       addExercise: (exercise) =>
         set((state) => {
-          const isBW = isBodyweightExercise(exercise.key, exercise.key);
+          const profile = useAuthStore.getState().profile;
+          const restTimes = profile?.latestRestTimesMap || {};
+          const exKey = exercise.key || exercise.exerciseKey;
+          const isBW = isBodyweightExercise(exKey, exKey);
+          const defaultSets = exercise.sets ?? [{ reps: '', weight: isBW ? 'BW' : '', completed: false, done: false }];
           return {
             exercises: [
               ...state.exercises,
               {
-                exerciseId:  `${exercise.key}_${Date.now()}`,
-                exerciseKey: exercise.key,
+                exerciseId:  `${exKey}_${Date.now()}`,
+                exerciseKey: exKey,
                 name:        exercise.name,
                 muscleGroup: exercise.muscleGroup,
-                sets:        [{ reps: '', weight: isBW ? 'BW' : '', completed: false, done: false }],
+                sets:        defaultSets,
+                restTimer:   restTimes[exKey] || 90,
               },
             ],
           };
@@ -170,6 +183,9 @@ export const useWorkoutStore = create(
             const isBW = isBodyweightExercise(ex.exerciseKey, ex.exerciseId);
             const sets = ex.sets.map((s, j) => {
               if (j !== setIndex) return s;
+              if (s.done || s.completed) {
+                return { ...s, completed: false, done: false };
+              }
               const isSetBW = s.weight === 'BW';
               const weight = isSetBW ? 0 : (parseFloat(s.weight) || 0);
               const reps = parseInt(s.reps, 10) || 0;
@@ -225,6 +241,15 @@ export const useWorkoutStore = create(
         set((state) => ({
           exercises: state.exercises.filter((ex) => ex.exerciseId !== exerciseId)
         })),
+
+      updateExerciseRestTimer: (exerciseId, seconds) =>
+        set((state) => {
+          const exercises = state.exercises.map((ex) => {
+            if (ex.exerciseId !== exerciseId) return ex;
+            return { ...ex, restTimer: seconds };
+          });
+          return { exercises };
+        }),
     }),
     {
       name: 'fitdesi-workout-session',

@@ -189,7 +189,7 @@ export const LoginPage = () => {
                   if (emailErr) setEmailErr('');
                 }}
                 onBlur={validateEmail}
-                autocomplete="email"
+                autoComplete="email"
                 required
                 className={`w-full bg-bg-input border ${emailErr ? 'border-destructive' : 'border-border-base'} hover:border-border-bright focus:border-primary rounded-xl pl-11 pr-4 py-3 text-text-primary placeholder:text-text-muted focus:outline-none transition duration-150 text-sm`}
                 placeholder="you@email.com"
@@ -224,7 +224,7 @@ export const LoginPage = () => {
                   if (passwordErr) setPasswordErr('');
                 }}
                 onBlur={validatePassword}
-                autocomplete="current-password"
+                autoComplete="current-password"
                 required
                 className={`w-full bg-bg-input border ${passwordErr ? 'border-destructive' : 'border-border-base'} hover:border-border-bright focus:border-primary rounded-xl pl-11 pr-11 py-3 text-text-primary placeholder:text-text-muted focus:outline-none transition duration-150 text-sm`}
                 placeholder="••••••••"

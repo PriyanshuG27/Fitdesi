@@ -8,6 +8,7 @@ import { useXPStore } from '../../stores/useXPStore';
 import { useWeeklyPlan } from '../../hooks/useWeeklyPlan';
 import { useChallenges } from '../../hooks/useChallenges';
 import { WeeklyPlanView } from './WeeklyPlanView';
+import { PlanGenerationLoader } from '../shared/PlanGenerationLoader';
 import { collection, query, orderBy, limit, getDocs, getDocsFromServer, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useUIStore } from '../../stores/useUIStore';
@@ -384,6 +385,8 @@ export const MobileHome = () => {
 
         {currentPlan ? (
           <WeeklyPlanView planDays={planDays} weekId={weekId} />
+        ) : planLoading ? (
+          <PlanGenerationLoader />
         ) : (
           <motion.div
             className="border-2 border-[var(--primary)] bg-[var(--surface)] p-5 rounded-lg shadow-[5px_5px_0px_rgba(255,92,0,0.15)] flex flex-col gap-4"
@@ -400,22 +403,13 @@ export const MobileHome = () => {
             </div>
 
             <motion.button
-              onClick={generatePlan}
+              onClick={() => generatePlan()}
               disabled={planLoading}
               className="w-full py-3 bg-[var(--primary)] text-black font-display font-extrabold tracking-widest text-sm uppercase rounded border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
               whileTap={{ scale: 0.97 }}
             >
-              {planLoading ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin" />
-                  <span>Synthesizing Plan...</span>
-                </>
-              ) : (
-                <>
-                  <Zap size={14} fill="currentColor" />
-                  <span>Generate AI Plan</span>
-                </>
-              )}
+              <Zap size={14} fill="currentColor" />
+              <span>Generate AI Plan</span>
             </motion.button>
           </motion.div>
         )}

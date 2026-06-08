@@ -198,6 +198,27 @@ describe('MobileLogger — Active Logger', () => {
     expect(exercises[0].name).toBe('Barbell Squat');
   });
 
+  it('initializes the rest timer from profile latestRestTimesMap when adding an exercise', () => {
+    useAuthStore.setState({
+      user: { uid: 'test-uid-123' },
+      profile: { weightKg: 75, latestRestTimesMap: { barbell_squat: 165 } },
+      loading: false,
+    });
+    useWorkoutStore.setState({
+      activeSession: { planDayId: 'custom', startedAt: Date.now() },
+      exercises: [],
+      elapsedSeconds: 0,
+    });
+    renderLogger();
+
+    // The mock ExerciseSearch calls onSelect with Barbell Squat (key: barbell_squat)
+    fireEvent.click(screen.getByTestId('exercise-search-add'));
+
+    const exercises = useWorkoutStore.getState().exercises;
+    expect(exercises.length).toBe(1);
+    expect(exercises[0].restTimer).toBe(165);
+  });
+
   it('"+ Add Set" appends a new empty SetRow to the exercise', () => {
     useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
     renderLogger();
@@ -207,6 +228,51 @@ describe('MobileLogger — Active Logger', () => {
 
     const sets = useWorkoutStore.getState().exercises[0].sets;
     expect(sets.length).toBe(2);
+  });
+
+  it('starts the rest timer when marking a set as done by default', async () => {
+    useWorkoutStore.setState({
+      activeSession: { planDayId: 'custom', startedAt: Date.now() },
+      exercises: [{
+        exerciseId: 'barbell_squat_1',
+        exerciseKey: 'barbell_squat',
+        name: 'Barbell Squat',
+        muscleGroup: 'legs',
+        sets: [{ reps: 8, weight: 100, completed: false, done: false }],
+      }],
+    });
+    renderLogger();
+
+    const doneBtn = screen.getByTestId('set-done-0-0');
+    fireEvent.click(doneBtn);
+
+    expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Rest timer started'), 'info');
+    expect(screen.getByText(/REST TIMER:/i)).toBeInTheDocument();
+  });
+
+  it('skips starting the rest timer when disableRestTimer is true in user profile', async () => {
+    useAuthStore.setState({
+      user: { uid: 'test-uid-123' },
+      profile: { weightKg: 75, disableRestTimer: true },
+      loading: false,
+    });
+    useWorkoutStore.setState({
+      activeSession: { planDayId: 'custom', startedAt: Date.now() },
+      exercises: [{
+        exerciseId: 'barbell_squat_1',
+        exerciseKey: 'barbell_squat',
+        name: 'Barbell Squat',
+        muscleGroup: 'legs',
+        sets: [{ reps: 8, weight: 100, completed: false, done: false }],
+      }],
+    });
+    renderLogger();
+
+    const doneBtn = screen.getByTestId('set-done-0-0');
+    fireEvent.click(doneBtn);
+
+    expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining('Rest timer started'), 'info');
+    expect(screen.queryByText(/REST TIMER:/i)).not.toBeInTheDocument();
   });
 
   it('tapping END with 0 exercises shows error toast and does NOT open confirmation sheet', () => {

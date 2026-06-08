@@ -40,16 +40,15 @@ async function getResults({ equipmentList = [], medicalFlags = [], query = '' } 
 // ─── Equipment filtering ──────────────────────────────────────────────────────
 
 describe('useExerciseSearch — equipment filter', () => {
-  it('filters OUT exercises requiring equipment not in user list', async () => {
+  it('does NOT filter OUT exercises requiring equipment not in user list', async () => {
     // User has only dumbbells + bench — no barbell
     const results = await getResults({
       equipmentList: ['Dumbbells', 'Flat Bench'],
     });
 
     const names = results.map((e) => e.name);
-    // Barbell Bench Press requires barbell → must be absent
-    expect(names).not.toContain('Barbell Bench Press');
-    // Dumbbell Bench Press requires dumbbells + bench → must be present
+    // Exercises should not be filtered by equipment for manual search
+    expect(names).toContain('Barbell Bench Press');
     expect(names).toContain('Dumbbell Bench Press');
   });
 
@@ -76,7 +75,7 @@ describe('useExerciseSearch — equipment filter', () => {
 // ─── Medical filtering ────────────────────────────────────────────────────────
 
 describe('useExerciseSearch — medical filter', () => {
-  it('filters OUT exercises restricted for user\'s medical flags', async () => {
+  it('does NOT filter OUT exercises restricted for user\'s medical flags', async () => {
     // "Shoulder Impingement" maps to "shoulder_impingement"
     const results = await getResults({
       equipmentList: ['Barbell', 'Flat Bench', 'Pull-up Bar'],
@@ -84,10 +83,10 @@ describe('useExerciseSearch — medical filter', () => {
     });
 
     const names = results.map((e) => e.name);
-    // All these have medicallyRestricted: ["shoulder_impingement"]
-    expect(names).not.toContain('Barbell Bench Press');
-    expect(names).not.toContain('Overhead Press');
-    expect(names).not.toContain('Pull-Ups'); // also has shoulder_impingement
+    // Should not be filtered by medical flags for manual search
+    expect(names).toContain('Barbell Bench Press');
+    expect(names).toContain('Overhead Press');
+    expect(names).toContain('Pull-Ups');
   });
 
   it('includes exercises NOT in user\'s restricted flags', async () => {
@@ -165,7 +164,7 @@ describe('useExerciseSearch — text search', () => {
 // ─── Result cap ───────────────────────────────────────────────────────────────
 
 describe('useExerciseSearch — result cap', () => {
-  it('results are capped at 20 even when more exercises are eligible', async () => {
+  it('results are capped at 50 even when more exercises are eligible', async () => {
     // All equipment → maximum eligible set; empty query → all eligible returned
     const results = await getResults({
       equipmentList: [
@@ -176,7 +175,7 @@ describe('useExerciseSearch — result cap', () => {
       query: '',
     });
 
-    expect(results.length).toBeLessThanOrEqual(20);
+    expect(results.length).toBeLessThanOrEqual(50);
   });
 });
 

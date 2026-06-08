@@ -254,7 +254,11 @@ export function useWorkoutLogger() {
     const boosterMultiplier = isBoosterActive ? 2.0 : 1.0;
 
     const currentXP  = typeof userData.xp === 'number' ? userData.xp : 0;
-    const xpEarned   = Math.round((BASE_SESSION_XP + newPRs.length * currentPR_XP + bossBonusXP) * overdriveMultiplier * boosterMultiplier);
+    const isLockedIn = session.moodTag === 'locked_in';
+    const adrenalineBonus = (isLockedIn && newPRs.length > 0) ? 15 : 0;
+    const gritBonus = session.stomachFlag ? 20 : 0;
+    
+    const xpEarned   = Math.round((BASE_SESSION_XP + newPRs.length * currentPR_XP + bossBonusXP + adrenalineBonus + gritBonus) * overdriveMultiplier * boosterMultiplier);
     const newXP      = currentXP + xpEarned;
     const prevDerived = deriveLevelFromXP(currentXP);
     const newDerived  = deriveLevelFromXP(newXP);
@@ -267,13 +271,55 @@ export function useWorkoutLogger() {
       dateString,
       moodTag:         session.moodTag        ?? 'average',
       stomachFlag:     Boolean(session.stomachFlag),
+      safeMode:        Boolean(session.stomachFlag), // deload tag
       totalVolume,
       totalSets,
       durationMinutes,
       xpEarned,
+      xpBreakdown: {
+        baseXP: BASE_SESSION_XP,
+        prCount: newPRs.length,
+        prXP: currentPR_XP,
+        adrenalineBonus,
+        gritBonus,
+        bossBonusXP,
+        overdriveMultiplier,
+        boosterMultiplier,
+      },
       prCount:         newPRs.length,
       isOverdrive,
       isXPBoosterActive: isBoosterActive,
+    };
+
+    // Compile latest lifts dictionary for profile caching
+    const activeLifts = {};
+    exercisesSnapshot.forEach((ex) => {
+      const exerciseKey = ex.exerciseKey ?? ex.exerciseId ?? ex.id;
+      const completedSets = ex.sets.filter((s) => s.done || s.completed);
+      if (completedSets.length > 0) {
+        activeLifts[exerciseKey] = completedSets.map((s) => ({
+          weight: s.weight === 'BW' ? 'BW' : (parseFloat(s.weight) || 0),
+          reps: parseInt(s.reps, 10) || 0
+        }));
+      }
+    });
+
+    const latestLiftsMap = {
+      ...(userData.latestLiftsMap || {}),
+      ...activeLifts
+    };
+
+    const activeRestTimes = {};
+    exercisesSnapshot.forEach((ex) => {
+      const exerciseKey = ex.exerciseKey ?? ex.exerciseId;
+      if (ex.restTimer !== undefined) {
+        activeRestTimes[exerciseKey] = ex.restTimer;
+      }
+    });
+
+    const latestRestTimesMap = {
+      ...(userData.latestRestTimesMap || {}),
+      ...activeRestTimes
     };
 
     return {
@@ -289,6 +335,8 @@ export function useWorkoutLogger() {
       newStreak,
       levelUp,
       powerUps: powerUpsUpdate,
+      latestLiftsMap,
+      latestRestTimesMap,
       skills: userData.skills || {},
       summary: {
         sessionId,
@@ -298,7 +346,18 @@ export function useWorkoutLogger() {
         exerciseCount: exerciseDocs.length,
         prCount:       newPRs.length,
         prNames:       newPRs.map((p) => p.name),
+        prs:           newPRs,
         xpEarned,
+        xpBreakdown: {
+          baseXP: BASE_SESSION_XP,
+          prCount: newPRs.length,
+          prXP: currentPR_XP,
+          adrenalineBonus,
+          gritBonus,
+          bossBonusXP,
+          overdriveMultiplier,
+          boosterMultiplier,
+        },
         levelUp,
         newLevel:     newDerived.level,
         newLevelName: newDerived.levelName,
@@ -312,7 +371,7 @@ export function useWorkoutLogger() {
     const {
       uid, userRef, sessionId, sessionDoc, exerciseDocs,
       newPRs, xpEarned, newXP, newDerived, newStreak,
-      powerUps,
+      powerUps, latestLiftsMap, latestRestTimesMap,
     } = payload;
 
     const batch = writeBatch(db);
@@ -352,11 +411,13 @@ export function useWorkoutLogger() {
 
     // Op 5 — User profile update
     const userUpdates = {
-      xp:             newXP,
-      level:          newDerived.level,
-      levelName:      newDerived.levelName,
-      streak:         newStreak,
-      streakLastDate: serverTimestamp(),
+      xp:                 newXP,
+      level:              newDerived.level,
+      levelName:          newDerived.levelName,
+      streak:             newStreak,
+      streakLastDate:     serverTimestamp(),
+      latestLiftsMap:     latestLiftsMap || {}, // flat cache map update
+      latestRestTimesMap: latestRestTimesMap || {}, // flat cache map update
     };
     if (powerUps) {
       userUpdates.powerUps = powerUps;

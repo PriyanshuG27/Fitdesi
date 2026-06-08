@@ -10,9 +10,8 @@
  */
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { firebaseConfig } from './firebaseConfig';
 
 const resolvedConfig = { ...firebaseConfig };
@@ -31,13 +30,11 @@ const app = getApps().length ? getApps()[0] : initializeApp(resolvedConfig);
 
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app, 'asia-south2');
 
 if (useEmulator) {
   try {
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
     connectAuthEmulator(auth, 'http://127.0.0.1:9099');
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
     
     // Force localStorage persistence so Playwright E2E storageState works
     setPersistence(auth, browserLocalPersistence)
@@ -45,6 +42,18 @@ if (useEmulator) {
   } catch (e) {
     console.error('Firebase emulators already connected or failed:', e);
   }
+}
+
+// Enable offline persistence (AFTER emulator connection)
+if (typeof window !== 'undefined') {
+  enableMultiTabIndexedDbPersistence(db)
+    .catch((err) => {
+      if (err.code === 'failed-precondition') {
+        console.warn('Firestore persistence failed-precondition (multiple tabs open)');
+      } else if (err.code === 'unimplemented') {
+        console.warn('Firestore persistence unimplemented in this browser');
+      }
+    });
 }
 
 export { app };

@@ -21,6 +21,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { callFitDesiAPI } from '../lib/apiClient';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUIStore } from '../stores/useUIStore';
 import { useXPEngine } from './useXPEngine';
@@ -255,10 +256,7 @@ export function useChallenges() {
         if (personalTemplates.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
           isGeneratingChallenges = true;
           try {
-            const { httpsCallable } = await import('firebase/functions');
-            const { functions } = await import('../lib/firebase');
-            const generateChallengeFn = httpsCallable(functions, 'generateChallenge');
-            const res = await generateChallengeFn();
+            const res = await callFitDesiAPI('generateChallenge');
             if (res.data && Array.isArray(res.data)) {
               res.data.forEach(tpl => {
                 const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();
@@ -273,7 +271,7 @@ export function useChallenges() {
               });
             }
           } catch (fnErr) {
-            console.error('[useChallenges] Failed to generate challenge via Cloud Function:', fnErr);
+            console.error('[useChallenges] Failed to generate challenge via Express API:', fnErr);
           } finally {
             isGeneratingChallenges = false;
           }

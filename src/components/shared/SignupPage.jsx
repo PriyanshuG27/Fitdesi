@@ -164,7 +164,7 @@ export const SignupPage = () => {
                   if (nameErr) setNameErr('');
                 }}
                 onBlur={validateName}
-                autocomplete="name"
+                autoComplete="name"
                 required
                 className={`w-full bg-bg-input border ${nameErr ? 'border-destructive' : 'border-border-base'} hover:border-border-bright focus:border-primary rounded-xl pl-11 pr-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none transition duration-150 text-sm`}
                 placeholder="Priyanshu Sharma"
@@ -197,7 +197,7 @@ export const SignupPage = () => {
                   if (emailErr) setEmailErr('');
                 }}
                 onBlur={validateEmail}
-                autocomplete="email"
+                autoComplete="email"
                 required
                 className={`w-full bg-bg-input border ${emailErr ? 'border-destructive' : 'border-border-base'} hover:border-border-bright focus:border-primary rounded-xl pl-11 pr-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none transition duration-150 text-sm`}
                 placeholder="you@email.com"
@@ -230,7 +230,7 @@ export const SignupPage = () => {
                   if (passwordErr) setPasswordErr('');
                 }}
                 onBlur={validatePassword}
-                autocomplete="new-password"
+                autoComplete="new-password"
                 required
                 className={`w-full bg-bg-input border ${passwordErr ? 'border-destructive' : 'border-border-base'} hover:border-border-bright focus:border-primary rounded-xl pl-11 pr-11 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none transition duration-150 text-sm`}
                 placeholder="Min. 8 characters + 1 number"

@@ -48,6 +48,8 @@ service cloud.firestore {
         'powerUps', 'badges',
         // Gamification — Phase 5
         'cooldowns', 'skills',
+        // New Profile Fields
+        'latestLiftsMap', 'latestRestTimesMap', 'gymId', 'gymName', 'disableRestTimer',
         // Metadata
         'createdAt'
       ]);
@@ -69,14 +71,30 @@ service cloud.firestore {
     function isValidEquipmentList() {
       return !('equipmentList' in request.resource.data) ||
         (request.resource.data.equipmentList is list &&
-         request.resource.data.equipmentList.size() <= 20);
+          request.resource.data.equipmentList.size() <= 20);
     }
 
     // ─── users/{uid} ─────────────────────────────────────────────────────────
 
     match /users/{uid} {
-      // Owner reads their own profile
-      allow read: if isOwner(uid);
+      // Owner reads their own full profile
+      allow get: if isOwner(uid);
+
+      // Other authenticated users in the same gym can only read/list profiles via query.
+      // We tightly scope this to prevent scraping the entire user database by enforcing:
+      // 1. The query must filter by the same gymId.
+      // 2. The query must sort by xp.
+      // 3. The query must have a strict limit of 20 or less.
+      allow list: if isAuth() && 
+        resource != null &&
+        resource.data != null &&
+        resource.data.gymId != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        resource.data.gymId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('gymId', '') &&
+        request.query.limit != null &&
+        request.query.limit <= 20 &&
+        request.query.orderBy != null &&
+        request.query.orderBy[0].field == 'xp';
 
       // Owner creates their own profile (signup — Phase 1)
       allow create: if isOwner(uid);
@@ -176,9 +194,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ─── strengthStandards/{document} ───────────────────────────────────────
+    // Populated by the backend route via Admin SDK. Read-only for authenticated users.
+    match /strengthStandards/{document} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
     // ─── Implicit default deny ────────────────────────────────────────────────
     // Any path not matched above is denied by Firestore's default behaviour.
     // No wildcard catch-all needed — absence of a rule = deny.
 
   }
 }
+

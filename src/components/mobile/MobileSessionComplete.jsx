@@ -20,10 +20,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Zap, Clock, Dumbbell, Weight, RotateCcw, Home, Star } from 'lucide-react';
+import { Trophy, Zap, Clock, Dumbbell, Weight, RotateCcw, Home, Star, Share2 } from 'lucide-react';
 import { useXPStore } from '../../stores/useXPStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useUIStore } from '../../stores/useUIStore';
+import { generatePRCardImage, getMuscleGroupForExercise, fetchStrengthStandards } from '../shared/PRShareTemplate';
 
 // ─── XP Counter animation ─────────────────────────────────────────────────────
+
 
 function useCountUp(target, duration = 1400) {
   const [value, setValue] = useState(0);
@@ -115,22 +119,34 @@ function LevelUpBanner({ newLevel, newLevelName, onClose }) {
 
 // ─── PR chip list ─────────────────────────────────────────────────────────────
 
-function PRList({ names }) {
-  if (!names?.length) return null;
+function PRList({ prs, onShare, sharing }) {
+  if (!prs?.length) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 mt-2">
-      {names.map((n) => (
-        <span
-          key={n}
-          className="px-2 py-0.5 rounded-full text-xs font-mono"
-          style={{
-            background: 'rgba(181,255,45,0.12)',
-            border:     '1px solid rgba(181,255,45,0.3)',
-            color:      'var(--accent-xp)',
-          }}
+    <div className="flex flex-col gap-2 mt-3 select-none">
+      {prs.map((pr) => (
+        <div
+          key={pr.name}
+          className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--border-bright)] bg-[var(--surface)] text-xs"
         >
-          {n}
-        </span>
+          <div className="flex flex-col min-w-0 pr-2">
+            <span className="font-display font-bold uppercase tracking-wide text-white truncate">
+              {pr.name}
+            </span>
+            <span className="font-mono text-[10px] text-[var(--accent-xp)] mt-0.5 font-bold">
+              {pr.weight === 'BW' ? 'BW' : `${pr.weight} kg`} × {pr.reps} {pr.reps === 1 ? 'rep' : 'reps'}
+            </span>
+          </div>
+          
+          <button
+            type="button"
+            disabled={sharing}
+            onClick={() => onShare(pr)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-xp)] text-black border-2 border-black rounded-lg shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 active:scale-95 transition-all text-[10px] font-display font-black uppercase shrink-0"
+          >
+            <Share2 size={10} strokeWidth={3} />
+            <span>Share</span>
+          </button>
+        </div>
       ))}
     </div>
   );
@@ -146,8 +162,81 @@ export const MobileSessionComplete = ({
 }) => {
   const navigate = useNavigate();
   const { leveledUp, level, levelName, clearPending } = useXPStore();
+  const { profile } = useAuthStore();
+  const { addToast } = useUIStore();
 
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleSharePR = async (pr) => {
+    setIsSharing(true);
+    addToast('Retrieving global rankings...', 'info');
+    try {
+      const est1RM = pr.weight === 'BW' ? 0 : Math.round(pr.weight * (1 + pr.reps / 30));
+      const exName = pr.name || pr.exerciseName || pr.exerciseKey?.replace(/_/g, ' ') || 'Bench Press';
+
+      // Compute statistics utilizing Firestore-cached strength standards
+      const stats = await fetchStrengthStandards(
+        exName,
+        est1RM,
+        profile?.weight || 80,
+        profile?.gender || 'male'
+      );
+
+      const targetMuscle = getMuscleGroupForExercise(exName);
+
+      const dataUrl = await generatePRCardImage({
+        userName: profile?.name || 'Trainer',
+        level: newLevel ?? level,
+        exerciseName: exName,
+        weight: pr.weight,
+        reps: pr.reps,
+        oneRepMax: est1RM,
+        dateString: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        percentile: stats.percentile,
+        tier: stats.tier,
+        bwMultiplier: stats.bwMultiplier,
+        targetMuscle
+      });
+
+      const weightText = pr.weight === 'BW' ? 'BW' : `${pr.weight} kg`;
+      const text = `🏋️ New PR hit on FitDesi! ${exName}: ${weightText} for ${pr.reps} reps${pr.weight !== 'BW' ? ` (Estimated 1RM: ${est1RM} kg)` : ''}! Global Rank: ${stats.percentile} (${stats.tier} Tier) 🔥💪`;
+
+
+
+
+      // Check if Web Share API with files is supported
+      if (navigator.share && navigator.canShare) {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const file = new File([blob], `pr_${pr.exerciseKey || 'lift'}.png`, { type: 'image/png' });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Personal Record Broken!',
+            text,
+          });
+          return;
+        }
+      }
+
+      // Fallback: Trigger instant browser download
+      const link = document.createElement('a');
+      link.download = `pr_${pr.exerciseKey || 'lift'}.png`;
+      link.href = dataUrl;
+      link.click();
+      
+      // Also copy the text template to clipboard
+      await navigator.clipboard.writeText(text);
+      addToast('PR Card image downloaded & details copied to clipboard!', 'success');
+    } catch (err) {
+      console.error('[MobileSessionComplete] Sharing failed:', err);
+      addToast('Could not generate share image.', 'error');
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   // Trigger level-up banner exactly once
   useEffect(() => {
@@ -275,7 +364,7 @@ export const MobileSessionComplete = ({
                 {prCount} PR{prCount > 1 ? 's' : ''}
               </span>
             </div>
-            <PRList names={prNames} />
+            <PRList prs={summary.prs} onShare={handleSharePR} sharing={isSharing} />
           </div>
         )}
       </motion.div>
@@ -310,19 +399,93 @@ export const MobileSessionComplete = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.35 }}
-        className="w-full px-5 mb-6"
+        className="w-full px-5 mb-6 flex flex-col gap-1"
         style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'DM Mono, monospace' }}
       >
-        <div className="flex justify-between mb-1">
-          <span>Session complete</span>
-          <span>+50 XP</span>
-        </div>
-        {prCount > 0 && (
-          <div className="flex justify-between">
-            <span>Personal records × {prCount}</span>
-            <span>+{prCount * 10} XP</span>
-          </div>
-        )}
+        {(() => {
+          const breakdown = summary.xpBreakdown;
+          if (!breakdown) {
+            // Smart fallback for tests/legacy payloads to make sure the math ALWAYS matches
+            const fallbackBase = 50;
+            const fallbackPR = prCount * 10;
+            const sum = fallbackBase + fallbackPR;
+            const diff = (summary.xpEarned || 0) - sum;
+
+            const fallbackLines = [
+              { label: 'Session complete', value: `+${fallbackBase} XP` }
+            ];
+            if (prCount > 0) {
+              fallbackLines.push({ label: `Personal records × ${prCount}`, value: `+${fallbackPR} XP` });
+            }
+            if (diff > 0) {
+              fallbackLines.push({ label: 'Active Skill Bonuses & Multipliers', value: `+${diff} XP` });
+            } else if (diff < 0) {
+              fallbackLines.push({ label: 'XP Adjustment', value: `${diff} XP` });
+            }
+
+            return fallbackLines.map((l, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span>{l.label}</span>
+                <span className="text-[var(--accent-xp)] font-bold">{l.value}</span>
+              </div>
+            ));
+          }
+
+          const lines = [];
+          lines.push({ label: 'Session complete', value: `+${breakdown.baseXP} XP` });
+          if (breakdown.prCount > 0) {
+            const prVal = breakdown.prCount * (breakdown.prXP || 10);
+            lines.push({ label: `Personal records × ${breakdown.prCount}`, value: `+${prVal} XP` });
+          }
+          if (breakdown.adrenalineBonus > 0) {
+            lines.push({ label: 'Adrenaline Rush (Locked In + PR)', value: `+${breakdown.adrenalineBonus} XP` });
+          }
+          if (breakdown.gritBonus > 0) {
+            lines.push({ label: 'Grit (Injury Protocol Bonus)', value: `+${breakdown.gritBonus} XP` });
+          }
+          if (breakdown.bossBonusXP > 0) {
+            lines.push({ label: 'Boss Fight Victory Bonus', value: `+${breakdown.bossBonusXP} XP` });
+          }
+
+          const hasMultipliers = (breakdown.overdriveMultiplier > 1.0) || (breakdown.boosterMultiplier > 1.0);
+          if (hasMultipliers) {
+            const additionSum = breakdown.baseXP +
+              (breakdown.prCount * (breakdown.prXP || 10)) +
+              (breakdown.adrenalineBonus || 0) +
+              (breakdown.gritBonus || 0) +
+              (breakdown.bossBonusXP || 0);
+
+            lines.push({ label: 'Subtotal', value: `${additionSum} XP`, isSubtotal: true });
+            if (breakdown.overdriveMultiplier > 1.0) {
+              lines.push({ label: 'Overdrive Hour Multiplier', value: `×${breakdown.overdriveMultiplier}` });
+            }
+            if (breakdown.boosterMultiplier > 1.0) {
+              lines.push({ label: 'XP Booster Multiplier', value: `×${breakdown.boosterMultiplier}` });
+            }
+            lines.push({ label: 'Total XP Earned', value: `+${summary.xpEarned} XP`, isTotal: true });
+          }
+
+          return lines.map((l, idx) => {
+            let className = '';
+            if (l.isSubtotal) {
+              className = 'border-t border-[var(--border-bright)] pt-1.5 mt-1 font-semibold text-[var(--text-secondary)]';
+            } else if (l.isTotal) {
+              className = 'border-t border-[var(--border-bright)] pt-1.5 mt-1 font-bold text-[var(--text-primary)] text-sm';
+            }
+            
+            let valClassName = '';
+            if (l.value.startsWith('×') || l.isTotal || l.isSubtotal) {
+              valClassName = 'text-[var(--accent-xp)] font-bold';
+            }
+
+            return (
+              <div key={idx} className={`flex justify-between ${className}`}>
+                <span>{l.label}</span>
+                <span className={valClassName}>{l.value}</span>
+              </div>
+            );
+          });
+        })()}
       </motion.div>
 
       {/* ── Error / Retry banner ─────────────────────────────────────────── */}
@@ -380,6 +543,7 @@ export const MobileSessionComplete = ({
         <Home size={18} />
         Back to Home
       </motion.button>
+
     </div>
   );
 };

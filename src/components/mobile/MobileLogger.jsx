@@ -12,6 +12,8 @@ import { useToast } from '../../hooks/useToast';
 import { SetRow } from '../shared/SetRow';
 import { ExerciseSearch } from '../shared/ExerciseSearch';
 import { MobileSessionComplete } from './MobileSessionComplete';
+import { parseWorkoutText } from '../../utils/nlpParser';
+import { playRestTimerBeep } from '../../utils/audioBeep';
 
 export const MobileLogger = () => {
   const navigate = useNavigate();
@@ -29,6 +31,7 @@ export const MobileLogger = () => {
     addSet,
     removeSet,
     removeExercise,
+    updateExerciseRestTimer,
     isOverdrive,
   } = useWorkoutStore();
 
@@ -41,6 +44,14 @@ export const MobileLogger = () => {
   // Local state for setup
   const [selectedMood, setSelectedMood] = useState('average');
   const [stomachFlag, setStomachFlag] = useState(false);
+
+  // Natural Language Dictation parser state
+  const [nlpInput, setNlpInput] = useState('');
+  const [parsedNLPResult, setParsedNLPResult] = useState(null);
+
+  // Rest Timer state
+  const [restTimeRemaining, setRestTimeRemaining] = useState(null);
+  const [restTimerEndTimestamp, setRestTimerEndTimestamp] = useState(null);
 
   // Bottom sheet + session-complete state
   const [isEndSheetOpen, setIsEndSheetOpen] = useState(false);
@@ -73,6 +84,87 @@ export const MobileLogger = () => {
     };
     fetchPRs();
   }, [user, isActive]);
+
+  // ─── Screen Wake Lock API ──────────────────────────────────────────────────
+  const wakeLockRef = React.useRef(null);
+
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && isActive) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        console.log('[WakeLock] Screen Wake Lock acquired.');
+      } catch (err) {
+        console.warn('[WakeLock] Failed to acquire screen wake lock:', err.message);
+      }
+    }
+  }, [isActive]);
+
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log('[WakeLock] Screen Wake Lock released.');
+      } catch (err) {
+        console.warn('[WakeLock] Failed to release screen wake lock:', err.message);
+      }
+    }
+  }, []);
+
+  // Request wake lock on session start/stop
+  useEffect(() => {
+    if (isActive) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+    return () => {
+      releaseWakeLock();
+    };
+  }, [isActive, requestWakeLock, releaseWakeLock]);
+
+  // Re-acquire lock if user returns to app (visibilitychange or window focus)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isActive) {
+        console.log('[WakeLock] Tab visibility returned. Re-acquiring screen lock...');
+        await requestWakeLock();
+      }
+    };
+
+    const handleFocus = async () => {
+      if (isActive) {
+        console.log('[WakeLock] Window focused. Re-acquiring screen lock...');
+        await requestWakeLock();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isActive, requestWakeLock]);
+
+  // ─── Rest Timer Background Countdown ───────────────────────────────────────
+  useEffect(() => {
+    if (!restTimerEndTimestamp) return;
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.round((restTimerEndTimestamp - Date.now()) / 1000));
+      setRestTimeRemaining(remaining);
+
+      if (remaining <= 0) {
+        setRestTimerEndTimestamp(null);
+        setRestTimeRemaining(null);
+        playRestTimerBeep();
+        toast('🔔 Rest over! Time for your next set.', 'success');
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [restTimerEndTimestamp, toast]);
 
   // Compute live stats for the end confirmation sheet
   const totalSetsCount = useMemo(() => {
@@ -156,8 +248,22 @@ export const MobileLogger = () => {
   }, [updateSet]);
 
   const handleMarkSetDone = useCallback((exerciseId, setIndex) => {
-    markSetDone(exerciseId, setIndex);
-  }, [markSetDone]);
+    const ex = exercises.find((e) => e.exerciseId === exerciseId);
+    const setRow = ex?.sets[setIndex];
+    const wasAlreadyDone = setRow?.done || setRow?.completed;
+
+    const success = markSetDone(exerciseId, setIndex);
+    if (success && !wasAlreadyDone) {
+      if (profile?.disableRestTimer) {
+        return;
+      }
+      // Find the exercise and read its custom restTimer (default to 90)
+      const duration = ex?.restTimer ?? 90;
+      setRestTimerEndTimestamp(Date.now() + duration * 1000);
+      setRestTimeRemaining(duration);
+      toast(`Rest timer started: ${duration}s ⏳`, 'info');
+    }
+  }, [markSetDone, exercises, toast, profile?.disableRestTimer]);
 
   const handleRemoveSet = useCallback((exerciseIndex, setIndex) => {
     removeSet(exerciseIndex, setIndex);
@@ -166,6 +272,30 @@ export const MobileLogger = () => {
   const handleAddExercise = useCallback((exercise) => {
     addExercise(exercise);
   }, [addExercise]);
+
+  const handleConfirmNLPAdd = useCallback(() => {
+    if (!parsedNLPResult) return;
+    addExercise({
+      key: parsedNLPResult.exerciseKey,
+      name: parsedNLPResult.name,
+      muscleGroup: parsedNLPResult.muscleGroup,
+      sets: parsedNLPResult.sets,
+    });
+    setNlpInput('');
+    setParsedNLPResult(null);
+    toast(`Added ${parsedNLPResult.name}!`, 'info');
+  }, [parsedNLPResult, addExercise, toast]);
+
+  const handleNLPChange = (e) => {
+    const val = e.target.value;
+    setNlpInput(val);
+    if (!val.trim()) {
+      setParsedNLPResult(null);
+      return;
+    }
+    const result = parseWorkoutText(val);
+    setParsedNLPResult(result);
+  };
 
   const handleStartSession = () => {
     startSession(selectedMood, stomachFlag);
@@ -190,14 +320,24 @@ export const MobileLogger = () => {
       setIsEndSheetOpen(false);
       setSessionSummary(summary);
     } catch (err) {
-      const newRetry = retryCount + 1;
-      setRetryCount(newRetry);
-      setFinishError(err.message ?? 'Failed to save session.');
-      setLocalError(
-        newRetry >= 3
-          ? 'Session saved locally — will sync when connection returns.'
-          : 'Could not save. Tap "Finish Session" to retry.'
-      );
+      const cleanMsg = err.message ? err.message.replace(/\[useWorkoutLogger\]\s*/g, '') : 'Failed to save session.';
+      setFinishError(cleanMsg);
+      
+      const isValidationError = cleanMsg.toLowerCase().includes('cannot save') || 
+                                cleanMsg.toLowerCase().includes('no active session') || 
+                                cleanMsg.toLowerCase().includes('valid uid');
+      
+      if (isValidationError) {
+        setLocalError(cleanMsg);
+      } else {
+        const newRetry = retryCount + 1;
+        setRetryCount(newRetry);
+        setLocalError(
+          newRetry >= 3
+            ? 'Session saved locally — will sync when connection returns.'
+            : 'Could not save. Tap "Finish Session" to retry.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -374,6 +514,66 @@ export const MobileLogger = () => {
 
           {/* MAIN SCROLL AREA */}
           <main className="flex-1 overflow-y-auto px-4 py-4 pb-36">
+            {/* ─── OFFLINE NATURAL LANGUAGE DICTATION LOGGER ─── */}
+            <div className="mb-6 bg-[var(--bg-surface)] border-2 border-black p-4 rounded-2xl shadow-[4px_4px_0px_rgba(0,0,0,1)] select-none">
+              <span className="block font-display text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+                🎤 Dictate or Type a Set
+              </span>
+              <div className="relative flex items-center bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-1.5 hover:border-[var(--border-bright)] transition-colors focus-within:border-[var(--primary)] focus-within:shadow-[0_0_8px_var(--primary-glow)]">
+                <input
+                  type="text"
+                  value={nlpInput}
+                  onChange={handleNLPChange}
+                  placeholder="e.g., Bench Press 60kg 3x10 (dictate via keyboard mic)"
+                  className="w-full bg-transparent text-sm text-[var(--text-primary)] focus:outline-none placeholder:text-[var(--text-muted)] pr-6 font-body"
+                />
+                {nlpInput && (
+                  <button
+                    type="button"
+                    onClick={() => { setNlpInput(''); setParsedNLPResult(null); }}
+                    className="absolute right-3 text-[var(--text-secondary)] hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Live Preview / Match Confirmation Box */}
+              <AnimatePresence>
+                {parsedNLPResult && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                    className="overflow-hidden mt-3 bg-yellow-400 text-black border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_rgba(0,0,0,1)] flex flex-col gap-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-display font-extrabold text-xs uppercase tracking-wider">
+                        ⚡ Quick Match Detected!
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setParsedNLPResult(null)}
+                        className="text-black/60 hover:text-black font-extrabold text-xs uppercase"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="font-body text-xs font-semibold">
+                      Add <span className="font-extrabold">{parsedNLPResult.name}</span>: {parsedNLPResult.sets.length} sets of {parsedNLPResult.sets[0].reps} reps @ {parsedNLPResult.sets[0].weight === 'BW' ? 'Bodyweight' : `${parsedNLPResult.sets[0].weight}kg`}?
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleConfirmNLPAdd}
+                      className="w-full py-2 bg-black text-white hover:bg-neutral-900 border-2 border-black font-body font-bold text-xs uppercase rounded-lg shadow-[2px_2px_0px_rgba(255,255,255,0.2)] transition-transform active:translate-y-0.5"
+                    >
+                      Add to Session
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             {isOverdrive && (
               <div className="mb-4 flex items-center justify-center gap-2 px-3 py-2 border-2 border-indigo-500 bg-indigo-950/40 text-indigo-400 text-xs font-mono font-bold uppercase rounded-xl select-none animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.2)]">
                 <Zap size={14} className="fill-indigo-400" />
@@ -414,9 +614,31 @@ export const MobileLogger = () => {
                       <h4 className="font-body font-bold text-base text-[var(--text-primary)] leading-tight">
                         {ex.name}
                       </h4>
-                      <span className="inline-block mt-1 font-body text-[10px] font-bold text-[var(--text-secondary)] bg-[var(--bg-elevated)] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        {ex.muscleGroup}
-                      </span>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="inline-block font-body text-[10px] font-bold text-[var(--text-secondary)] bg-[var(--bg-elevated)] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          {ex.muscleGroup}
+                        </span>
+                        
+                        {/* Neubrutalist Custom Rest Timer Control per Exercise */}
+                        <div className="flex items-center gap-1.5 bg-[var(--bg-input)] border border-[var(--border)] rounded px-2 py-0.5 text-[10px] font-mono font-bold select-none shrink-0 shadow-[1px_1px_0px_black]">
+                          <span className="text-[var(--text-secondary)]">⏱️ Rest:</span>
+                          <button
+                            type="button"
+                            onClick={() => updateExerciseRestTimer(ex.exerciseId, Math.max(15, (ex.restTimer ?? 90) - 15))}
+                            className="w-4 h-4 flex items-center justify-center bg-black/35 rounded border border-neutral-700 hover:bg-neutral-800 text-white font-mono active:scale-95 cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="text-white min-w-[28px] text-center">{(ex.restTimer ?? 90)}s</span>
+                          <button
+                            type="button"
+                            onClick={() => updateExerciseRestTimer(ex.exerciseId, Math.min(300, (ex.restTimer ?? 90) + 15))}
+                            className="w-4 h-4 flex items-center justify-center bg-black/35 rounded border border-neutral-700 hover:bg-neutral-800 text-white font-mono active:scale-95 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <button
@@ -452,21 +674,33 @@ export const MobileLogger = () => {
 
                   {/* List of SetRows */}
                   <div className="flex flex-col mb-4">
-                    {ex.sets.map((s, setIndex) => (
-                      <SetRow
-                        key={setIndex}
-                        exerciseId={ex.exerciseId}
-                        setIndex={setIndex}
-                        set={s}
-                        exerciseIndex={exIndex}
-                        isBodyweight={isBodyweightExercise(ex.exerciseKey, ex.exerciseId)}
-                        isDurationBased={ex.muscleGroup?.toLowerCase() === 'stretching'}
-                        onUpdate={handleUpdateSet}
-                        onDone={handleMarkSetDone}
-                        isPR={checkIfSetIsPR(ex.exerciseId, s)}
-                        onDelete={ex.sets.length > 1 ? handleRemoveSet : null}
-                      />
-                    ))}
+                    {ex.sets.map((s, setIndex) => {
+                      const prevSets = profile?.latestLiftsMap?.[ex.exerciseKey] || profile?.latestLiftsMap?.[ex.exerciseId] || null;
+                      const prevSet = prevSets?.[setIndex] || null;
+
+                      const targetEx = activeSession?.exercises?.find(
+                        (e) => (e.key ?? e.exerciseKey) === ex.exerciseKey || e.name === ex.name
+                      );
+                      const targetSet = targetEx ? { targetWeight: targetEx.targetWeight, reps: targetEx.reps } : null;
+
+                      return (
+                        <SetRow
+                          key={setIndex}
+                          exerciseId={ex.exerciseId}
+                          setIndex={setIndex}
+                          set={s}
+                          previousSet={prevSet}
+                          targetSet={targetSet}
+                          exerciseIndex={exIndex}
+                          isBodyweight={isBodyweightExercise(ex.exerciseKey, ex.exerciseId)}
+                          isDurationBased={ex.muscleGroup?.toLowerCase() === 'stretching'}
+                          onUpdate={handleUpdateSet}
+                          onDone={handleMarkSetDone}
+                          isPR={checkIfSetIsPR(ex.exerciseId, s)}
+                          onDelete={ex.sets.length > 1 ? handleRemoveSet : null}
+                        />
+                      );
+                    })}
                   </div>
 
                   {/* Add Set Row */}
@@ -485,6 +719,32 @@ export const MobileLogger = () => {
               ))
             )}
           </main>
+
+          {/* REST TIMER FLOATING CARD */}
+          <AnimatePresence>
+            {restTimeRemaining !== null && restTimeRemaining > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 50, scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className="fixed bottom-20 left-4 right-4 z-30 bg-yellow-300 text-black border-2 border-black px-4 py-3 rounded-xl shadow-[3px_3px_0px_black] flex items-center justify-between font-mono font-bold select-none"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="animate-spin text-sm">⏳</span>
+                  <span className="text-xs uppercase tracking-wider font-body font-extrabold text-black/70">REST TIMER:</span>
+                  <span className="text-lg tracking-widest bg-black text-white px-2.5 py-0.5 rounded border-2 border-black shadow-[1px_1px_0px_black] font-mono font-black">{restTimeRemaining}s</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setRestTimerEndTimestamp(null); setRestTimeRemaining(null); }}
+                  className="bg-black text-white hover:bg-neutral-900 border-2 border-black font-body font-extrabold text-xs uppercase px-3 py-1 rounded-lg shadow-[2px_2px_0px_black] transition-transform active:translate-y-0.5"
+                >
+                  Skip
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* STICKY EXERCISE SEARCH */}
           <div

@@ -258,4 +258,91 @@ describe('SetRow Component', () => {
     fireEvent.click(buttons[1]); // weight+
     expect(props.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'weight', 0);
   });
+
+  // ── Match, Overload and Edit chips ──────────────────────────────────────────
+
+  it('renders Match and Overload chips instead of inputs when they are provided', () => {
+    const props = {
+      ...defaultProps,
+      set: { reps: '', weight: '', done: false },
+      previousSet: { weight: 70, reps: 10 },
+      targetSet: { targetWeight: 72.5, reps: 8 },
+    };
+    render(<SetRow {...props} />);
+
+    // Inputs should not be rendered yet
+    expect(screen.queryByTestId('weight-1-0')).not.toBeInTheDocument();
+
+    // Match and Overload chips should be rendered
+    expect(screen.getByText('Match:')).toBeInTheDocument();
+    expect(screen.getByText('70k×10')).toBeInTheDocument();
+    expect(screen.getByText('Overload:')).toBeInTheDocument();
+    expect(screen.getByText('72.5k×8')).toBeInTheDocument();
+  });
+
+  it('clicking Match chip calls onUpdate and shows inputs without calling onDone', () => {
+    const props = {
+      ...defaultProps,
+      set: { reps: '', weight: '', done: false },
+      previousSet: { weight: 70, reps: 10 },
+      targetSet: { targetWeight: 72.5, reps: 8 },
+    };
+    render(<SetRow {...props} />);
+
+    fireEvent.click(screen.getByText('Match:'));
+
+    // Check onUpdate was called
+    expect(props.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'weight', 70);
+    expect(props.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'reps', 10);
+
+    // Check onDone was NOT called
+    expect(props.onDone).not.toHaveBeenCalled();
+
+    // Inputs should now be visible
+    expect(screen.getByTestId('weight-1-0')).toBeInTheDocument();
+    expect(screen.getByTestId('reps-1-0')).toBeInTheDocument();
+  });
+
+  it('clicking Overload chip calls onUpdate and shows inputs without calling onDone', () => {
+    const props = {
+      ...defaultProps,
+      set: { reps: '', weight: '', done: false },
+      previousSet: { weight: 70, reps: 10 },
+      targetSet: { targetWeight: 72.5, reps: 8 },
+    };
+    render(<SetRow {...props} />);
+
+    fireEvent.click(screen.getByText('Overload:'));
+
+    // Check onUpdate was called
+    expect(props.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'weight', 72.5);
+    expect(props.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'reps', 8);
+
+    // Check onDone was NOT called
+    expect(props.onDone).not.toHaveBeenCalled();
+
+    // Inputs should now be visible
+    expect(screen.getByTestId('weight-1-0')).toBeInTheDocument();
+    expect(screen.getByTestId('reps-1-0')).toBeInTheDocument();
+  });
+
+  it('clicking edit pencil shows inputs directly without updating or calling onDone', () => {
+    const props = {
+      ...defaultProps,
+      set: { reps: '', weight: '', done: false },
+      previousSet: { weight: 70, reps: 10 },
+      targetSet: { targetWeight: 72.5, reps: 8 },
+    };
+    render(<SetRow {...props} />);
+
+    fireEvent.click(screen.getByText('✏️'));
+
+    // Check onUpdate and onDone were NOT called
+    expect(props.onUpdate).not.toHaveBeenCalled();
+    expect(props.onDone).not.toHaveBeenCalled();
+
+    // Inputs should now be visible
+    expect(screen.getByTestId('weight-1-0')).toBeInTheDocument();
+    expect(screen.getByTestId('reps-1-0')).toBeInTheDocument();
+  });
 });

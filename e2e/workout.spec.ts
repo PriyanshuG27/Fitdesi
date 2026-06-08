@@ -118,6 +118,11 @@ async function fillSet(
   weight: number | string,
   reps: number,
 ) {
+  const editBtn = page.getByTestId(`edit-set-${exerciseIndex}-${setIndex}`);
+  if (await editBtn.isVisible()) {
+    await editBtn.click();
+  }
+
   const weightInput = page.getByTestId(`weight-${exerciseIndex}-${setIndex}`);
   const repsInput = page.getByTestId(`reps-${exerciseIndex}-${setIndex}`);
 

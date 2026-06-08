@@ -29,7 +29,7 @@ import exerciseBank from '../data/exercises.json';
 // the US English spelling ("sanitize"), so we match that exactly.
 import { sanitizeString } from '../lib/firestoreUtils';
 
-const MAX_RESULTS = 20;
+const MAX_RESULTS = 50;
 const DEBOUNCE_MS = 200;
 
 /**
@@ -173,21 +173,11 @@ export function useExerciseSearch({ equipmentList = [], medicalFlags = [], query
   const mappedEquipment = useMemo(() => mapAvailableEquipment(equipmentList), [equipmentList]);
   const mappedMedical = useMemo(() => mapMedicalFlags(medicalFlags), [medicalFlags]);
 
-  // Pre-filter by equipment + medical once (stable unless profile changes)
-  const eligibleExercises = useMemo(() => {
-    return exerciseBank.filter(
-      (ex) =>
-        passesEquipmentGate(ex.equipmentRequired, mappedEquipment) &&
-        passesMedicalGate(ex.medicallyRestricted, mappedMedical)
-    );
-  }, [mappedEquipment, mappedMedical]);
-
-  // Apply text filter on debounced query
+  // Apply text filter on debounced query directly on the entire exercise bank (no equipment/medical filters for manual search)
   const results = useMemo(() => {
-    // sanitizeString(str, maxLen) — imported from firestoreUtils
     const cleanQuery = sanitizeString(debouncedQuery, 80).toLowerCase().trim();
-    return eligibleExercises.filter((ex) => matchesQuery(ex, cleanQuery)).slice(0, MAX_RESULTS);
-  }, [eligibleExercises, debouncedQuery]);
+    return exerciseBank.filter((ex) => matchesQuery(ex, cleanQuery)).slice(0, MAX_RESULTS);
+  }, [debouncedQuery]);
 
   return { results, isSearching };
 }

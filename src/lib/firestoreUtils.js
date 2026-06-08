@@ -272,3 +272,10 @@ export const addXPLog = async (uid, source, amount, meta = {}) => {
     throw new Error('XP Log Failed: Unable to write XP log entry.');
   }
 };
+
+export const abbreviateExerciseName = (name) => {
+  if (typeof name !== 'string') return '';
+  return name
+    .replace(/Barbell/gi, 'BB')
+    .replace(/Dumbbell/gi, 'DB');
+};

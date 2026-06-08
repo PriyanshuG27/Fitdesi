@@ -109,13 +109,16 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
                 date: sessionData.dateString || formatDate(sessionDate),
                 maxWeight,
                 maxReps,
+                timestamp: sessionDate.getTime(),
               });
             }
           }
         }
 
-        // Sort ascending by date (oldest first)
-        const sortedData = records.sort((a, b) => a.date.localeCompare(b.date));
+        // Sort ascending by timestamp (oldest first) and strip temporary timestamp property
+        const sortedData = records
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .map(({ date, maxWeight, maxReps }) => ({ date, maxWeight, maxReps }));
 
         strengthCache.set(cacheKey, sortedData);
 

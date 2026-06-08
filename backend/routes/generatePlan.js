@@ -1,12 +1,12 @@
 'use strict';
 
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const authGuard = require('../middleware/authGuard');
+const { admin, adminDb } = require('../lib/firebaseAdmin');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { validateUID, validatePlanRequest, validatePlan, HttpsError } = require('../lib/validators');
+const { checkRateLimit } = require('../middleware/rateLimiter');
 
-const { validateUID, validatePlanRequest, validatePlan } = require('./validators');
-const { checkRateLimit } = require('./rateLimiter');
-
+const FieldValue = admin.firestore.FieldValue;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 function getISOWeek(date = new Date()) {
@@ -26,27 +26,20 @@ function parseGeminiJSON(text) {
   }
 }
 
-exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, async (request) => {
-  if (!GEMINI_API_KEY) {
-    throw new HttpsError('internal', 'Server configuration error');
-  }
-
-  const uid = request.auth?.uid;
-  if (!uid) {
-    throw new HttpsError('unauthenticated', 'Login required');
-  }
-
+module.exports = [authGuard, async (req, res) => {
+  const uid = req.user.uid;
+  
   try {
     validateUID(uid);
-    validatePlanRequest(request.data);
+    validatePlanRequest(req.body);
 
-    const adminDb = getFirestore();
-    await checkRateLimit(adminDb, uid, request.data?.usePowerUp === true);
+    await checkRateLimit(adminDb, uid, req.body?.usePowerUp === true);
 
     const userDoc = await adminDb.doc(`users/${uid}`).get();
     if (!userDoc.exists) {
-      throw new HttpsError('not-found', 'User profile not found');
+      return res.status(404).json({ error: 'User profile not found' });
     }
+    
     const { 
       equipmentList = [], 
       medicalFlags = [], 
@@ -71,7 +64,6 @@ exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, asy
           .get();
         return {
           date: sessionData.date,
-          safeMode: Boolean(sessionData.safeMode || sessionData.deload), // safeMode deload tag
           exercises: exercisesSnap.docs.map((ex) => {
             const exData = ex.data();
             return {
@@ -118,9 +110,8 @@ STRICT RULES:
    - Apply a precise 2.5% to 5.0% progressive overload weight increase on top of their recent maximum weight lifted for identical exercises.
    - Round all targetWeight values to the nearest 2.5 kg increment (e.g. 60 kg, 62.5 kg, 65 kg; 0 for bodyweight).
 8. If the user experience level is 'Comeback', ignore progression and dial target weights back to 70-80% of their recent logs to ease them in safely.
-9. CRITICAL AI CONTAMINATION FILTER: Ignore any session in RECENT SESSION LOGS where "safeMode": true is present. Treat flagged sessions as sick/recovery days. Do NOT use their weights/reps to calculate overload targets. Instead, progressive overload must be computed relative to the most recent healthy (unflagged) session for each exercise.
 
-${request.data?.personalRequirements ? `USER'S PERSONAL REQUIREMENTS FOR THIS WEEK:\n"${request.data.personalRequirements}"\nYou MUST incorporate these requirements into the plan.\n` : ''}
+${req.body?.personalRequirements ? `USER'S PERSONAL REQUIREMENTS FOR THIS WEEK:\n"${req.body.personalRequirements}"\nYou MUST incorporate these requirements into the plan.\n` : ''}
 OUTPUT FORMAT:
 Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
 JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
@@ -218,35 +209,35 @@ JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Re
     if (!rawText) {
       const isTimeout = errors.some(e => e.error === 'deadline-exceeded');
       if (isTimeout) {
-        throw new HttpsError('deadline-exceeded', 'Plan generation timed out. Please try again.');
+        return res.status(504).json({ error: 'Plan generation timed out. Please try again.' });
       }
-      throw new HttpsError('internal', `Plan generation failed. All models failed: ${JSON.stringify(errors)}`);
+      return res.status(500).json({ error: `Plan generation failed. All models failed: ${JSON.stringify(errors)}` });
     }
 
     const plan = parseGeminiJSON(rawText);
     validatePlan(plan);
 
     const weekId =
-      request.data && typeof request.data.weekId === 'string' && /^\d{4}-W\d{2}$/.test(request.data.weekId)
-        ? request.data.weekId
+      req.body && typeof req.body.weekId === 'string' && /^\d{4}-W\d{2}$/.test(req.body.weekId)
+        ? req.body.weekId
         : getISOWeek();
 
     await adminDb.doc(`users/${uid}/weeklyPlans/${weekId}`).set({
       weekId,
       generatedAt: FieldValue.serverTimestamp(),
-      source: 'gemini',
+      source: successModel,
       plan,
     });
 
-    return { success: true, weekId };
+    return res.status(200).json({ success: true, weekId });
 
   } catch (error) {
     console.error('[generatePlan] error:', error.message);
-    if (error instanceof HttpsError) throw error;
+    const status = error.status || 500;
     
     if (error.message === 'plan_parse_failed') {
-      throw new HttpsError('internal', 'Plan generation failed. Please try again.');
+      return res.status(status).json({ error: 'Plan generation failed. Please try again.' });
     }
-    throw new HttpsError('internal', 'Plan generation failed. Please try again.');
+    return res.status(status).json({ error: error.message || 'Plan generation failed. Please try again.' });
   }
-});
+}];

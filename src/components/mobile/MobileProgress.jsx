@@ -5,12 +5,18 @@ import { useAuthStore } from '../../stores/authStore';
 import { useStrengthData, useVolumeData, usePRList, clearStrengthCache } from '../../hooks/useProgress';
 import { StrengthChart } from '../shared/StrengthChart';
 import { VolumeChart } from '../shared/VolumeChart';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import exerciseBank from '../../data/exercises.json';
 import { useUIStore } from '../../stores/useUIStore';
+import { abbreviateExerciseName } from '../../lib/firestoreUtils';
+import { calculateMuscleFatigue } from '../../utils/fatigueCalculator';
+import { generatePRCardImage, getMuscleGroupForExercise, fetchStrengthStandards } from '../shared/PRShareTemplate';
+import { calculateDetailedMuscleStrength } from '../../utils/strengthCalculator';
+import { MuscleMap, StrengthRadarChart, StrengthTiersLegend, MuscleDetailPanel } from '../shared/MuscleMap';
 
-const TABS = ['Strength', 'Volume', 'PRs'];
+
+const TABS = ['Strength', 'Volume', 'PRs', 'Recovery'];
 
 // Helper to format Date/Timestamp from Firestore
 const formatPRDate = (dateVal) => {
@@ -25,13 +31,29 @@ const formatPRDate = (dateVal) => {
   return dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+
+
 export const MobileProgress = () => {
   const uid = useAuthStore((state) => state.uid);
+  const profile = useAuthStore((state) => state.profile);
   const { prs, loading: prsLoading, refresh: refreshPRs } = usePRList(uid);
   const { addToast } = useUIStore();
 
   const [activeTab, setActiveTab] = useState('Strength');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const [sessions, setSessions] = useState([]);
+  const [loadingFatigue, setLoadingFatigue] = useState(true);
+  const [fatigueData, setFatigueData] = useState({});
+  const [selectedRecoveryMuscleKey, setSelectedRecoveryMuscleKey] = useState(null);
+
+  const [mannequinView, setMannequinView] = useState('front');
+  const [mannequinMode, setMannequinMode] = useState('fatigue');
+  const [viewType, setViewType] = useState('grouped');
+
+  const mannequinStrengthData = useMemo(() => {
+    return calculateDetailedMuscleStrength(prs, profile);
+  }, [prs, profile]);
 
   const handleRefresh = () => {
     clearStrengthCache();
@@ -47,6 +69,7 @@ export const MobileProgress = () => {
   
   // Selected PR state for celebration modal
   const [selectedPR, setSelectedPR] = useState(null);
+  const [isSharing, setIsSharing] = useState(false);
 
   const { data: strengthData, loading: strengthLoading } = useStrengthData(uid, selectedExercise, strengthRange, refreshTrigger);
   const { data: volumeData, loading: volumeLoading } = useVolumeData(uid, 12);
@@ -186,6 +209,71 @@ export const MobileProgress = () => {
     fetchMuscleDistribution();
   }, [uid, prs]); // Refetch when PRs (and therefore sessions) might update
 
+  // Fetch recent sessions on mount to compute fatigue
+  useEffect(() => {
+    if (!uid || activeTab !== 'Recovery') return;
+    const fetchRecentSessions = async () => {
+      setLoadingFatigue(true);
+      try {
+        const sessionsRef = collection(db, 'users', uid, 'sessions');
+        const q = query(sessionsRef, orderBy('date', 'desc'), limit(10));
+        const snap = await getDocs(q);
+        
+        const loadedSessions = [];
+        for (const docSnap of snap.docs) {
+          const sessData = docSnap.data();
+          const exSnap = await getDocs(collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises'));
+          const exercises = exSnap.docs.map(exDoc => exDoc.data());
+          loadedSessions.push({
+            id: docSnap.id,
+            ...sessData,
+            exercises
+          });
+        }
+        
+        setSessions(loadedSessions);
+        const fatigue = calculateMuscleFatigue(loadedSessions);
+        setFatigueData(fatigue);
+      } catch (err) {
+        console.error('[MobileProgress] Error compiling fatigue data:', err);
+      } finally {
+        setLoadingFatigue(false);
+      }
+    };
+
+    fetchRecentSessions();
+  }, [uid, activeTab, refreshTrigger]);
+
+  const getMuscleColor = (muscleKey) => {
+    const fatigue = (viewType === 'individual' ? fatigueData.individual?.[muscleKey] : fatigueData.general?.[muscleKey]) || 0;
+    if (fatigue > 100) return '#FF3366'; // Neon Red (>100% fatigue)
+    if (fatigue >= 30) return '#FFE600'; // Neon Yellow (30-100% fatigue)
+    return '#33FF66'; // Neon Green (<30% fatigue)
+  };
+
+  const getRecoveryHours = (fatigue) => {
+    if (fatigue > 100) return '48 - 72 hours (High Fatigue)';
+    if (fatigue >= 30) return '24 - 48 hours (Active Recovery)';
+    return 'Fully Recovered (<12 hours)';
+  };
+
+  const getMuscleLabel = (key) => {
+    const labels = {
+      chest: 'Chest',
+      back: 'Back',
+      shoulders: 'Shoulders',
+      arms: 'Arms',
+      legs: 'Legs',
+      core: 'Core & Abs'
+    };
+    return labels[key] || key;
+  };
+
+  const selectedRecoveryMuscle = selectedRecoveryMuscleKey ? {
+    key: selectedRecoveryMuscleKey,
+    fatigue: (viewType === 'individual' ? fatigueData.individual?.[selectedRecoveryMuscleKey] : fatigueData.general?.[selectedRecoveryMuscleKey]) || 0
+  } : null;
+
   // Strength metrics computations
   const strengthMetrics = useMemo(() => {
     if (!strengthData || strengthData.length === 0) return null;
@@ -225,13 +313,74 @@ export const MobileProgress = () => {
     };
   }, [volumeData]);
 
-  // PR Clipboard share action
-  const handleSharePR = (pr) => {
-    const est1RM = pr.weight === 'BW' ? 0 : Math.round(pr.weight * (1 + pr.reps / 30));
-    const weightText = pr.weight === 'BW' ? 'BW' : `${pr.weight} kg`;
-    const text = `🏋️ New PR hit on FitDesi! ${pr.exerciseName}: ${weightText} for ${pr.reps} reps${pr.weight !== 'BW' ? ` (Estimated 1RM: ${est1RM} kg)` : ''}! COMEBACK MODE ACTIVE 🔥💪`;
-    navigator.clipboard.writeText(text);
-    addToast('Copied PR details to clipboard!', 'success');
+  const handleSharePR = async (pr) => {
+    setIsSharing(true);
+    addToast('Retrieving global rankings...', 'info');
+    try {
+      const est1RM = pr.weight === 'BW' ? 0 : Math.round(pr.weight * (1 + pr.reps / 30));
+      const exName = pr.exerciseName || pr.name || pr.exerciseKey?.replace(/_/g, ' ') || 'Bench Press';
+
+      // Compute statistics utilizing Firestore-cached strength standards
+      const stats = await fetchStrengthStandards(
+        exName,
+        est1RM,
+        profile?.weight || 80,
+        profile?.gender || 'male'
+      );
+
+      const targetMuscle = getMuscleGroupForExercise(exName);
+
+      const dataUrl = await generatePRCardImage({
+        userName: profile?.name || 'Trainer',
+        level: profile?.level || 1,
+        exerciseName: exName,
+        weight: pr.weight,
+        reps: pr.reps,
+        oneRepMax: est1RM,
+        dateString: formatPRDate(pr.date),
+        percentile: stats.percentile,
+        tier: stats.tier,
+        bwMultiplier: stats.bwMultiplier,
+        targetMuscle
+      });
+
+      const weightText = pr.weight === 'BW' ? 'BW' : `${pr.weight} kg`;
+      const text = `🏋️ New PR hit on FitDesi! ${exName}: ${weightText} for ${pr.reps} reps${pr.weight !== 'BW' ? ` (Estimated 1RM: ${est1RM} kg)` : ''}! Global Rank: ${stats.percentile} (${stats.tier} Tier) 🔥💪`;
+
+
+
+
+      // Check if Web Share API with files is supported
+      if (navigator.share && navigator.canShare) {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const file = new File([blob], `pr_${pr.exerciseKey || 'lift'}.png`, { type: 'image/png' });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Personal Record Broken!',
+            text,
+          });
+          return;
+        }
+      }
+
+      // Fallback: Trigger instant browser download
+      const link = document.createElement('a');
+      link.download = `pr_${pr.exerciseKey || 'lift'}.png`;
+      link.href = dataUrl;
+      link.click();
+      
+      // Also copy the text template to clipboard
+      await navigator.clipboard.writeText(text);
+      addToast('PR Card image downloaded & details copied to clipboard!', 'success');
+    } catch (err) {
+      console.error('[MobileProgress] Sharing failed:', err);
+      addToast('Could not generate share image.', 'error');
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // Framer Motion staggered list variants for PRs
@@ -357,7 +506,7 @@ export const MobileProgress = () => {
                               : 'bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border-bright)] hover:border-[var(--text-secondary)] shadow-none'
                           }`}
                         >
-                          {(chip.name || chip.key.replace(/_/g, ' ')).replace('Barbell ', '').replace('Dumbbell ', '').replace('barbell ', '').replace('dumbbell ', '')}
+                          {abbreviateExerciseName(chip.name || chip.key.replace(/_/g, ' '))}
                         </button>
                       );
                     })}
@@ -427,7 +576,7 @@ export const MobileProgress = () => {
                       </span>
                       <span className="text-xs font-sans font-bold text-[var(--text-primary)] mt-1">
                         {strengthMetrics.dataCount > 1
-                          ? `Lifted +${strengthMetrics.weightDelta} kg since first log`
+                          ? `Lifted ${strengthMetrics.weightDelta >= 0 ? '+' : ''}${strengthMetrics.weightDelta} kg since first log`
                           : 'Initial benchmark log established'}
                       </span>
                     </div>
@@ -578,7 +727,7 @@ export const MobileProgress = () => {
                     >
                       <div className="flex flex-col">
                         <h4 className="text-display text-base text-[var(--text-primary)] font-bold tracking-tight uppercase leading-none">
-                          {pr.exerciseName || pr.exerciseKey.replace(/_/g, ' ')}
+                          {abbreviateExerciseName(pr.exerciseName || pr.exerciseKey.replace(/_/g, ' '))}
                         </h4>
                         <span className="text-[10px] text-[var(--text-secondary)] font-mono mt-1">
                           Hit on {formatPRDate(pr.date)}
@@ -600,6 +749,76 @@ export const MobileProgress = () => {
                     </motion.div>
                   ))}
                 </motion.div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'Recovery' && (
+            <motion.div
+              key="recovery"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col gap-5"
+            >
+              {/* Muscle Map Interactive Section */}
+              <MuscleMap
+                fatigueData={fatigueData}
+                strengthData={mannequinStrengthData}
+                activeMuscle={selectedRecoveryMuscleKey}
+                onMuscleClick={(m) => setSelectedRecoveryMuscleKey(selectedRecoveryMuscleKey === m ? null : m)}
+                mode={mannequinMode}
+                setMode={setMannequinMode}
+                view={mannequinView}
+                setView={setMannequinView}
+                viewType={viewType}
+                setViewType={(vt) => {
+                  setViewType(vt);
+                  setSelectedRecoveryMuscleKey(null);
+                }}
+              />
+
+              {/* Muscle Telemetry Details panel */}
+              <MuscleDetailPanel
+                muscleKey={selectedRecoveryMuscleKey}
+                fatigueScore={
+                  mannequinMode === 'fatigue'
+                    ? (viewType === 'individual'
+                        ? (fatigueData.individual?.[selectedRecoveryMuscleKey] || 0)
+                        : (fatigueData.general?.[selectedRecoveryMuscleKey] || 0))
+                    : 0
+                }
+                strengthScore={
+                  viewType === 'individual'
+                    ? (mannequinStrengthData.individual?.[selectedRecoveryMuscleKey] || 0)
+                    : (mannequinStrengthData.general?.[selectedRecoveryMuscleKey] || 0)
+                }
+                mode={mannequinMode}
+              />
+
+              {/* Strength Mode Sub-Analytics */}
+              {mannequinMode === 'strength' && (
+                <div className="flex flex-col gap-4 mt-1">
+                  <StrengthRadarChart 
+                    strengthData={mannequinStrengthData}
+                    viewType={viewType}
+                    title="Universal Strength Split"
+                  />
+                  <StrengthTiersLegend />
+                </div>
+              )}
+
+              {/* Fatigue Mode Sub-Analytics (ACWR Guide Card) */}
+              {mannequinMode === 'fatigue' && (
+                <div className="border border-[var(--border)] bg-[var(--surface)] p-4 rounded-xl shadow-[3px_3px_0px_black] flex flex-col gap-2">
+                  <span className="text-[10px] font-mono text-[var(--secondary)] uppercase tracking-wider font-bold">
+                    Telemetry Guide
+                  </span>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed mt-1">
+                    Your Fatigue Index is calculated using the Acute-to-Chronic Workload Ratio (ACWR) model. 
+                    Target green regions for high-intensity training. Yellow regions indicate active recovery, while red regions warn of potential overload.
+                  </p>
+                </div>
               )}
             </motion.div>
           )}
@@ -649,7 +868,7 @@ export const MobileProgress = () => {
                     Exercise
                   </span>
                   <span className="font-display text-lg font-bold text-white uppercase text-center mt-1">
-                    {selectedPR.exerciseName || selectedPR.exerciseKey.replace(/_/g, ' ')}
+                    {abbreviateExerciseName(selectedPR.exerciseName || selectedPR.exerciseKey.replace(/_/g, ' '))}
                   </span>
                 </div>
                 
@@ -707,6 +926,7 @@ export const MobileProgress = () => {
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 };

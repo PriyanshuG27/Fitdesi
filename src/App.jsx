@@ -19,6 +19,7 @@ import { LoginPage }   from './components/shared/LoginPage';
 import { SignupPage }  from './components/shared/SignupPage';
 import { PWAInstallModal } from './components/shared/PWAInstallModal';
 import { PWAInstallBanner } from './components/shared/PWAInstallBanner';
+import { ToastStack } from './components/shared/ToastStack';
 
 const OnboardingPage = React.lazy(() => import('./components/shared/OnboardingPage'));
 
@@ -215,6 +216,7 @@ function App() {
       <AppRoutes layout={layout} />
       <PWAInstallBanner />
       <PWAInstallModal />
+      <ToastStack />
     </BrowserRouter>
   );
 }

@@ -7,8 +7,8 @@
 
 import { useEffect, useCallback } from 'react';
 import { doc, getDoc }            from 'firebase/firestore';
-import { httpsCallable }          from 'firebase/functions';
-import { db, functions }          from '../lib/firebase';
+import { db }                     from '../lib/firebase';
+import { callFitDesiAPI }         from '../lib/apiClient';
 import { useAuthStore }           from '../stores/useAuthStore';
 import { usePlanStore }           from '../stores/usePlanStore';
 import { useUIStore }             from '../stores/useUIStore';
@@ -55,12 +55,11 @@ export function useWeeklyPlan() {
     setPlanError(null);
 
     try {
-      const fn = httpsCallable(functions, 'generatePlan');
       const payload = { weekId, usePowerUp };
-      if (personalRequirements) {
+      if (personalRequirements && typeof personalRequirements === 'string' && personalRequirements.trim() !== '') {
         payload.personalRequirements = personalRequirements;
       }
-      const res = await fn(payload);
+      const res = await callFitDesiAPI('generatePlan', payload, 70000);
       
       // Upon successful generation, fetch the newly generated plan from Firestore.
       if (res.data?.success) {

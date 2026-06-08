@@ -73,7 +73,9 @@ export function ExerciseSearch({ onSelect, label = 'Add Exercise', dropUp = fals
 
   // Open dropdown whenever there is a query value
   useEffect(() => {
-    setIsOpen(query.length > 0);
+    if (query.length > 0) {
+      setIsOpen(true);
+    }
     setHighlightedIdx(-1);
   }, [query]);
 
@@ -154,7 +156,7 @@ export function ExerciseSearch({ onSelect, label = 'Add Exercise', dropUp = fals
       ? `exercise-option-${results[highlightedIdx].key}`
       : undefined;
 
-  const showDropdown = isOpen && query.length > 0;
+  const showDropdown = isOpen;
 
   return (
     <div
@@ -217,6 +219,10 @@ export function ExerciseSearch({ onSelect, label = 'Add Exercise', dropUp = fals
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => {
+            setIsOpen(true);
+            setHighlightedIdx(-1);
+          }}
           autoComplete="off"
           spellCheck={false}
           style={{
