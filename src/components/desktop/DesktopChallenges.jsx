@@ -7,7 +7,7 @@ export const DesktopChallenges = () => {
         Desktop Challenges
       </h1>
       <p className="text-[var(--text-secondary)] font-sans text-base mt-3 tracking-wider max-w-md">
-        FITDESI Desktop Challenges Hub Shell
+        ZENKAI Desktop Challenges Hub Shell
       </p>
     </div>
   );

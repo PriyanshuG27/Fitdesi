@@ -7,7 +7,7 @@ export const DesktopProgress = () => {
         Desktop Progress
       </h1>
       <p className="text-[var(--text-secondary)] font-sans text-base mt-3 tracking-wider max-w-md">
-        FITDESI Desktop Progress & PR Telemetry Shell
+        ZENKAI Desktop Progress & PR Telemetry Shell
       </p>
     </div>
   );

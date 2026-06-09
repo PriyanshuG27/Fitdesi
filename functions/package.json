@@ -1,7 +1,7 @@
 {
-  "name": "fitdesi-functions",
+  "name": "zenkai-functions",
   "version": "1.0.0",
-  "description": "FitDesi Firebase Cloud Functions",
+  "description": "Zenkai Firebase Cloud Functions",
   "main": "src/index.js",
   "engines": {
     "node": "20"

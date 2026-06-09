@@ -1,4 +1,4 @@
-# FitDesi — Technical Requirements Document (TRD)
+# Zenkai — Technical Requirements Document (TRD)
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -391,8 +391,8 @@ Gemini key is **never** in `.env` for the client. Only set in Cloud Functions co
 
 ```bash
 # 1. Clone + install
-git clone https://github.com/{username}/fitdesi
-cd fitdesi
+git clone https://github.com/{username}/zenkai
+cd zenkai
 npm install
 
 # 2. Firebase project

@@ -81,7 +81,7 @@ export const PWAInstallBanner = () => {
             
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-semibold text-white tracking-wide leading-tight">
-                Install FitDesi
+                Install Zenkai
               </span>
               <span className="text-[10px] text-[#a1a1b5] font-sans truncate mt-0.5">
                 {domain}

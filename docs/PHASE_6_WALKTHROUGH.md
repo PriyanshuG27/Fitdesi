@@ -1,4 +1,4 @@
-# FitDesi — Phase 6 Walkthrough: Production Code Audit & Performance Optimization
+# Zenkai — Phase 6 Walkthrough: Production Code Audit & Performance Optimization
 
 > **Status**: **Phase Complete.** All production code audit tasks have been executed, optimized, and thoroughly verified. Initial bundle sizes have been reduced, Recharts has been successfully code-split, safe query limits have been added to Firestore queries, React rendering performance has been optimized (eliminating redundant re-renders via `React.memo` and `useCallback` with coordinate signatures), and accessibility/DOM warnings have been fixed. All 153 Vitest unit tests pass successfully.
 
@@ -6,20 +6,20 @@
 
 ## 📂 Section 1: Detailed Code Splitting & Suspense Routing
 
-To achieve the mobile performance goals, we restructured the routing structure in [`src/App.jsx`](file:///d:/Fitdesi/src/App.jsx). 
+To achieve the mobile performance goals, we restructured the routing structure in [`src/App.jsx`](file:///d:/Zenkai/src/App.jsx). 
 
 ### 1. Architectural Strategy: Eager vs. Lazy Loading
 We split the routes based on user interaction urgency and performance impact:
 
 1. **Eager Loading (Initial Bundle)**:
-   * **Authentication Shells**: [`LandingPage.jsx`](file:///d:/Fitdesi/src/components/shared/LandingPage.jsx), [`LoginPage.jsx`](file:///d:/Fitdesi/src/components/shared/LoginPage.jsx), and [`SignupPage.jsx`](file:///d:/Fitdesi/src/components/shared/SignupPage.jsx). These must load eagerly so that the landing page and authentication flow are instantly interactive upon first visit.
-   * **Home Dashboards**: [`MobileHome.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileHome.jsx) and [`DesktopDashboard.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopDashboard.jsx). These form the core landing screen once auth completes.
-   * **Workout Loggers**: [`MobileLogger.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileLogger.jsx) and [`DesktopLoggerPanel.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopLoggerPanel.jsx). Loggers are triggered physically by FAB taps (floating action buttons) or sidebar navigation clicks. If lazy-loaded, the user would experience a spinner flash or white content area while the bundle is fetched over cellular connections. Keeping them eager makes the logger open instantly.
+   * **Authentication Shells**: [`LandingPage.jsx`](file:///d:/Zenkai/src/components/shared/LandingPage.jsx), [`LoginPage.jsx`](file:///d:/Zenkai/src/components/shared/LoginPage.jsx), and [`SignupPage.jsx`](file:///d:/Zenkai/src/components/shared/SignupPage.jsx). These must load eagerly so that the landing page and authentication flow are instantly interactive upon first visit.
+   * **Home Dashboards**: [`MobileHome.jsx`](file:///d:/Zenkai/src/components/mobile/MobileHome.jsx) and [`DesktopDashboard.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopDashboard.jsx). These form the core landing screen once auth completes.
+   * **Workout Loggers**: [`MobileLogger.jsx`](file:///d:/Zenkai/src/components/mobile/MobileLogger.jsx) and [`DesktopLoggerPanel.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopLoggerPanel.jsx). Loggers are triggered physically by FAB taps (floating action buttons) or sidebar navigation clicks. If lazy-loaded, the user would experience a spinner flash or white content area while the bundle is fetched over cellular connections. Keeping them eager makes the logger open instantly.
 2. **Lazy Loading (Deferred Chunks)**:
    * Non-critical screens are code-split via `React.lazy()` and dynamic `import()` statements, which are fetched asynchronously in the background.
 
-### 2. Code Implementation in [`src/App.jsx`](file:///d:/Fitdesi/src/App.jsx)
-The lazy loaded components are defined at the top of [`src/App.jsx`](file:///d:/Fitdesi/src/App.jsx):
+### 2. Code Implementation in [`src/App.jsx`](file:///d:/Zenkai/src/App.jsx)
+The lazy loaded components are defined at the top of [`src/App.jsx`](file:///d:/Zenkai/src/App.jsx):
 ```javascript
 // Layout Shells
 const MobileApp = React.lazy(() => import('./components/mobile/MobileApp'));
@@ -41,7 +41,7 @@ const DesktopChallenges = React.lazy(() => import('./components/desktop/DesktopC
 const DesktopProfile = React.lazy(() => import('./components/desktop/DesktopProfile'));
 ```
 
-These lazy-loaded routes are wrapped inside a global `<React.Suspense>` boundary in [`AppRoutes`](file:///d:/Fitdesi/src/App.jsx#L48-L109):
+These lazy-loaded routes are wrapped inside a global `<React.Suspense>` boundary in [`AppRoutes`](file:///d:/Zenkai/src/App.jsx#L48-L109):
 ```javascript
 function AppRoutes({ layout }) {
   const isMobile = layout === 'mobile';
@@ -99,8 +99,8 @@ function AppRoutes({ layout }) {
 
 ### 3. Verification of Recharts Isolation
 Recharts is dynamically loaded **only** on the `/progress` route.
-* Recharts components are imported in [`StrengthChart.jsx`](file:///d:/Fitdesi/src/components/shared/StrengthChart.jsx) and [`VolumeChart.jsx`](file:///d:/Fitdesi/src/components/shared/VolumeChart.jsx).
-* These two chart files are imported by [`MobileProgress.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileProgress.jsx) and [`DesktopProgress.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopProgress.jsx).
+* Recharts components are imported in [`StrengthChart.jsx`](file:///d:/Zenkai/src/components/shared/StrengthChart.jsx) and [`VolumeChart.jsx`](file:///d:/Zenkai/src/components/shared/VolumeChart.jsx).
+* These two chart files are imported by [`MobileProgress.jsx`](file:///d:/Zenkai/src/components/mobile/MobileProgress.jsx) and [`DesktopProgress.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopProgress.jsx).
 * Both progress components are lazy-loaded via the `/progress` route.
 * As a result, Recharts is not included in the main bundle and is only downloaded when navigating to the progress screen.
 
@@ -109,7 +109,7 @@ Recharts is dynamically loaded **only** on the `/progress` route.
 ## 📊 Section 2: Bundle Analysis & Rollup Configuration
 
 ### 1. Conditional Setup for `rollup-plugin-visualizer`
-To prevent the visualizer from opening a browser tab and generating a `stats.html` file on every build (which is noisy during local development and CI builds), we wrapped it in a conditional block in [`vite.config.js`](file:///d:/Fitdesi/vite.config.js):
+To prevent the visualizer from opening a browser tab and generating a `stats.html` file on every build (which is noisy during local development and CI builds), we wrapped it in a conditional block in [`vite.config.js`](file:///d:/Zenkai/vite.config.js):
 
 ```javascript
 import { defineConfig } from 'vite';
@@ -184,7 +184,7 @@ import firebase from 'firebase';
 ## 🎨 Section 3: Font & Asset Performance Optimization
 
 ### 1. Preconnecting to Google Fonts
-We modified [`index.html`](file:///d:/Fitdesi/index.html) to establish early connections to the Google Fonts servers:
+We modified [`index.html`](file:///d:/Zenkai/index.html) to establish early connections to the Google Fonts servers:
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -222,7 +222,7 @@ The resulting Framer Motion chunk is tree-shaked down to **40.59 kB** gzipped.
 We audited all `getDocs` and `onSnapshot` queries to prevent unbounded data loading:
 
 ### 1. Capping History in `useProgress.js`
-In [`src/hooks/useProgress.js`](file:///d:/Fitdesi/src/hooks/useProgress.js), the query fetching historical workout sessions is limited to **60 sessions**:
+In [`src/hooks/useProgress.js`](file:///d:/Zenkai/src/hooks/useProgress.js), the query fetching historical workout sessions is limited to **60 sessions**:
 ```javascript
 const q = query(
   collection(db, 'users', uid, 'sessions'),
@@ -232,7 +232,7 @@ const q = query(
 ```
 
 ### 2. Date Bounds and Capping in `useWeeklyRecap.js`
-In [`src/hooks/useWeeklyRecap.js`](file:///d:/Fitdesi/src/hooks/useWeeklyRecap.js), we filter for workouts within the last 7 days and limit the result to **7 documents** to prevent fetching unnecessary historical data:
+In [`src/hooks/useWeeklyRecap.js`](file:///d:/Zenkai/src/hooks/useWeeklyRecap.js), we filter for workouts within the last 7 days and limit the result to **7 documents** to prevent fetching unnecessary historical data:
 ```javascript
 const sevenDaysAgo = new Date();
 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -259,7 +259,7 @@ We wrapped key frequently updating components in `React.memo` to block re-render
 * **`StrengthChart` & `VolumeChart`**: Prevents expensive Recharts canvas re-renders when other parent components or state updates trigger.
 
 ### 2. Stable Callback Signatures (`useCallback` + Coordinates)
-We refactored event callbacks in [`src/components/mobile/MobileLogger.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileLogger.jsx) to prevent reference changes on parent re-renders. 
+We refactored event callbacks in [`src/components/mobile/MobileLogger.jsx`](file:///d:/Zenkai/src/components/mobile/MobileLogger.jsx) to prevent reference changes on parent re-renders. 
 
 Instead of passing inline arrow functions that create new closures during rendering:
 ```javascript
@@ -278,14 +278,14 @@ const onToggleDone = useCallback((exerciseId, setIndex) => {
   toggleSetDone(exerciseId, setIndex);
 }, [toggleSetDone]);
 ```
-Inside [`SetRow.jsx`](file:///d:/Fitdesi/src/components/mobile/SetRow.jsx):
+Inside [`SetRow.jsx`](file:///d:/Zenkai/src/components/mobile/SetRow.jsx):
 ```javascript
 // Invoke callback using coordinates
 onUpdate(exerciseId, setIndex, 'weight', parseFloat(e.target.value) || 0);
 ```
 
 ### 3. HTML Form Attribute fixes (autoComplete)
-In [`LoginPage.jsx`](file:///d:/Fitdesi/src/components/shared/LoginPage.jsx) and [`SignupPage.jsx`](file:///d:/Fitdesi/src/components/shared/SignupPage.jsx), we updated lowercase `autocomplete` attributes to `autoComplete` to resolve React DOM warnings:
+In [`LoginPage.jsx`](file:///d:/Zenkai/src/components/shared/LoginPage.jsx) and [`SignupPage.jsx`](file:///d:/Zenkai/src/components/shared/SignupPage.jsx), we updated lowercase `autocomplete` attributes to `autoComplete` to resolve React DOM warnings:
 ```diff
 - autocomplete="email"
 + autoComplete="email"

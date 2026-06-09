@@ -1,4 +1,4 @@
-# FitDesi — Security Document
+# Zenkai — Security Document
 
 **Version:** 1.0  
 **Date:** June 2026  

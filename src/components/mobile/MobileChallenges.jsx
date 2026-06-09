@@ -18,7 +18,7 @@ import {
   Trash2,
   FastForward
 } from 'lucide-react';
-import { callFitDesiAPI } from '../../lib/apiClient';
+import { callZenkaiAPI } from '../../lib/apiClient';
 import { SquadMatchmaker } from '../desktop/SquadMatchmaker';
 import { useChallenges } from '../../hooks/useChallenges';
 import { useAuthStore } from '../../stores/authStore';
@@ -170,7 +170,7 @@ export const MobileChallenges = () => {
       setCameraImage(previewDataUrl);
 
       // 2. Dispatch clean base64 payload to Render Express backend
-      const res = await callFitDesiAPI('verifyGymImage', { image: cleanBase64Payload });
+      const res = await callZenkaiAPI('verifyGymImage', { image: cleanBase64Payload });
       
       if (res.data?.success && res.data?.verified) {
         setCameraVerified(true);

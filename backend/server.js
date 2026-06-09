@@ -28,7 +28,7 @@ const { initWeeklyChallengeScheduler } = require('./lib/weeklyChallengeScheduler
 initWeeklyChallengeScheduler();
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`FitDesi Engine operational on port ${PORT}`));
+app.listen(PORT, () => console.log(`Zenkai Engine operational on port ${PORT}`));
 
 
 

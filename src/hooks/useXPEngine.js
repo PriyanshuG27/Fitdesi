@@ -1,7 +1,7 @@
 /**
  * useXPEngine.js
  *
- * The reward-system core of FitDesi.
+ * The reward-system core of Zenkai.
  * Handles XP awards, level derivation, streak evaluation,
  * and Firestore persistence — all in one place.
  *

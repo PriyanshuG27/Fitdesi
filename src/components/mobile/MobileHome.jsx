@@ -322,10 +322,10 @@ export const MobileHome = () => {
             </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-sm uppercase tracking-wide">
-                FitDesi Native Experience
+                Zenkai Native Experience
               </span>
               <p className="text-[10px] text-[var(--text-secondary)] font-sans leading-relaxed mt-0.5">
-                Run FitDesi in fullscreen from your home screen with faster load times and offline support.
+                Run Zenkai in fullscreen from your home screen with faster load times and offline support.
               </p>
             </div>
           </div>

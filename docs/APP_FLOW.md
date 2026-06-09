@@ -1,4 +1,4 @@
-# FitDesi — App Flow
+# Zenkai — App Flow
 
 **Version:** 1.0  
 **Date:** June 2026  

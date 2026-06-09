@@ -4,7 +4,7 @@ export const DesktopLogin = () => {
   return (
     <div className="min-h-screen bg-bg-base text-text-primary p-8 flex flex-col justify-center items-center">
       <div className="w-full max-w-md bg-bg-surface p-8 rounded-xl border border-border space-y-6">
-        <h2 className="text-heading text-3xl text-text-primary text-center">Login to FitDesi</h2>
+        <h2 className="text-heading text-3xl text-text-primary text-center">Login to Zenkai</h2>
         <div className="space-y-4">
           <input 
             type="email" 

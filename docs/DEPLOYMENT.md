@@ -1,4 +1,4 @@
-# FitDesi — Deployment Document
+# Zenkai — Deployment Document
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -258,7 +258,7 @@ Post-MVP additions:
 
 ## 10. Free Tier Limits to Watch
 
-Firebase Spark plan is free. FitDesi MVP stays within it easily, but know the limits:
+Firebase Spark plan is free. Zenkai MVP stays within it easily, but know the limits:
 
 | Resource | Free limit | Expected usage |
 |---|---|---|

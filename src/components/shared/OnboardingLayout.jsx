@@ -59,7 +59,7 @@ export const OnboardingLayout = ({ step, totalSteps, onBack, onSkip, children })
 
       {/* Footer Branding */}
       <footer className="w-full max-w-lg mx-auto px-6 py-6 text-center text-[10px] text-text-muted font-mono uppercase tracking-widest z-10 shrink-0">
-        FitDesi Baseline Config
+        Zenkai Baseline Config
       </footer>
     </div>
   );

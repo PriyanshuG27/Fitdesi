@@ -7,7 +7,7 @@ export const MobilePlan = () => {
         Mobile Plan
       </h1>
       <p className="text-[var(--text-secondary)] font-sans text-xs mt-2 tracking-wider">
-        FITDESI Mobile Plan Shell
+        ZENKAI Mobile Plan Shell
       </p>
     </div>
   );

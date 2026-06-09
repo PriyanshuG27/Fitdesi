@@ -32,7 +32,7 @@ export const DesktopSidebar = () => {
         {/* Logo Header */}
         <div className="h-16 flex items-center px-6 border-b border-[var(--border)]">
           <span className="font-display text-2xl font-bold tracking-wider text-[var(--primary)]">
-            FITDESI
+            ZENKAI
           </span>
         </div>
 

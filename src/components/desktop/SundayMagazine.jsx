@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Newspaper, Flame, RefreshCw, Award, Target, HelpCircle, Activity, Sparkles, BookOpen, Quote } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { callFitDesiAPI } from '../../lib/apiClient';
+import { callZenkaiAPI } from '../../lib/apiClient';
 import { motion } from 'framer-motion';
 
 const activeMagazineFetches = new Set();
@@ -41,7 +41,7 @@ export const SundayMagazine = () => {
     setError(null);
 
     try {
-      const res = await callFitDesiAPI('generateWeeklyMagazine', { reprint: forceRefresh });
+      const res = await callZenkaiAPI('generateWeeklyMagazine', { reprint: forceRefresh });
       if (res && res.data && res.data.success) {
         setMagazineData(res.data.magazine);
         setTelemetry(res.data.telemetry);
@@ -143,7 +143,7 @@ export const SundayMagazine = () => {
             {/* Newspaper Heading Mask */}
             <div className="border-b-4 border-double border-black pb-4 text-center">
               <h2 className="font-serif font-black text-3xl md:text-5xl uppercase tracking-tighter text-black leading-none select-none">
-                FITDESI CHRONICLES
+                ZENKAI CHRONICLES
               </h2>
               <div className="flex justify-between items-center text-[9px] font-mono font-bold uppercase border-t border-black mt-2 pt-2 px-1 text-neutral-600">
                 <span>Vol. I // Issue XXIV</span>

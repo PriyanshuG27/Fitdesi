@@ -1,4 +1,4 @@
-# FitDesi — Workout Logging Phase Walkthrough
+# Zenkai — Workout Logging Phase Walkthrough
 
 > **Status**: All systems built and passing 84/84 tests as of 2026-06-06.
 > Run `npm run test -- --run` to verify at any point.
@@ -11,55 +11,55 @@
 
 | File | Purpose | Key Shape |
 |---|---|---|
-| [`sessionStore.js`](file:///d:/Fitdesi/src/stores/sessionStore.js) | Ephemeral workout session — NOT persisted | `isActive`, `startTime`, `moodTag`, `stomachFlag`, `exercises[]` |
-| [`useWorkoutStore.js`](file:///d:/Fitdesi/src/stores/useWorkoutStore.js) | Persisted active session (localStorage) | `activeSession`, `exercises[]`, `elapsedSeconds` |
-| [`useXPStore.js`](file:///d:/Fitdesi/src/stores/useXPStore.js) | Gamification state — XP, level, streak | `totalXP`, `level`, `levelName`, `pendingXP`, `leveledUp` |
-| [`useUIStore.js`](file:///d:/Fitdesi/src/stores/useUIStore.js) | Cross-cutting UI — toasts, modals | `toasts[]`, `activeModal`, `mobileTab` |
-| [`useAuthStore.js`](file:///d:/Fitdesi/src/stores/useAuthStore.js) | Firebase Auth user + profile | `user`, `profile`, `loading` |
-| [`usePlanStore.js`](file:///d:/Fitdesi/src/stores/usePlanStore.js) | Active training plan | `currentPlan`, `planDays[]` |
+| [`sessionStore.js`](file:///d:/Zenkai/src/stores/sessionStore.js) | Ephemeral workout session — NOT persisted | `isActive`, `startTime`, `moodTag`, `stomachFlag`, `exercises[]` |
+| [`useWorkoutStore.js`](file:///d:/Zenkai/src/stores/useWorkoutStore.js) | Persisted active session (localStorage) | `activeSession`, `exercises[]`, `elapsedSeconds` |
+| [`useXPStore.js`](file:///d:/Zenkai/src/stores/useXPStore.js) | Gamification state — XP, level, streak | `totalXP`, `level`, `levelName`, `pendingXP`, `leveledUp` |
+| [`useUIStore.js`](file:///d:/Zenkai/src/stores/useUIStore.js) | Cross-cutting UI — toasts, modals | `toasts[]`, `activeModal`, `mobileTab` |
+| [`useAuthStore.js`](file:///d:/Zenkai/src/stores/useAuthStore.js) | Firebase Auth user + profile | `user`, `profile`, `loading` |
+| [`usePlanStore.js`](file:///d:/Zenkai/src/stores/usePlanStore.js) | Active training plan | `currentPlan`, `planDays[]` |
 
 ### Hooks
 
 | File | Purpose |
 |---|---|
-| [`useWorkoutLogger.js`](file:///d:/Fitdesi/src/hooks/useWorkoutLogger.js) | **Core session-save hook** — builds payload, writes atomic batch, handles retry/rollback |
-| [`useXPEngine.js`](file:///d:/Fitdesi/src/hooks/useXPEngine.js) | XP award engine — level interpolation, streak evaluation, Firestore writes |
-| [`usePRDetection.js`](file:///d:/Fitdesi/src/hooks/usePRDetection.js) | Per-set PR check using Epley 1RM vs Firestore cache |
-| [`useWorkout.js`](file:///d:/Fitdesi/src/hooks/useWorkout.js) | Session save/cancel orchestration (delegates to useXPEngine) |
-| [`useExerciseSearch.js`](file:///d:/Fitdesi/src/hooks/useExerciseSearch.js) | Client-side exercise filter — equipment gate, medical gate, debounced text search |
-| [`useWorkoutTimer.js`](file:///d:/Fitdesi/src/hooks/useWorkoutTimer.js) | Tick-based session timer |
-| [`useDeviceLayout.js`](file:///d:/Fitdesi/src/hooks/useDeviceLayout.js) | Detects `mobile` vs `desktop` (debounced resize) |
-| [`useAuth.js`](file:///d:/Fitdesi/src/hooks/useAuth.js) | Firebase Auth operations (login, signup, logout) |
+| [`useWorkoutLogger.js`](file:///d:/Zenkai/src/hooks/useWorkoutLogger.js) | **Core session-save hook** — builds payload, writes atomic batch, handles retry/rollback |
+| [`useXPEngine.js`](file:///d:/Zenkai/src/hooks/useXPEngine.js) | XP award engine — level interpolation, streak evaluation, Firestore writes |
+| [`usePRDetection.js`](file:///d:/Zenkai/src/hooks/usePRDetection.js) | Per-set PR check using Epley 1RM vs Firestore cache |
+| [`useWorkout.js`](file:///d:/Zenkai/src/hooks/useWorkout.js) | Session save/cancel orchestration (delegates to useXPEngine) |
+| [`useExerciseSearch.js`](file:///d:/Zenkai/src/hooks/useExerciseSearch.js) | Client-side exercise filter — equipment gate, medical gate, debounced text search |
+| [`useWorkoutTimer.js`](file:///d:/Zenkai/src/hooks/useWorkoutTimer.js) | Tick-based session timer |
+| [`useDeviceLayout.js`](file:///d:/Zenkai/src/hooks/useDeviceLayout.js) | Detects `mobile` vs `desktop` (debounced resize) |
+| [`useAuth.js`](file:///d:/Zenkai/src/hooks/useAuth.js) | Firebase Auth operations (login, signup, logout) |
 
 ### Components — Mobile
 
 | File | Purpose |
 |---|---|
-| [`MobileLogger.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileLogger.jsx) | Full workout logging screen — setup sheet, exercise list, end-session sheet |
-| [`MobileSessionComplete.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileSessionComplete.jsx) | Post-session summary — animated XP counter, level-up banner, PR chips, retry |
-| [`SetRow.jsx`](file:///d:/Fitdesi/src/components/shared/SetRow.jsx) | Atomic set row — weight ±2.5, reps ±1, BW toggle, Done button, PR badge |
-| [`ExerciseSearch.jsx`](file:///d:/Fitdesi/src/components/shared/ExerciseSearch.jsx) | Sticky search bar — uses `useExerciseSearch`, shows filtered dropdown |
-| [`BottomNav.jsx`](file:///d:/Fitdesi/src/components/mobile/BottomNav.jsx) | 5-tab mobile nav bar |
+| [`MobileLogger.jsx`](file:///d:/Zenkai/src/components/mobile/MobileLogger.jsx) | Full workout logging screen — setup sheet, exercise list, end-session sheet |
+| [`MobileSessionComplete.jsx`](file:///d:/Zenkai/src/components/mobile/MobileSessionComplete.jsx) | Post-session summary — animated XP counter, level-up banner, PR chips, retry |
+| [`SetRow.jsx`](file:///d:/Zenkai/src/components/shared/SetRow.jsx) | Atomic set row — weight ±2.5, reps ±1, BW toggle, Done button, PR badge |
+| [`ExerciseSearch.jsx`](file:///d:/Zenkai/src/components/shared/ExerciseSearch.jsx) | Sticky search bar — uses `useExerciseSearch`, shows filtered dropdown |
+| [`BottomNav.jsx`](file:///d:/Zenkai/src/components/mobile/BottomNav.jsx) | 5-tab mobile nav bar |
 
 ### Utilities
 
 | File | Purpose |
 |---|---|
-| [`firestoreUtils.js`](file:///d:/Fitdesi/src/lib/firestoreUtils.js) | Sanitised Firestore writes — `updatePR`, `addXPLog`, `writeSession`, `updateUserProfile` |
-| [`exercises.json`](file:///d:/Fitdesi/src/data/exercises.json) | Static exercise bank — 50+ exercises with equipmentRequired, medicallyRestricted, aliases |
+| [`firestoreUtils.js`](file:///d:/Zenkai/src/lib/firestoreUtils.js) | Sanitised Firestore writes — `updatePR`, `addXPLog`, `writeSession`, `updateUserProfile` |
+| [`exercises.json`](file:///d:/Zenkai/src/data/exercises.json) | Static exercise bank — 50+ exercises with equipmentRequired, medicallyRestricted, aliases |
 
 ### Tests
 
 | File | Tests | What it covers |
 |---|---|---|
-| [`MobileLogger.test.jsx`](file:///d:/Fitdesi/src/__tests__/MobileLogger.test.jsx) | 15 | Setup sheet, mood/stomach, crash recovery, add exercise, add-set, END guard, finish success/failure, retry × 3, save-locally, discard |
-| [`SetRow.test.jsx`](file:///d:/Fitdesi/src/__tests__/SetRow.test.jsx) | 20 | Render, ±weight/reps buttons, 0-floor clamp, done disabled/enabled, done=true checkmark style, PR badge, BW toggle, manual input, Enter key |
-| [`useExerciseSearch.test.js`](file:///d:/Fitdesi/src/__tests__/useExerciseSearch.test.js) | 13 | Equipment gate, medical gate, name match, alias match, empty query, 20-cap, debounce isSearching, rapid-change single-pass |
-| [`usePRDetection.test.jsx`](file:///d:/Fitdesi/src/__tests__/usePRDetection.test.jsx) | 5 | First PR, heavier is PR, lighter isn't, Firestore error fallback, session cache |
-| [`firestoreUtils.test.jsx`](file:///d:/Fitdesi/src/__tests__/firestoreUtils.test.jsx) | 8 | UID validation, whitelist filtering, HTML strip, negative weight/reps, XP source enum |
-| [`auth.test.jsx`](file:///d:/Fitdesi/src/__tests__/auth.test.jsx) | 13 | Login, signup, Google auth, validation |
-| [`onboarding.test.jsx`](file:///d:/Fitdesi/src/__tests__/onboarding.test.jsx) | 6 | Onboarding flow steps |
-| [`routing.test.jsx`](file:///d:/Fitdesi/src/__tests__/routing.test.jsx) | 5 | Route guards, redirects |
+| [`MobileLogger.test.jsx`](file:///d:/Zenkai/src/__tests__/MobileLogger.test.jsx) | 15 | Setup sheet, mood/stomach, crash recovery, add exercise, add-set, END guard, finish success/failure, retry × 3, save-locally, discard |
+| [`SetRow.test.jsx`](file:///d:/Zenkai/src/__tests__/SetRow.test.jsx) | 20 | Render, ±weight/reps buttons, 0-floor clamp, done disabled/enabled, done=true checkmark style, PR badge, BW toggle, manual input, Enter key |
+| [`useExerciseSearch.test.js`](file:///d:/Zenkai/src/__tests__/useExerciseSearch.test.js) | 13 | Equipment gate, medical gate, name match, alias match, empty query, 20-cap, debounce isSearching, rapid-change single-pass |
+| [`usePRDetection.test.jsx`](file:///d:/Zenkai/src/__tests__/usePRDetection.test.jsx) | 5 | First PR, heavier is PR, lighter isn't, Firestore error fallback, session cache |
+| [`firestoreUtils.test.jsx`](file:///d:/Zenkai/src/__tests__/firestoreUtils.test.jsx) | 8 | UID validation, whitelist filtering, HTML strip, negative weight/reps, XP source enum |
+| [`auth.test.jsx`](file:///d:/Zenkai/src/__tests__/auth.test.jsx) | 13 | Login, signup, Google auth, validation |
+| [`onboarding.test.jsx`](file:///d:/Zenkai/src/__tests__/onboarding.test.jsx) | 6 | Onboarding flow steps |
+| [`routing.test.jsx`](file:///d:/Zenkai/src/__tests__/routing.test.jsx) | 5 | Route guards, redirects |
 | **Total** | **84** | **Zero failures** |
 
 ---
@@ -304,7 +304,7 @@ users/{uid}/
 
 ### Recommendation: **Desktop = Analytics + Read-Only. Mobile = Logging.**
 
-Here's why this is the right call for FitDesi:
+Here's why this is the right call for Zenkai:
 
 #### Why keep logging on mobile only
 1. **Gym context**: Users log sets *while lifting* — phone in hand between sets. Desktop is for review, not real-time entry.
@@ -418,7 +418,7 @@ npm run preview
     * Reps Capsule (`w-[88px]`): `[-  reps  +]`
   - **Interactive Glow-on-Focus**: Added dynamic focus tracking to both capsules. When the weight input is focused/tapped, the entire capsule wrapper glows in **Burnt Orange** (`border-[var(--primary)] shadow-[0_0_8px_var(--primary-glow)]`). When the reps input is focused/tapped, the wrapper glows in **Electric Cyan** (`border-[var(--secondary)] shadow-[0_0_8px_var(--secondary-glow)]`). This provides rich, high-end visual feedback that ties directly into the brand's saffron/cyan theme.
   - **Neon PR Badge Glow**: Upgraded the PR badge to use a premium, neon-glowing outline and backing shadow (`text-[var(--accent-xp)] bg-[var(--accent-xp)]/10 border border-[var(--accent-xp)]/30 shadow-[0_0_8px_var(--accent-xp-glow)]`).
-  - **Solved PR Badge & Delete Button Overlap & Zig-zagging**: Shifted the delete/remove-set (`X`) button inside the [`SetRow.jsx`](file:///d:/Fitdesi/src/components/shared/SetRow.jsx) component as an optional `onDelete` prop. Designed a structured 4-column layout where the last column has fixed-width slots for the Done button (`w-8`), PR badge (`w-10`), and Delete button (`w-6`). If a PR badge or delete button is absent, they render empty spacers of the same width. This guarantees that **Done buttons, PR badges, and Delete buttons are always vertically aligned, never overlap, and never zig-zag**.
+  - **Solved PR Badge & Delete Button Overlap & Zig-zagging**: Shifted the delete/remove-set (`X`) button inside the [`SetRow.jsx`](file:///d:/Zenkai/src/components/shared/SetRow.jsx) component as an optional `onDelete` prop. Designed a structured 4-column layout where the last column has fixed-width slots for the Done button (`w-8`), PR badge (`w-10`), and Delete button (`w-6`). If a PR badge or delete button is absent, they render empty spacers of the same width. This guarantees that **Done buttons, PR badges, and Delete buttons are always vertically aligned, never overlap, and never zig-zag**.
   - **Cleaned Up Nested Boxes**: Removed the individual borders, backgrounds, and capsule shapes from every set row. They are now presented as a clean unified table list inside the card separated by a subtle border divider (`border-b border-[var(--border)]/20`), matching premium apps like Hevy or Strong.
   - Aligned column headers perfectly using matching flex layouts and spacers corresponding to the remove-set button.
   - Resized the Done button to `28px` (`w-7 h-7`) for a balanced, modern visual hierarchy.
@@ -427,13 +427,13 @@ npm run preview
 - **Problem**: Clicking "End Session" / "Finish Session" crashed with `FirebaseError: Missing or insufficient permissions` on the live Firebase project.
 - **Root Cause**: The security rules on the Firebase project matched up to 5-segment paths (e.g., `users/{uid}/sessions/{sessionId}`) but lacked rules for 6-segment nested paths (e.g. `users/{uid}/sessions/{sessionId}/exercises/{exerciseId}`), which failed the entire atomic `writeBatch`.
 - **Solution**:
-  - Created a comprehensive [`firestore.rules`](file:///d:/Fitdesi/firestore.rules) file in the root workspace.
+  - Created a comprehensive [`firestore.rules`](file:///d:/Zenkai/firestore.rules) file in the root workspace.
   - Added explicit, granular security rules for all required collections and subcollections:
     - `users/{uid}` and its subcollections: `sessions`, `exercises`, `prs`, `xpLog`, and `challengeProgress` (owner read/write).
     - `users/{uid}/weeklyPlans` (owner read, write false - Cloud Function only).
     - `challenges/{challengeId}` (participant read, creator/participant update).
     - `rateLimits/{docId}` (write/read false - Cloud Function only).
-  - **Programmatic Rules Deployment (No Firebase CLI required)**: Developed a deployment script [`deployRules.cjs`](file:///d:/Fitdesi/scripts/deployRules.cjs) that parses the local rules file and publishes it directly to the live Firebase console via the Admin SDK using the local `serviceAccountKey.json`. This eliminates the need for a global Firebase CLI or credentials login.
+  - **Programmatic Rules Deployment (No Firebase CLI required)**: Developed a deployment script [`deployRules.cjs`](file:///d:/Zenkai/scripts/deployRules.cjs) that parses the local rules file and publishes it directly to the live Firebase console via the Admin SDK using the local `serviceAccountKey.json`. This eliminates the need for a global Firebase CLI or credentials login.
   - **Solved Client AdBlocker Blockages**: Documented that browsers running adblockers (like uBlock Origin, Brave Shields) can block outgoing Firestore listen sockets with `net::ERR_BLOCKED_BY_CLIENT`. Deactivating shields on `localhost` resolves the blockage immediately.
 
 ### 3. Hook Order Stability & State Mismatch Fixes

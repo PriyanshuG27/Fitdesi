@@ -4,7 +4,7 @@ import { db } from '../../lib/firebase';
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, limit, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSquadStore } from '../../stores/useSquadStore';
-import { callFitDesiAPI } from '../../lib/apiClient';
+import { callZenkaiAPI } from '../../lib/apiClient';
 import { requestNotificationPermission, sendBrowserNotification } from '../../utils/notificationHelper';
 import { LineChart, Line, XAxis as ReXAxis, YAxis as ReYAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,7 +28,7 @@ export const SquadMatchmaker = () => {
   const [presenceList, setPresenceList] = useState([]);
   const [pollsList, setPollsList] = useState([]);
   const [notificationsMuted, setNotificationsMuted] = useState(
-    localStorage.getItem('fitdesi_mute_squad_notifications') === 'true'
+    localStorage.getItem('zenkai_mute_squad_notifications') === 'true'
   );
   const [generatingChallenge, setGeneratingChallenge] = useState(false);
   const [checkInTime, setCheckInTime] = useState('18:00');
@@ -69,7 +69,7 @@ export const SquadMatchmaker = () => {
         
         if (!code) {
           // Generate new squad code: FIT- + clean first 4 chars of name + 3 random digits
-          const cleanName = (profile.name || 'FitDesi').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+          const cleanName = (profile.name || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
           const padName = cleanName.padEnd(4, 'X');
           const randomDigits = Math.floor(100 + Math.random() * 900); // 3 digits
           code = `FIT-${padName}${randomDigits}`;
@@ -551,7 +551,7 @@ export const SquadMatchmaker = () => {
     if (!activeSquad) return;
     setGeneratingChallenge(true);
     try {
-      const res = await callFitDesiAPI('generateSquadChallenge', {
+      const res = await callZenkaiAPI('generateSquadChallenge', {
         squadCode: activeSquad.squadCode
       });
       if (res.data && res.data.success) {
@@ -588,7 +588,7 @@ export const SquadMatchmaker = () => {
 
       if (nextVotes.length >= requiredVotes) {
         setGeneratingChallenge(true);
-        const res = await callFitDesiAPI('generateSquadChallenge', {
+        const res = await callZenkaiAPI('generateSquadChallenge', {
           squadCode: activeSquad.squadCode,
           isRegen: true
         });
@@ -840,7 +840,7 @@ export const SquadMatchmaker = () => {
             onClick={() => {
               const next = !notificationsMuted;
               setNotificationsMuted(next);
-              localStorage.setItem('fitdesi_mute_squad_notifications', next ? 'true' : 'false');
+              localStorage.setItem('zenkai_mute_squad_notifications', next ? 'true' : 'false');
             }}
             className="flex items-center gap-1.5 border border-[#222] hover:border-[var(--primary)] bg-black/40 px-3 py-1.5 rounded-xl text-xs font-mono text-white transition-all cursor-pointer"
             title={notificationsMuted ? "Unmute Notifications" : "Mute Notifications"}
@@ -1515,7 +1515,7 @@ export const SquadMatchmaker = () => {
                       <button
                         onClick={() => {
                           const names = inactiveMembers.map(m => m.name.replace(' (You)', '')).join(' and ');
-                          const msg = `Yo ${names}! You've been MIA from our FitDesi gym squad. Our XP multiplier is about to decay! Go log your workout right now. - FitDesi Squad ⚡`;
+                          const msg = `Yo ${names}! You've been MIA from our Zenkai gym squad. Our XP multiplier is about to decay! Go log your workout right now. - Zenkai Squad ⚡`;
                           navigator.clipboard.writeText(msg);
                           setSuccessMsg('Nudge copied! Send it via WhatsApp/Slack.');
                           setTimeout(() => setSuccessMsg(''), 4000);

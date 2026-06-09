@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright E2E configuration for FitDesi
+ * Playwright E2E configuration for Zenkai
  *
  * Strategy:
  *  - Chromium only (sufficient for CI, covers Chrome + Edge + modern Android webview)

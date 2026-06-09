@@ -1,4 +1,4 @@
-# FitDesi — Backend Schema
+# Zenkai — Backend Schema
 
 **Version:** 1.0  
 **Date:** June 2026  

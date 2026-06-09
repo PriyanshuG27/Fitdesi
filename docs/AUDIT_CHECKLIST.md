@@ -1,4 +1,4 @@
-# FitDesi — Production Audit Checklist
+# Zenkai — Production Audit Checklist
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -87,7 +87,7 @@
 - [ ] Everything else uses `getDocs` (one-time read)
 
 ### C4. Lighthouse Targets
-Run: `npx lighthouse https://fitdesi.vercel.app --view`
+Run: `npx lighthouse https://zenkai.vercel.app --view`
 - [ ] Performance: ≥ 85
 - [ ] Accessibility: ≥ 90
 - [ ] Best Practices: ≥ 95

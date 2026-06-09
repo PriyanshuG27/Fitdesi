@@ -1,4 +1,4 @@
-# FitDesi — Error Handling Document
+# Zenkai — Error Handling Document
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -7,7 +7,7 @@
 
 ## 1. Error Taxonomy
 
-Every error in FitDesi falls into one of five buckets:
+Every error in Zenkai falls into one of five buckets:
 
 | Bucket | Source | Recovery |
 |---|---|---|
@@ -71,7 +71,7 @@ export const USER_MESSAGES = {
   [ERROR_CODES.AUTH_TOKEN_EXPIRED]:      'Your session expired. Logging you back in…',
 
   [ERROR_CODES.FS_PERMISSION_DENIED]:    'Access denied. Try logging out and back in.',
-  [ERROR_CODES.FS_UNAVAILABLE]:          'FitDesi is having trouble connecting. Check your internet.',
+  [ERROR_CODES.FS_UNAVAILABLE]:          'Zenkai is having trouble connecting. Check your internet.',
   [ERROR_CODES.FS_WRITE_FAILED]:         "Couldn't save your session. Tap retry to try again.",
 
   [ERROR_CODES.CF_RATE_LIMITED]:         "You've generated 3 plans today. Come back tomorrow for a new one.",

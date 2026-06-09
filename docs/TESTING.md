@@ -1,4 +1,4 @@
-# FitDesi — Testing Document
+# Zenkai — Testing Document
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -152,7 +152,7 @@ export let testEnv;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: 'fitdesi-test',
+    projectId: 'zenkai-test',
     firestore: {
       rules: readFileSync('firestore.rules', 'utf8'),
       host: 'localhost',
@@ -412,7 +412,7 @@ test.describe('Core workout loop', () => {
   test.beforeEach(async ({ page }) => {
     // Use test account (seeded in emulator or staging env)
     await page.goto('/login');
-    await page.fill('[data-testid="email"]', 'test@fitdesi.app');
+    await page.fill('[data-testid="email"]', 'test@zenkai.app');
     await page.fill('[data-testid="password"]', 'testpassword123');
     await page.click('[data-testid="login-btn"]');
     await expect(page).toHaveURL('/home');
@@ -536,7 +536,7 @@ jobs:
           npx playwright test
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_PROJECT_ID: fitdesi-test
+          VITE_FIREBASE_PROJECT_ID: zenkai-test
           # ... other test env vars
 
       - name: Upload coverage report

@@ -14,7 +14,7 @@ export const PosterStudio = () => {
     if (!stageRef.current) return;
     const dataUrl = stageRef.current.toDataURL({ pixelRatio: 2 });
     const link = document.createElement('a');
-    link.download = `fitdesi_milestone_${template}.png`;
+    link.download = `zenkai_milestone_${template}.png`;
     link.href = dataUrl;
     document.body.appendChild(link);
     link.click();
@@ -200,7 +200,7 @@ export const PosterStudio = () => {
 
                   {/* Footer Branding */}
                   <Text
-                    text="FITDESI ⚡ COMEBACK PROJECT"
+                    text="ZENKAI ⚡ COMEBACK PROJECT"
                     fontSize={10}
                     fontFamily="Courier New, monospace"
                     fill="#444"

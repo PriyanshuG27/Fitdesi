@@ -105,7 +105,7 @@ export const LandingPage = () => {
 
       {/* Footer */}
       <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 py-8 flex flex-col md:flex-row justify-between items-center border-t border-border-base/40 text-xs text-text-muted gap-4">
-        <span>© {new Date().getFullYear()} FitDesi. Built for Indian strength and endurance.</span>
+        <span>© {new Date().getFullYear()} Zenkai. Built for Indian strength and endurance.</span>
         <div className="flex gap-6">
           <span className="hover:text-text-secondary transition duration-150 cursor-pointer">Privacy Policy</span>
           <span className="hover:text-text-secondary transition duration-150 cursor-pointer">Terms of Service</span>

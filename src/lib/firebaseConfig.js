@@ -14,7 +14,7 @@ const required = [
 required.forEach((key) => {
   if (!import.meta.env[key]) {
     throw new Error(
-      `[FitDesi] Missing required environment variable: ${key}\n` +
+      `[Zenkai] Missing required environment variable: ${key}\n` +
         `Copy .env.example to .env and fill in your Firebase credentials.`
     );
   }

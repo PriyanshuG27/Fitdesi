@@ -127,7 +127,7 @@ export const DesktopProfile = () => {
   };
 
   const nameInitial = profile?.name ? profile.name.charAt(0).toUpperCase() : 'F';
-  const email = profile?.email || auth.currentUser?.email || 'trainer@fitdesi.com';
+  const email = profile?.email || auth.currentUser?.email || 'trainer@zenkai.com';
 
   return (
     <div className="w-full max-w-[1440px] mx-auto flex flex-col gap-8 text-[var(--text-primary)] min-h-[85vh] font-sans select-none">
@@ -168,7 +168,7 @@ export const DesktopProfile = () => {
               
               <div className="flex flex-col min-w-0">
                 <h2 className="font-display text-2xl font-black uppercase tracking-wide text-white leading-tight">
-                  {profile?.name || 'FITDESI TRAINER'}
+                  {profile?.name || 'ZENKAI TRAINER'}
                 </h2>
                 <span className="text-sm font-mono text-[var(--text-secondary)] mt-0.5 truncate">
                   {email}

@@ -24,10 +24,10 @@ import { test, expect } from '@playwright/test';
 
 /** Unique email per test run so emulator state collisions don't happen */
 const uniqueEmail = (label: string) =>
-  `e2e-${label}-${Date.now()}@fitdesi.test`;
+  `e2e-${label}-${Date.now()}@zenkai.test`;
 
-/** Password satisfying FitDesi validation: min 8 chars + 1 number */
-const TEST_PASSWORD = 'Fitdesi1!';
+/** Password satisfying Zenkai validation: min 8 chars + 1 number */
+const TEST_PASSWORD = 'Zenkai1!';
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ test.describe('Auth journeys', () => {
 
     // ── Navigate to /login ────────────────────────────────────────────────
     await page.goto('/login');
-    await expect(page.getByRole('link', { name: /fitdesi/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /zenkai/i })).toBeVisible();
 
     // ── Fill login form ───────────────────────────────────────────────────
     await page.fill('#email', email);

@@ -125,7 +125,7 @@ export const MobileProfile = () => {
   };
 
   const nameInitial = profile?.name ? profile.name.charAt(0).toUpperCase() : 'F';
-  const email = profile?.email || auth.currentUser?.email || 'trainer@fitdesi.com';
+  const email = profile?.email || auth.currentUser?.email || 'trainer@zenkai.com';
 
   return (
     <div className="flex flex-col gap-6 p-4 min-h-[100dvh] bg-[var(--bg-base)] text-[var(--text-primary)] pb-28">
@@ -148,7 +148,7 @@ export const MobileProfile = () => {
         
         <div className="flex flex-col min-w-0">
           <h2 className="font-display text-xl font-bold uppercase tracking-wide truncate text-[var(--text-primary)]">
-            {profile?.name || 'FITDESI TRAINER'}
+            {profile?.name || 'ZENKAI TRAINER'}
           </h2>
           <span className="text-xs text-[var(--text-secondary)] font-mono truncate">
             {email}
@@ -284,7 +284,7 @@ export const MobileProfile = () => {
                 Sign Out
               </span>
               <span className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5">
-                Log out of your FitDesi session
+                Log out of your Zenkai session
               </span>
             </div>
           </div>
@@ -588,7 +588,7 @@ export const MobileProfile = () => {
         <Info size={18} className="text-[var(--text-secondary)] shrink-0 mt-0.5" />
         <div className="flex flex-col">
           <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">
-            FitDesi Mobile v1.0.0
+            Zenkai Mobile v1.0.0
           </span>
           <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-relaxed mt-0.5">
             Designed for Indian athletes. Standard Neubrutalist Telemetry Shell. Offline synchronization enabled via local caching.

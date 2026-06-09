@@ -31,14 +31,14 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('Failed to generate image blob');
 
-      const filename = `fitdesi-recap-week-${weekNumber}.png`;
+      const filename = `zenkai-recap-week-${weekNumber}.png`;
       const file = new File([blob], filename, { type: 'image/png' });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'My FitDesi Week',
-          text: `Check out my FitDesi weekly recap for Week ${weekNumber}! ⚡`,
+          title: 'My Zenkai Week',
+          text: `Check out my Zenkai weekly recap for Week ${weekNumber}! ⚡`,
         });
       } else {
         // Desktop fallback: download the image
@@ -227,7 +227,7 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
           </div>
           <div className="flex flex-col items-end">
             <span className="text-xl font-extrabold text-[#FF5C00] tracking-wide" style={{ fontFamily: 'Barlow Condensed' }}>
-              FITDESI
+              ZENKAI
             </span>
             <span className="text-[7px] font-mono text-[#888888] tracking-widest mt-0.5">
               TRAIN SMARTER

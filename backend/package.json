@@ -1,7 +1,7 @@
 {
-  "name": "fitdesi-backend",
+  "name": "zenkai-backend",
   "version": "1.0.0",
-  "description": "Production AI Engine for FitDesi Framework",
+  "description": "Production AI Engine for Zenkai Framework",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

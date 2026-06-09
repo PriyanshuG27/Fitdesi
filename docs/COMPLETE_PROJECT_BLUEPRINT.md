@@ -1,15 +1,15 @@
-# FitDesi — Ultimate End-to-End System Blueprint & Technical Manual
+# Zenkai — Ultimate End-to-End System Blueprint & Technical Manual
 
-This blueprint serves as the comprehensive, developer-level documentation for the entire FitDesi codebase. It details every store, hook, component, and database model, along with their exact state variables, methods, parameters, and algorithms.
+This blueprint serves as the comprehensive, developer-level documentation for the entire Zenkai codebase. It details every store, hook, component, and database model, along with their exact state variables, methods, parameters, and algorithms.
 
 ---
 
 ## 📂 Section 1: Architectural Overview & Project Layout
 
-FitDesi consists of a unified React client and a companion Node.js Express backend. The application codebase is organized into modular directories under `src/`:
+Zenkai consists of a unified React client and a companion Node.js Express backend. The application codebase is organized into modular directories under `src/`:
 
 ```
-d:\Fitdesi\src\
+d:\Zenkai\src\
 ├── App.jsx                   # Central routing gateway (eager/lazy loader)
 ├── main.jsx                  # Application entry point
 ├── index.css                 # Base Neubrutalist stylesheet & design tokens
@@ -29,7 +29,7 @@ d:\Fitdesi\src\
 
 ## 💾 Section 2: Global State Management (Zustand Stores)
 
-State in FitDesi is managed using decentralized Zustand stores located in `src/stores/`. This ensures fast, boilerplate-free state updates across highly interactive views.
+State in Zenkai is managed using decentralized Zustand stores located in `src/stores/`. This ensures fast, boilerplate-free state updates across highly interactive views.
 
 ### 1. Authentication Store (`authStore.js` / `useAuthStore.js`)
 * **Purpose**: Manages current user state, auth token caches, and user profile data retrieved from `/users/{uid}`.

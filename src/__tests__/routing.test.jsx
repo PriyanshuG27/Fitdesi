@@ -1,6 +1,6 @@
 /**
  * routing.test.jsx
- * Behaviour tests for FitDesi route guard integration.
+ * Behaviour tests for Zenkai route guard integration.
  *
  * Tests verify:
  * - Unauthenticated users are redirected away from protected routes
@@ -70,7 +70,7 @@ describe('Routing — Authenticated redirects', () => {
 
   it('authenticated user visiting /login gets redirected to /home', () => {
     useAuthStore.setState({
-      user: { uid: 'auth-user-1', email: 'user@fitdesi.com' },
+      user: { uid: 'auth-user-1', email: 'user@zenkai.com' },
       loading: false,
     });
 

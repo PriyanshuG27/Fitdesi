@@ -1,11 +1,11 @@
 <div align="center">
   <!-- 🔥 Animated Typing Headline 🔥 -->
-  <a href="https://github.com/PriyanshuG27/Fitdesi">
-    <img src="https://readme-typing-svg.herokuapp.com?font=Barlow+Condensed&weight=900&size=65&pause=1000&color=FF5C00&center=true&vCenter=true&width=800&lines=FITDESI+⚡;TRAIN+SMARTER.+🧠;COME+BACK+STRONGER.+🏋️;POWERED+BY+GEMINI+3+🚀" alt="Typing SVG" />
+  <a href="https://github.com/PriyanshuG27/Zenkai">
+    <img src="https://readme-typing-svg.herokuapp.com?font=Barlow+Condensed&weight=900&size=65&pause=1000&color=FF5C00&center=true&vCenter=true&width=800&lines=ZENKAI+⚡;TRAIN+SMARTER.+🧠;COME+BACK+STRONGER.+🏋️;POWERED+BY+GEMINI+3+🚀" alt="Typing SVG" />
   </a>
 
   <!-- Animated Neubrutalism App Mockup Banner -->
-  <img src="public/fitdesi_banner_v5.svg?v=9" alt="FitDesi Banner" width="100%" />
+  <img src="public/zenkai_banner_v5.svg?v=9" alt="Zenkai Banner" width="100%" />
 
   <br /><br />
 
@@ -15,7 +15,7 @@
   <h3>⚡ Premium Dark Athletic Gym Tracker & Recovery Platform ⚡</h3>
   
   <p>
-    FitDesi is a dark athletic fitness tracking web app designed to solve the core failure modes of Indian gym culture: inconsistent attendance, lack of tracking, and difficult comeback phases after breaks.
+    Zenkai is a dark athletic fitness tracking web app designed to solve the core failure modes of Indian gym culture: inconsistent attendance, lack of tracking, and difficult comeback phases after breaks.
   </p>
 
   <!-- 🛡️ Cool Tech Badges -->
@@ -54,7 +54,7 @@
 
 ## <img src="https://readme-typing-svg.herokuapp.com?font=Outfit&weight=800&size=28&color=FF5C00&vCenter=true&width=500&lines=🎨+The+Design+System" alt="Design System" />
 
-FitDesi uses a custom **Neubrutalism + Dark OLED** style designed to look premium, energetic, and highly tactile. Interactive elements look *liftable*, matching the physical gym environment.
+Zenkai uses a custom **Neubrutalism + Dark OLED** style designed to look premium, energetic, and highly tactile. Interactive elements look *liftable*, matching the physical gym environment.
 
 <details>
 <summary><b>🎨 View Color Token Registry (CSS Variables)</b></summary>
@@ -164,7 +164,7 @@ graph TD
 <summary><b>📂 View Complete Directory Map</b></summary>
 
 ```
-Fitdesi/
+Zenkai/
 ├── .env.example              # Template for frontend environment variables
 ├── .gitignore                # Production ignore patterns for keys & node_modules
 ├── eslint.config.js          # Code linting settings
@@ -240,9 +240,9 @@ Fitdesi/
 Create a `.env` file in the project root:
 ```bash
 VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=fitdesi-app.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=fitdesi-app
-VITE_FIREBASE_STORAGE_BUCKET=fitdesi-app.appspot.com
+VITE_FIREBASE_AUTH_DOMAIN=zenkai-app.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=zenkai-app
+VITE_FIREBASE_STORAGE_BUCKET=zenkai-app.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 ```
@@ -265,14 +265,14 @@ firebase functions:config:set gemini.key="YOUR_GEMINI_API_KEY"
 
 ## <img src="https://readme-typing-svg.herokuapp.com?font=Outfit&weight=800&size=28&color=FF5C00&vCenter=true&width=500&lines=🛠️+Local+Development" alt="Local Development Setup" />
 
-Follow these steps to run the FitDesi application locally:
+Follow these steps to run the Zenkai application locally:
 
 ### 1. Installation
 Install the project dependencies for the client and backend functions:
 ```bash
 # Clone the repository
-git clone https://github.com/PriyanshuG27/Fitdesi.git
-cd Fitdesi
+git clone https://github.com/PriyanshuG27/Zenkai.git
+cd Zenkai
 
 # Install client packages
 npm install
@@ -351,6 +351,6 @@ For detailed reviews of technical requirements, audits, and performance targets:
 
 <div align="center">
   <p style="color: #666; font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 2px;">
-    BUILT FOR THE COMEBACK. BUILT FOR FITDESI.
+    BUILT FOR THE COMEBACK. BUILT FOR ZENKAI.
   </p>
 </div>

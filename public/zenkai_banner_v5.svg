@@ -250,7 +250,7 @@
     
     <!-- Screen Content (Header) -->
     <g transform="translate(15, 28)">
-      <text x="0" y="15" class="font-display" font-weight="900" font-size="16" fill="#FF5C00" letter-spacing="1">FD <tspan fill="#F0F0F0">FITDESI</tspan></text>
+      <text x="0" y="15" class="font-display" font-weight="900" font-size="16" fill="#FF5C00" letter-spacing="1">FD <tspan fill="#F0F0F0">ZENKAI</tspan></text>
       
       <!-- Small Streak Pill -->
       <rect x="142" y="0" width="52" height="20" rx="10" fill="#1A1A1A" stroke="#FF5C00" stroke-width="1" />

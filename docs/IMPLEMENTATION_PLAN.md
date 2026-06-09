@@ -1,4 +1,4 @@
-# FitDesi — Implementation Plan
+# Zenkai — Implementation Plan
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -23,8 +23,8 @@
 
 ### Scaffold Commands
 ```bash
-npm create vite@latest fitdesi -- --template react
-cd fitdesi
+npm create vite@latest zenkai -- --template react
+cd zenkai
 npm install
 
 # Core dependencies
@@ -278,7 +278,7 @@ cd functions && npm install @google/generative-ai firebase-admin firebase-functi
 - [ ] Mobile test: physical Android device (Chrome)
 - [ ] Desktop test: Chrome + Firefox + Safari
 - [ ] Vercel production deploy
-- [ ] Custom domain (optional: fitdesi.vercel.app or custom)
+- [ ] Custom domain (optional: zenkai.vercel.app or custom)
 - [ ] README.md with setup instructions + live URL
 
 **Phase 4 Definition of Done:**

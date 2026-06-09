@@ -252,7 +252,7 @@ export const useWorkoutStore = create(
         }),
     }),
     {
-      name: 'fitdesi-workout-session',
+      name: 'zenkai-workout-session',
       partialize: (state) => ({
         activeSession:  state.activeSession,
         exercises:      state.exercises,

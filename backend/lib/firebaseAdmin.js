@@ -12,7 +12,7 @@ if (isEmulator) {
   
   if (!admin.apps.length) {
     admin.initializeApp({ 
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'fitdesi-74283' 
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'zenkai-74283' 
     });
   }
 } else {

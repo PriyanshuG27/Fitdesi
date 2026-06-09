@@ -144,7 +144,7 @@ export const CommandPalette = () => {
         <div className="border-b-4 border-black bg-[#1a1a1a] px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 font-mono text-xs text-[var(--secondary)] uppercase font-black">
             <Terminal size={16} />
-            <span>FitDesi Core Command Palette</span>
+            <span>Zenkai Core Command Palette</span>
           </div>
           <button 
             onClick={() => setIsOpen(false)} 

@@ -2,14 +2,14 @@ import { auth } from './firebase';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV 
   ? 'http://localhost:10000' 
-  : 'https://fitdesi-engine.onrender.com');
+  : 'https://zenkai-engine.onrender.com');
 
 /**
  * Dispatches a POST query to the Render compute nodes with dynamic auth token injection.
  * Integrates directly with existing view components.
  * Returns response wrapped in { data } to match Firebase httpsCallable signature.
  */
-export const callFitDesiAPI = async (endpointName, payload = {}, timeoutMs = 30000) => {
+export const callZenkaiAPI = async (endpointName, payload = {}, timeoutMs = 30000) => {
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("Operation blocked: Missing authenticated profile context.");
 

@@ -345,7 +345,7 @@ export const MobileProgress = () => {
       });
 
       const weightText = pr.weight === 'BW' ? 'BW' : `${pr.weight} kg`;
-      const text = `🏋️ New PR hit on FitDesi! ${exName}: ${weightText} for ${pr.reps} reps${pr.weight !== 'BW' ? ` (Estimated 1RM: ${est1RM} kg)` : ''}! Global Rank: ${stats.percentile} (${stats.tier} Tier) 🔥💪`;
+      const text = `🏋️ New PR hit on Zenkai! ${exName}: ${weightText} for ${pr.reps} reps${pr.weight !== 'BW' ? ` (Estimated 1RM: ${est1RM} kg)` : ''}! Global Rank: ${stats.percentile} (${stats.tier} Tier) 🔥💪`;
 
 
 

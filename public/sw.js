@@ -1,11 +1,11 @@
-const CACHE_NAME = 'fitdesi-cache-v1';
+const CACHE_NAME = 'zenkai-cache-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/favicon.svg',
   '/icons.svg',
   '/neon_divider.svg',
-  '/fitdesi_banner_v5.svg',
+  '/zenkai_banner_v5.svg',
   '/gemini_badge_v3.svg',
 ];
 

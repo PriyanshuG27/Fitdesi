@@ -7,7 +7,7 @@ export const DesktopPlan = () => {
         Desktop Plan
       </h1>
       <p className="text-[var(--text-secondary)] font-sans text-base mt-3 tracking-wider max-w-md">
-        FITDESI Desktop Plan & Weekly Schedule Shell
+        ZENKAI Desktop Plan & Weekly Schedule Shell
       </p>
     </div>
   );

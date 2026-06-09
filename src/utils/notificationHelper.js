@@ -22,7 +22,7 @@ export const sendBrowserNotification = (title, body) => {
   if (typeof window === 'undefined') return;
 
   // Check if system notifications are muted in local storage
-  const isMuted = localStorage.getItem('fitdesi_mute_squad_notifications') === 'true';
+  const isMuted = localStorage.getItem('zenkai_mute_squad_notifications') === 'true';
   if (isMuted) return;
 
   if ('Notification' in window && Notification.permission === 'granted') {

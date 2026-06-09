@@ -8,7 +8,7 @@
 import { useEffect, useCallback } from 'react';
 import { doc, getDoc }            from 'firebase/firestore';
 import { db }                     from '../lib/firebase';
-import { callFitDesiAPI }         from '../lib/apiClient';
+import { callZenkaiAPI }         from '../lib/apiClient';
 import { useAuthStore }           from '../stores/useAuthStore';
 import { usePlanStore }           from '../stores/usePlanStore';
 import { useUIStore }             from '../stores/useUIStore';
@@ -59,7 +59,7 @@ export function useWeeklyPlan() {
       if (personalRequirements && typeof personalRequirements === 'string' && personalRequirements.trim() !== '') {
         payload.personalRequirements = personalRequirements;
       }
-      const res = await callFitDesiAPI('generatePlan', payload, 70000);
+      const res = await callZenkaiAPI('generatePlan', payload, 70000);
       
       // Upon successful generation, fetch the newly generated plan from Firestore.
       if (res.data?.success) {

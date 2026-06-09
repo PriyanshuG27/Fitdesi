@@ -1,4 +1,4 @@
-# FitDesi — Full Session Walkthrough & Audit (Phase 3 & 4)
+# Zenkai — Full Session Walkthrough & Audit (Phase 3 & 4)
 
 > **Status**: **Phase Complete.** AI Plan Generation, Progress Tracking, UI Enhancements, and PWA logic have been successfully built and verified.
 
@@ -34,4 +34,4 @@ During local development on a mobile device via a local Wi-Fi IP address (e.g., 
 2. **Google Sign-In Fails**: Firebase OAuth redirects require a secure origin. While `localhost` is whitelisted for development, accessing the app via a local network IP will cause the OAuth popup to crash or be blocked.
 
 ### The Fix
-These are not code bugs—they are standard web security enforcements. Once the application is deployed to a production host (like Vercel or Firebase Hosting) which automatically provides an SSL certificate (`https://`), both Google Sign-in and the "Install FitDesi" native prompts will function perfectly on your mobile device.
+These are not code bugs—they are standard web security enforcements. Once the application is deployed to a production host (like Vercel or Firebase Hosting) which automatically provides an SSL certificate (`https://`), both Google Sign-in and the "Install Zenkai" native prompts will function perfectly on your mobile device.

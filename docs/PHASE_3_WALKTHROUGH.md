@@ -1,4 +1,4 @@
-# FitDesi — Phase 3 Walkthrough: AI Generation & Progress Tracking
+# Zenkai — Phase 3 Walkthrough: AI Generation & Progress Tracking
 
 > **Status**: AI Plan Generation (Cloud Functions) and Progress Data Layer built and passing all unit tests (123 Frontend + 7 Backend) as of 2026-06-06.
 
@@ -10,24 +10,24 @@
 
 | File | Purpose | Security & Logic |
 |---|---|---|
-| [`generatePlan.js`](file:///d:/Fitdesi/functions/src/generatePlan.js) | Core Gemini AI orchestration | Passes `AbortController` signal for strict 15s timeout; strips markdown code fences; parses exact JSON schema. |
-| [`rateLimiter.js`](file:///d:/Fitdesi/functions/src/rateLimiter.js) | Enforces quota limitations | Uses Firestore transactions to guarantee max 5 calls/hour per UID. |
-| [`validators.js`](file:///d:/Fitdesi/functions/src/validators.js) | Input & Output validation | Validates raw JSON output from Gemini strictly against structural requirements (7 days, nested exercises). |
-| [`index.js`](file:///d:/Fitdesi/functions/src/index.js) | Serverless Entrypoint | Lightweight facade exporting `generatePlan` via `onCall` (asia-south2). |
+| [`generatePlan.js`](file:///d:/Zenkai/functions/src/generatePlan.js) | Core Gemini AI orchestration | Passes `AbortController` signal for strict 15s timeout; strips markdown code fences; parses exact JSON schema. |
+| [`rateLimiter.js`](file:///d:/Zenkai/functions/src/rateLimiter.js) | Enforces quota limitations | Uses Firestore transactions to guarantee max 5 calls/hour per UID. |
+| [`validators.js`](file:///d:/Zenkai/functions/src/validators.js) | Input & Output validation | Validates raw JSON output from Gemini strictly against structural requirements (7 days, nested exercises). |
+| [`index.js`](file:///d:/Zenkai/functions/src/index.js) | Serverless Entrypoint | Lightweight facade exporting `generatePlan` via `onCall` (asia-south2). |
 
 ### Frontend Hooks (`src/hooks/`)
 
 | File | Purpose | Key Behaviors |
 |---|---|---|
-| [`useWeeklyPlan.js`](file:///d:/Fitdesi/src/hooks/useWeeklyPlan.js) | Plan Fetching & Generation | Orchestrates Cloud Function trigger. Hydrates the global `usePlanStore.js` (no local state hoarding). |
-| [`useProgress.js`](file:///d:/Fitdesi/src/hooks/useProgress.js) | Dashboard Data Layer | Exports `useStrengthData`, `useVolumeData`, and `usePRList` for the charts. Handles data aggregation safely with `AbortController` on unmount. |
+| [`useWeeklyPlan.js`](file:///d:/Zenkai/src/hooks/useWeeklyPlan.js) | Plan Fetching & Generation | Orchestrates Cloud Function trigger. Hydrates the global `usePlanStore.js` (no local state hoarding). |
+| [`useProgress.js`](file:///d:/Zenkai/src/hooks/useProgress.js) | Dashboard Data Layer | Exports `useStrengthData`, `useVolumeData`, and `usePRList` for the charts. Handles data aggregation safely with `AbortController` on unmount. |
 
 ### Test Suites
 
 | File | Framework | Tests | What it covers |
 |---|---|---|---|
-| [`generatePlan.test.js`](file:///d:/Fitdesi/functions/src/__tests__/generatePlan.test.js) | Jest (Node) | 7 | Auth walls, rate limits, JSON parsing failure safety, schema validation bypasses, 15-second Promise race timeouts. Achieves >70% statement coverage. |
-| [`progress.test.js`](file:///d:/Fitdesi/src/__tests__/progress.test.js) | Vitest | 6 | Ensures `useStrengthData` sorts oldest-first (Ascending), `useVolumeData` correctly fills gap weeks with `0` volume instead of `undefined`, unmount cleanup, and `usePRList` descending sort. |
+| [`generatePlan.test.js`](file:///d:/Zenkai/functions/src/__tests__/generatePlan.test.js) | Jest (Node) | 7 | Auth walls, rate limits, JSON parsing failure safety, schema validation bypasses, 15-second Promise race timeouts. Achieves >70% statement coverage. |
+| [`progress.test.js`](file:///d:/Zenkai/src/__tests__/progress.test.js) | Vitest | 6 | Ensures `useStrengthData` sorts oldest-first (Ascending), `useVolumeData` correctly fills gap weeks with `0` volume instead of `undefined`, unmount cleanup, and `usePRList` descending sort. |
 
 ---
 

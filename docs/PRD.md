@@ -1,4 +1,4 @@
-# FitDesi — Product Requirements Document (PRD)
+# Zenkai — Product Requirements Document (PRD)
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-FitDesi is a dark athletic fitness tracking web app targeting Indian gym users aged 18–25. It solves the specific failure mode of Indian gym culture: inconsistent attendance, no tracking, and no comeback structure after breaks. The app is equipment-aware, medically gated, comeback-first, and uses XP + challenge mechanics to drive retention.
+Zenkai is a dark athletic fitness tracking web app targeting Indian gym users aged 18–25. It solves the specific failure mode of Indian gym culture: inconsistent attendance, no tracking, and no comeback structure after breaks. The app is equipment-aware, medically gated, comeback-first, and uses XP + challenge mechanics to drive retention.
 
 Web-first build (React + Vite). Android port planned for next semester. Deployed on Vercel.
 
@@ -21,7 +21,7 @@ Indian gym users in the 18–25 bracket share a specific pattern:
 - Return with no baseline, overdo it on day one, quit again.
 - Existing apps (MyFitnessPal, Strong) are built for Western gym contexts with full equipment availability. Indian mid-tier gyms don't have half the listed exercises.
 - No app treats the "comeback" as a first-class user journey.
-- Gamification in fitness apps is typically cosmetic. FitDesi wires XP directly to logged behavior.
+- Gamification in fitness apps is typically cosmetic. Zenkai wires XP directly to logged behavior.
 
 ---
 

@@ -21,7 +21,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { callFitDesiAPI } from '../lib/apiClient';
+import { callZenkaiAPI } from '../lib/apiClient';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUIStore } from '../stores/useUIStore';
 import { useXPEngine } from './useXPEngine';
@@ -256,7 +256,7 @@ export function useChallenges() {
         if (personalTemplates.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
           isGeneratingChallenges = true;
           try {
-            const res = await callFitDesiAPI('generateChallenge');
+            const res = await callZenkaiAPI('generateChallenge');
             if (res.data && Array.isArray(res.data)) {
               res.data.forEach(tpl => {
                 const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();

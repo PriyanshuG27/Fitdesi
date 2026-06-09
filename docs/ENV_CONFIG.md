@@ -1,4 +1,4 @@
-# FitDesi — Environment Configuration
+# Zenkai — Environment Configuration
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -25,9 +25,9 @@
 ```bash
 # .env (never commit this file)
 VITE_FIREBASE_API_KEY=AIzaSy...
-VITE_FIREBASE_AUTH_DOMAIN=fitdesi-xyz.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=fitdesi-xyz
-VITE_FIREBASE_STORAGE_BUCKET=fitdesi-xyz.appspot.com
+VITE_FIREBASE_AUTH_DOMAIN=zenkai-xyz.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=zenkai-xyz
+VITE_FIREBASE_STORAGE_BUCKET=zenkai-xyz.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
 VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
 ```

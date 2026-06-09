@@ -1,6 +1,6 @@
 /**
  * auth.test.jsx
- * Behaviour tests for FitDesi auth hooks, route guards, and form validation.
+ * Behaviour tests for Zenkai auth hooks, route guards, and form validation.
  *
  * All Firebase calls are mocked — zero network requests.
  * Tests target: useAuth (login, signup), ProtectedRoute, OnboardingGuard, LoginPage validation.
@@ -57,7 +57,7 @@ function resetAll() {
   // Clear all mock call history
   vi.clearAllMocks();
   // Clear lockout localStorage
-  localStorage.removeItem('fitdesi_lockout_until');
+  localStorage.removeItem('zenkai_lockout_until');
 }
 
 // ─── useAuth — login() ───────────────────────────────────────────────────────
@@ -67,19 +67,19 @@ describe('useAuth — login()', () => {
 
   it('calls signInWithEmailAndPassword with correct email and password', async () => {
     mockSignInWithEmailAndPassword.mockResolvedValueOnce({
-      user: { uid: 'test-uid', email: 'test@fitdesi.com' },
+      user: { uid: 'test-uid', email: 'test@zenkai.com' },
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper: hookWrapper });
 
     await act(async () => {
-      await result.current.login('test@fitdesi.com', 'password123');
+      await result.current.login('test@zenkai.com', 'password123');
     });
 
     expect(mockSignInWithEmailAndPassword).toHaveBeenCalledTimes(1);
     expect(mockSignInWithEmailAndPassword).toHaveBeenCalledWith(
       mockAuth,
-      'test@fitdesi.com',
+      'test@zenkai.com',
       'password123'
     );
   });
@@ -94,7 +94,7 @@ describe('useAuth — login()', () => {
 
     await act(async () => {
       try {
-        await result.current.login('test@fitdesi.com', 'badpass123');
+        await result.current.login('test@zenkai.com', 'badpass123');
       } catch {
         // expected
       }
@@ -114,7 +114,7 @@ describe('useAuth — login()', () => {
 
     await act(async () => {
       try {
-        await result.current.login('nobody@fitdesi.com', 'password123');
+        await result.current.login('nobody@zenkai.com', 'password123');
       } catch {
         // expected
       }
@@ -135,7 +135,7 @@ describe('useAuth — login()', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: hookWrapper });
 
     await act(async () => {
-      await result.current.login('test@fitdesi.com', 'password123');
+      await result.current.login('test@zenkai.com', 'password123');
     });
 
     // Loading is managed by onAuthStateChanged, but error should be cleared
@@ -151,7 +151,7 @@ describe('useAuth — signup()', () => {
 
   const mockNewUser = {
     uid: 'new-uid-123',
-    email: 'new@fitdesi.com',
+    email: 'new@zenkai.com',
     displayName: 'Test User',
   };
 
@@ -166,13 +166,13 @@ describe('useAuth — signup()', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: hookWrapper });
 
     await act(async () => {
-      await result.current.signup('Test User', 'new@fitdesi.com', 'password123');
+      await result.current.signup('Test User', 'new@zenkai.com', 'password123');
     });
 
     expect(mockCreateUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
     expect(mockCreateUserWithEmailAndPassword).toHaveBeenCalledWith(
       mockAuth,
-      'new@fitdesi.com',
+      'new@zenkai.com',
       'password123'
     );
   });
@@ -188,7 +188,7 @@ describe('useAuth — signup()', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: hookWrapper });
 
     await act(async () => {
-      await result.current.signup('Test User', 'new@fitdesi.com', 'password123');
+      await result.current.signup('Test User', 'new@zenkai.com', 'password123');
     });
 
     expect(mockSetDoc).toHaveBeenCalledTimes(2);
@@ -199,7 +199,7 @@ describe('useAuth — signup()', () => {
     // Verify critical fields
     expect(docData.uid).toBe('new-uid-123');
     expect(docData.name).toBe('Test User');
-    expect(docData.email).toBe('new@fitdesi.com');
+    expect(docData.email).toBe('new@zenkai.com');
     expect(docData.onboardingComplete).toBe(false);
     expect(docData.xp).toBe(0);
     expect(docData.level).toBe(1);
@@ -225,7 +225,7 @@ describe('useAuth — signup()', () => {
 
     await act(async () => {
       try {
-        await result.current.signup('Test User', 'new@fitdesi.com', 'password123');
+        await result.current.signup('Test User', 'new@zenkai.com', 'password123');
       } catch {
         // expected
       }

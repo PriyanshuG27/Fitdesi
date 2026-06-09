@@ -1,4 +1,4 @@
-# FitDesi — UI/UX Design Brief
+# Zenkai — UI/UX Design Brief
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -9,7 +9,7 @@
 ## 1. Design System
 
 ```
-TARGET: FitDesi — RECOMMENDED DESIGN SYSTEM
+TARGET: Zenkai — RECOMMENDED DESIGN SYSTEM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PATTERN:    Mobile bottom nav + full-screen sections /
             Desktop persistent left sidebar + content area
@@ -42,7 +42,7 @@ CHECKLIST:  All touch targets ≥ 44×44px
             Empty states on all data-dependent screens
 ```
 
-**Why this combination works for FitDesi:**  
+**Why this combination works for Zenkai:**  
 Indian gym users aged 18–25 respond to energy and boldness. OLED dark base keeps the app premium and battery-efficient on AMOLED phones. Neubrutalism edges on cards give tactile weight — they feel *liftable*, matching the gym context. Aurora celebrations are reserved for earned moments only (PR, level-up) — using them everywhere would dilute the payoff.
 
 ---
@@ -358,7 +358,7 @@ Mobile: Single column, hero text smaller, CTA sticky bottom
 ```
 Mobile layout:
   ┌────────────────────────────────────┐
-  │ FitDesi      [streak 🔥 7]  [XP]  │  ← sticky top bar
+  │ Zenkai      [streak 🔥 7]  [XP]  │  ← sticky top bar
   ├────────────────────────────────────┤
   │                                    │
   │  [Today's Mission Card]            │  ← primary card, ~200px

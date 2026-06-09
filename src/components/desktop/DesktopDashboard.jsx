@@ -222,7 +222,7 @@ export const DesktopDashboard = () => {
         <div>
           <h1 className="font-display text-4xl font-black tracking-tight uppercase leading-none text-white flex items-center gap-3">
             <Activity className="text-[var(--primary)]" size={32} />
-            <span>FITDESI TELEMETRY CENTER</span>
+            <span>ZENKAI TELEMETRY CENTER</span>
           </h1>
           <p className="text-xs font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-2.5 flex items-center gap-2">
             <span>Desktop Off-Gym Planning & Analysis Deck</span>

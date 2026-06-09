@@ -61,7 +61,7 @@ export function useAuth() {
       const userRef = doc(db, 'users', firebaseUser.uid);
       const snap = await getDoc(userRef);
       if (!snap.exists()) {
-        const cleanName = (firebaseUser.displayName || 'FitDesi').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+        const cleanName = (firebaseUser.displayName || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
         const padName = cleanName.padEnd(4, 'X');
         const randomDigits = Math.floor(100 + Math.random() * 900);
         const code = `FIT-${padName}${randomDigits}`;

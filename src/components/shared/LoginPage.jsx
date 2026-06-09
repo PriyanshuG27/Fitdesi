@@ -28,7 +28,7 @@ export const LoginPage = () => {
 
   // Hydrate lock from localStorage on mount
   useEffect(() => {
-    const storedLock = localStorage.getItem('fitdesi_lockout_until');
+    const storedLock = localStorage.getItem('zenkai_lockout_until');
     if (storedLock) {
       const remainingMs = parseInt(storedLock, 10) - Date.now();
       if (remainingMs > 0) {
@@ -36,7 +36,7 @@ export const LoginPage = () => {
         setCooldown(remainingSecs);
         setServerErr('Too many failed attempts. 30-second cooldown active.');
       } else {
-        localStorage.removeItem('fitdesi_lockout_until');
+        localStorage.removeItem('zenkai_lockout_until');
       }
     }
   }, []);
@@ -49,7 +49,7 @@ export const LoginPage = () => {
           if (prev <= 1) {
             clearInterval(timerRef.current);
             setFailedAttempts(0);
-            localStorage.removeItem('fitdesi_lockout_until');
+            localStorage.removeItem('zenkai_lockout_until');
             setServerErr('');
             return 0;
           }
@@ -134,7 +134,7 @@ export const LoginPage = () => {
 
       if (newAttempts >= 3) {
         const lockoutUntil = Date.now() + 30 * 1000;
-        localStorage.setItem('fitdesi_lockout_until', lockoutUntil.toString());
+        localStorage.setItem('zenkai_lockout_until', lockoutUntil.toString());
         setCooldown(30);
         setServerErr('Too many failed attempts. 30-second cooldown active.');
       } else {
@@ -325,7 +325,7 @@ export const LoginPage = () => {
 
         {/* Footer Link */}
         <p className="mt-8 text-center text-sm text-text-secondary">
-          New to FitDesi?{' '}
+          New to Zenkai?{' '}
           <Link to="/signup" className="text-primary hover:underline font-semibold transition">
             Create an Account
           </Link>

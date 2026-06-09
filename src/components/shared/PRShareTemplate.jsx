@@ -2,7 +2,7 @@ import React from 'react';
 import exerciseBank from '../../data/exercises.json';
 import { db } from '../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { callFitDesiAPI } from '../../lib/apiClient';
+import { callZenkaiAPI } from '../../lib/apiClient';
 
 // Helper to determine the primary target muscle for an exercise name
 export const getMuscleGroupForExercise = (exerciseName) => {
@@ -46,7 +46,7 @@ export const fetchStrengthStandards = async (exerciseName, oneRepMax, bodyweight
 
   if (!multipliers) {
     try {
-      const res = await callFitDesiAPI('getPRStats', {
+      const res = await callZenkaiAPI('getPRStats', {
         exerciseName,
         gender: genderKey
       });
@@ -328,7 +328,7 @@ function drawCyberHexagonBadge(ctx, cx, cy, size, tier, percentile) {
   // Certification badge footer
   ctx.font = '600 8px "Outfit", system-ui, sans-serif';
   ctx.fillStyle = '#FF5C00';
-  fillTextWithSpacing(ctx, 'FITDESI SECURED', cx, cy + 54, 1.5, 'center');
+  fillTextWithSpacing(ctx, 'ZENKAI SECURED', cx, cy + 54, 1.5, 'center');
 
   ctx.restore();
 }
@@ -714,12 +714,12 @@ export const generatePRCardImage = async ({
   ctx.fillText(userName.toUpperCase(), 215, footerY + 44);
   ctx.restore();
 
-  // FITDESI Logo
+  // ZENKAI Logo
   ctx.save();
   ctx.font = '800 42px "Barlow Condensed", sans-serif';
   ctx.fillStyle = '#FF5C00'; // saffron saffron logo
   ctx.textAlign = 'right';
-  ctx.fillText('FITDESI', 1000, footerY + 15);
+  ctx.fillText('ZENKAI', 1000, footerY + 15);
 
   // Date String
   ctx.font = '600 16px "DM Mono", monospace';
@@ -868,7 +868,7 @@ export default function PRShareTemplate({
                   <text x="100" y="65" fill="#A3A3A3" fontSize="10" fontWeight="600" fontFamily="system-ui" letterSpacing="1.5" textAnchor="middle">STRENGTH TIER</text>
                   <text x="100" y="108" fill="#ffffff" fontSize="28" fontWeight="800" fontFamily="Barlow Condensed, sans-serif" textAnchor="middle">{tier}</text>
                   <text x="100" y="142" fill="#B5FF2D" fontSize="12" fontWeight="600" fontFamily="DM Mono, monospace" letterSpacing="1" textAnchor="middle">{percentile}</text>
-                  <text x="100" y="158" fill="#FF5C00" fontSize="7" fontWeight="600" fontFamily="system-ui" letterSpacing="1" textAnchor="middle">FITDESI SECURED</text>
+                  <text x="100" y="158" fill="#FF5C00" fontSize="7" fontWeight="600" fontFamily="system-ui" letterSpacing="1" textAnchor="middle">ZENKAI SECURED</text>
                 </svg>
               </div>
             </div>
@@ -889,7 +889,7 @@ export default function PRShareTemplate({
         </div>
 
         <div className="flex flex-col items-end">
-          <p className="text-4xl font-extrabold tracking-tight text-[#FF5C00]" style={{ fontFamily: '"Barlow Condensed", sans-serif' }}>FITDESI</p>
+          <p className="text-4xl font-extrabold tracking-tight text-[#FF5C00]" style={{ fontFamily: '"Barlow Condensed", sans-serif' }}>ZENKAI</p>
           <p className="text-base font-semibold tracking-wider text-[#A3A3A3] uppercase" style={{ fontFamily: '"DM Mono", monospace' }}>{date}</p>
         </div>
       </div>

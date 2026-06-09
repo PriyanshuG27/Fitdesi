@@ -1,4 +1,4 @@
-# FitDesi — Performance Document
+# Zenkai — Performance Document
 
 **Version:** 1.0  
 **Date:** June 2026  
@@ -283,7 +283,7 @@ lhci autorun
   uses: treosh/lighthouse-ci-action@v10
   with:
     urls: |
-      https://fitdesi.vercel.app
+      https://zenkai.vercel.app
     budgetPath: ./budget.json
     uploadArtifacts: true
 ```

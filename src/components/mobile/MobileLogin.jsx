@@ -3,7 +3,7 @@ import React from 'react';
 export const MobileLogin = () => {
   return (
     <div className="min-h-screen bg-bg-base text-text-primary p-4 flex flex-col justify-center items-center">
-      <h2 className="text-heading text-2xl text-text-primary mb-4">Login to FitDesi</h2>
+      <h2 className="text-heading text-2xl text-text-primary mb-4">Login to Zenkai</h2>
       <div className="w-full max-w-sm space-y-4">
         <input 
           type="email" 

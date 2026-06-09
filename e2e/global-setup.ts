@@ -28,7 +28,7 @@ const __dirname = path.dirname(__filename);
 
 const EMULATOR_AUTH_URL = 'http://127.0.0.1:9099';
 const EMULATOR_FIRESTORE_URL = 'http://127.0.0.1:8080';
-const PROJECT_ID = 'fitdesi-test';
+const PROJECT_ID = 'zenkai-test';
 const AUTH_STATE_PATH = path.join(__dirname, '.auth', 'user.json');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ export default async function globalSetup(config: FullConfig) {
     // Navigate to signup and create the workout test user
     await page.goto('/signup');
     await page.fill('#name', 'Onboarded TestUser');
-    await page.fill('#email', 'e2e-workout@fitdesi.test');
+    await page.fill('#email', 'e2e-workout@zenkai.test');
     await page.fill('#password', 'Test1234!');
     await page.click('button[type="submit"]');
 

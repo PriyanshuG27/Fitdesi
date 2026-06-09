@@ -1,15 +1,15 @@
-# FitDesi — Desktop Off-Gym Command Center Walkthrough
+# Zenkai — Desktop Off-Gym Command Center Walkthrough
 
-> **Status**: **Phase Complete.** The FitDesi Desktop application has been transformed from mobile-centric views into a dedicated, high-fidelity **Off-Gym Command Center**. Every command center feature—from the Post-Workout Recap Cinema to the Bar Path Video Autopsy and Accountability Squad Code Draft—is now fully implemented, integrated, and verified. The code builds successfully, and all 165 Vitest unit tests pass.
+> **Status**: **Phase Complete.** The Zenkai Desktop application has been transformed from mobile-centric views into a dedicated, high-fidelity **Off-Gym Command Center**. Every command center feature—from the Post-Workout Recap Cinema to the Bar Path Video Autopsy and Accountability Squad Code Draft—is now fully implemented, integrated, and verified. The code builds successfully, and all 165 Vitest unit tests pass.
 
 ---
 
 ## 📂 Section 1: Desktop Application Routing & Sidebar Navigation
 
-To optimize the desktop experience, all mobile-centric views and placeholder pages have been refactored. The application routing in [`src/App.jsx`](file:///d:/Fitdesi/src/App.jsx) maps routes directly to dedicated, full-screen command center modules:
+To optimize the desktop experience, all mobile-centric views and placeholder pages have been refactored. The application routing in [`src/App.jsx`](file:///d:/Zenkai/src/App.jsx) maps routes directly to dedicated, full-screen command center modules:
 
 ### 1. App Routing Configuration
-The lazy-loaded page components are defined at the top of [`src/App.jsx`](file:///d:/Fitdesi/src/App.jsx):
+The lazy-loaded page components are defined at the top of [`src/App.jsx`](file:///d:/Zenkai/src/App.jsx):
 ```javascript
 const DesktopDashboard   = React.lazy(() => import('./components/desktop/DesktopDashboard'));
 const DesktopLogEditor   = React.lazy(() => import('./components/desktop/DesktopLogEditor'));
@@ -31,7 +31,7 @@ These are routed within the desktop application shell:
 * `/aura-forecaster` ➔ `AuraForecaster` (Aura & Beast Mode Forecaster)
 * `/magazine` ➔ `SundayMagazine` (Sunday AI "Scouting Report" Magazine)
 
-### 2. Neubrutalist Sidebar Navigation ([`DesktopSidebar.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopSidebar.jsx))
+### 2. Neubrutalist Sidebar Navigation ([`DesktopSidebar.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopSidebar.jsx))
 Designed with high-contrast borders and thick drop shadows, the sidebar acts as the main hub:
 * Employs active route highlighting (e.g., matching paths like `/recap`, `/poster`).
 * Replaces the former start workout triggers on desktop (which was a mobile anti-pattern) with planning and analysis deck launchers.
@@ -41,11 +41,11 @@ Designed with high-contrast borders and thick drop shadows, the sidebar acts as 
 
 ## 💻 Section 2: Unified Bento Dashboard & Exercises Telemetry
 
-The main desktop view ([`DesktopDashboard.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopDashboard.jsx)) features a dense bento grid:
+The main desktop view ([`DesktopDashboard.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopDashboard.jsx)) features a dense bento grid:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        FITDESI TELEMETRY CENTER                        │
+│                        ZENKAI TELEMETRY CENTER                        │
 ├────────────────────────────────────────┬───────────────────────────────┤
 │                                        │                               │
 │  [ Quick Workspace Tools ]              │   [ Neubrutalist Calendar ]   │
@@ -75,7 +75,7 @@ The main desktop view ([`DesktopDashboard.jsx`](file:///d:/Fitdesi/src/component
   * **⚪ Unlogged**: Shows movements not yet executed.
 
 ### 3. Mannequin Telemetry Card
-* Integrates the premium, high-quality vector silhouette [`MuscleMap`](file:///d:/Fitdesi/src/components/shared/MuscleMap.jsx) mapping Chest, Shoulders, Back, Arms, Legs, and Core.
+* Integrates the premium, high-quality vector silhouette [`MuscleMap`](file:///d:/Zenkai/src/components/shared/MuscleMap.jsx) mapping Chest, Shoulders, Back, Arms, Legs, and Core.
 * Computes muscle fatigue and strength indices from the merged sessions log.
 * Highlights muscle paths with dynamic visual gradients representing relative recovery. Clicking a path loads alternative movements and estimated recovery timers in the `MuscleDetailPanel`.
 
@@ -83,7 +83,7 @@ The main desktop view ([`DesktopDashboard.jsx`](file:///d:/Fitdesi/src/component
 
 ## 🎬 Section 3: Post-Workout Recap Cinema & Desk Log Editor
 
-Located at [`DesktopLogEditor.jsx`](file:///d:/Fitdesi/src/components/desktop/DesktopLogEditor.jsx), this workspace is designed for editing logs:
+Located at [`DesktopLogEditor.jsx`](file:///d:/Zenkai/src/components/desktop/DesktopLogEditor.jsx), this workspace is designed for editing logs:
 
 1. **Log List Selector**: Loads the last 30 logs (desktop and mobile combined) in a neubrutalist dropdown. Selected sessions sync with the URL parameter `?sessionId=...` for deep-linking.
 2. **Per-Set RPE & MMC Sliders**: Moves RPE and MMC sliders from a global level to individual rows. Users can slide values (1-10) for each set, with overall averages dynamically updated at the top of the card.
@@ -94,7 +94,7 @@ Located at [`DesktopLogEditor.jsx`](file:///d:/Fitdesi/src/components/desktop/De
 
 ## 📹 Section 4: Bar Path Autopsy (60fps Imperative Video Bay)
 
-Built at [`BarPathAutopsy.jsx`](file:///d:/Fitdesi/src/components/desktop/BarPathAutopsy.jsx), this tool allows frame-by-frame scrubbing:
+Built at [`BarPathAutopsy.jsx`](file:///d:/Zenkai/src/components/desktop/BarPathAutopsy.jsx), this tool allows frame-by-frame scrubbing:
 
 ### 1. Imperative Playback Synchronization (60fps Lag-Free)
 To prevent React/Zustand state updates from throttling rendering at 60fps:
@@ -110,7 +110,7 @@ To prevent React/Zustand state updates from throttling rendering at 60fps:
 
 ## 🎨 Section 5: Neubrutalist Social Poster Studio
 
-Created in [`PosterStudio.jsx`](file:///d:/Fitdesi/src/components/desktop/PosterStudio.jsx), this module utilizes **React-Konva** to compile milestone achievements into graphics:
+Created in [`PosterStudio.jsx`](file:///d:/Zenkai/src/components/desktop/PosterStudio.jsx), this module utilizes **React-Konva** to compile milestone achievements into graphics:
 
 1. **Graphic Canvas Editor**: Drag and drop milestone stickers (`PR SHATTERED`, `LEVEL UP`, `STREAK HERO`), adjust text colors, and configure neubrutalist borders.
 2. **QR Code Sharing**: Generates a mobile-friendly QR code encoding the session URL. Scanning the QR code downloads the rendered graphic directly to the user's phone.
@@ -118,7 +118,7 @@ Created in [`PosterStudio.jsx`](file:///d:/Fitdesi/src/components/desktop/Poster
 ---
 ## 🤝 Section 6: Accountability Squads & PvE Titan Raid Boss Fights
 
-### 1. Squad Code Draft System ([`SquadMatchmaker.jsx`](file:///d:/Fitdesi/src/components/desktop/SquadMatchmaker.jsx))
+### 1. Squad Code Draft System ([`SquadMatchmaker.jsx`](file:///d:/Zenkai/src/components/desktop/SquadMatchmaker.jsx))
 * Replaces email-based scraping queries with unique squad codes (e.g. `FIT-PRIY821`).
 * Automatically registers a code to a user's profile upon signup or Google Authentication login.
 * Direct document fetches on `/squad_codes/{code}` bypass collection-wide list blocks in `firestore.rules`.
@@ -130,7 +130,7 @@ Created in [`PosterStudio.jsx`](file:///d:/Fitdesi/src/components/desktop/Poster
 * **Distributed Concurrency Safe Lock**: Uses Firestore's atomic `increment()` API to log workout damage synchronously and prevent race conditions. Clamps the boss's HP safely at 0 (`Math.max(0, currentHP)`) and locks completion state to prevent double-claiming raid rewards.
 * **Weakness & Roster Damage Tracking**: Highlights specific muscle weaknesses (e.g. "1.5x damage on Legs") and lists individual squad member damage contribution statistics in a neubrutalist progress panel.
 
-### 3. Academic Exam Buffer Config ([`AcademicBufferConfig.jsx`](file:///d:/Fitdesi/src/components/desktop/AcademicBufferConfig.jsx))
+### 3. Academic Exam Buffer Config ([`AcademicBufferConfig.jsx`](file:///d:/Zenkai/src/components/desktop/AcademicBufferConfig.jsx))
 * Features a calendar date selector to highlight exam weeks.
 * Activating the buffer automatically scales down target volume to exactly **1/9th of normal** in the Firestore schedule.
 * Pushes flexible, day-agnostic plan adjustments to the mobile app, allowing busy students to train on any day they find time during exams without breaking their streak.
@@ -139,7 +139,7 @@ Created in [`PosterStudio.jsx`](file:///d:/Fitdesi/src/components/desktop/Poster
 
 ## ⚡ Section 7: Aura & Beast Mode Forecaster
 
-Located at [`AuraForecaster.jsx`](file:///d:/Fitdesi/src/components/desktop/AuraForecaster.jsx), this dashboard converts training consistency, volume, and focus into gamified status metrics:
+Located at [`AuraForecaster.jsx`](file:///d:/Zenkai/src/components/desktop/AuraForecaster.jsx), this dashboard converts training consistency, volume, and focus into gamified status metrics:
 
 ### 1. Gym Aura Points & Upkeep Decay
 * **Score Capping**: Computes a dynamic Aura Score between `0` and `10,000` based on a rolling 30-day window.
@@ -160,7 +160,7 @@ Located at [`AuraForecaster.jsx`](file:///d:/Fitdesi/src/components/desktop/Aura
 
 ## 📰 Section 8: Sunday AI "Scouting Report" Magazine
 
-Located at [`SundayMagazine.jsx`](file:///d:/Fitdesi/src/components/desktop/SundayMagazine.jsx), this editorial newspaper generates ruthless AI coaching feedback:
+Located at [`SundayMagazine.jsx`](file:///d:/Zenkai/src/components/desktop/SundayMagazine.jsx), this editorial newspaper generates ruthless AI coaching feedback:
 
 ### 1. Telemetry Pre-Processing
 * Compresses the last 7 days of raw workout logs into a light, standardized JSON payload before querying the backend API. This prevents token bloat and API timeout errors.
@@ -178,12 +178,12 @@ Located at [`SundayMagazine.jsx`](file:///d:/Fitdesi/src/components/desktop/Sund
 
 ## 🔒 Section 9: Firestore Security Rules & Sync Resolution
 
-### 1. Hardened Firestore Rules ([`firestore.rules`](file:///d:/Fitdesi/firestore.rules))
+### 1. Hardened Firestore Rules ([`firestore.rules`](file:///d:/Zenkai/firestore.rules))
 * **Squad Codes**: Allows direct read on `/squad_codes/{code}` for code-matching searches.
 * **Write Permissions**: Restricts write access for `planned_targets`, `executed_sessions`, and `stalledLifts` to the document owner.
 * **Leaderboard Scrape Mitigation**: Blocks `/users` list queries, allowing list checks only if a strict filter is applied on leaderboard gym bounds.
 
-### 2. Dual-Vector Sync Engine ([`useSyncEngine.js`](file:///d:/Fitdesi/src/hooks/useSyncEngine.js))
+### 2. Dual-Vector Sync Engine ([`useSyncEngine.js`](file:///d:/Zenkai/src/hooks/useSyncEngine.js))
 * Avoids Last-Write-Wins (LWW) collisions by segregating planned data (`planned_targets`) and logged sessions (`executed_sessions`).
 * Resolves offline gym basement session syncing by calculating the delta difference between plans and execution records once connection is restored.
 

@@ -1,4 +1,4 @@
-# FitDesi — Phase 5 Walkthrough: Weekly Recap & Gamified Retention Engine
+# Zenkai — Phase 5 Walkthrough: Weekly Recap & Gamified Retention Engine
 
 > **Status**: **Phase Complete.** The Weekly Recap System, Personalized Challenge Engine, Wave 2 Gamification Mechanics (Flame Wagers, Overdrive Hour, Skill Tree, Boss Fights), and Production PWA Caching strategy have been successfully built, verified, and pass all 150 automated tests (Vitest + Jest).
 
@@ -10,26 +10,26 @@
 
 | File | Purpose | Security & Logic |
 |---|---|---|
-| [`generateChallenge.js`](file:///d:/Fitdesi/functions/src/generateChallenge.js) | Personalized AI Challenge Generator | Tallies muscle group volume from the last 15 workouts to find the user's Weak Point and Favorite Group; scales targets based on goals; queries Groq API (`llama-3.1-8b-instant`) for gamified title and description with deterministic fallbacks. |
-| [`rateLimiter.js`](file:///d:/Fitdesi/functions/src/rateLimiter.js) | Quota Limiting | Configured rate limiter to `MAX_CALLS = 3` calls per hour per user. |
+| [`generateChallenge.js`](file:///d:/Zenkai/functions/src/generateChallenge.js) | Personalized AI Challenge Generator | Tallies muscle group volume from the last 15 workouts to find the user's Weak Point and Favorite Group; scales targets based on goals; queries Groq API (`llama-3.1-8b-instant`) for gamified title and description with deterministic fallbacks. |
+| [`rateLimiter.js`](file:///d:/Zenkai/functions/src/rateLimiter.js) | Quota Limiting | Configured rate limiter to `MAX_CALLS = 3` calls per hour per user. |
 
 ### Frontend Hooks & Stores (`src/hooks/` & `src/stores/`)
 
 | File | Purpose | Key Behaviors |
 |---|---|---|
-| [`useWeeklyRecap.js`](file:///d:/Fitdesi/src/hooks/useWeeklyRecap.js) | Recap Data Collector | Aggregates volume, reps, PRs, and best lifts from Monday to Sunday. Detects completed sets using both `set.done` and `set.completed` flags. Fallbacks to bodyweight rep metrics if no external weight was logged. |
-| [`useChallenges.js`](file:///d:/Fitdesi/src/hooks/useChallenges.js) | Challenges Hub Hook | Manages active/available slots; restricts Comeback templates to comeback users; handles 24h cooldown locks on abandonment; enforces duplicate active checks; implements optimistic UI deletion filters. |
-| [`useWorkoutLogger.js`](file:///d:/Fitdesi/src/hooks/useWorkoutLogger.js) | Session Logger updates | Automatically triggers active challenge progress increments in the background; awards +200 XP for Boss Fights; rolls 10% chance for Flash Quests; applies Overdrive and Skill Tree multipliers. |
-| [`useWorkoutStore.js`](file:///d:/Fitdesi/src/stores/useWorkoutStore.js) | Session Store updates | Exposes `isOverdrive` session flags and `setOverdrive` toggle. |
+| [`useWeeklyRecap.js`](file:///d:/Zenkai/src/hooks/useWeeklyRecap.js) | Recap Data Collector | Aggregates volume, reps, PRs, and best lifts from Monday to Sunday. Detects completed sets using both `set.done` and `set.completed` flags. Fallbacks to bodyweight rep metrics if no external weight was logged. |
+| [`useChallenges.js`](file:///d:/Zenkai/src/hooks/useChallenges.js) | Challenges Hub Hook | Manages active/available slots; restricts Comeback templates to comeback users; handles 24h cooldown locks on abandonment; enforces duplicate active checks; implements optimistic UI deletion filters. |
+| [`useWorkoutLogger.js`](file:///d:/Zenkai/src/hooks/useWorkoutLogger.js) | Session Logger updates | Automatically triggers active challenge progress increments in the background; awards +200 XP for Boss Fights; rolls 10% chance for Flash Quests; applies Overdrive and Skill Tree multipliers. |
+| [`useWorkoutStore.js`](file:///d:/Zenkai/src/stores/useWorkoutStore.js) | Session Store updates | Exposes `isOverdrive` session flags and `setOverdrive` toggle. |
 
 ### UI Components (`src/components/`)
 
 | File | Purpose | Visual & Interaction Design |
 |---|---|---|
-| [`WeeklyRecapScreen.jsx`](file:///d:/Fitdesi/src/components/mobile/WeeklyRecapScreen.jsx) | Weekly Recap overlay | Neubrutalist card displaying stats; offscreen `html2canvas` share card generator; Web Share API and download fallback; high z-index overlay (`z-[9999]`). |
-| [`MobileChallenges.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileChallenges.jsx) | Mobile Challenges Hub | Split Campaign/Quest slots; neon progress bars; pulsing locked cards with remaining cooldown timer; Overdrive Camera upload; Flame Wager panel; RPG Skill Tree unlocks; custom `CONQUEROR WARNING` abandon overlay. |
-| [`MobileHome.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileHome.jsx) | Home dashboard trigger | Triggers the Sunday Weekly Recap banner and handles seen dismissal states. |
-| [`MobileProfile.jsx`](file:///d:/Fitdesi/src/components/mobile/MobileProfile.jsx) | Profile Settings trigger | Adds a permanent "Weekly Recap" button to re-watch the current week's summary at any time. |
+| [`WeeklyRecapScreen.jsx`](file:///d:/Zenkai/src/components/mobile/WeeklyRecapScreen.jsx) | Weekly Recap overlay | Neubrutalist card displaying stats; offscreen `html2canvas` share card generator; Web Share API and download fallback; high z-index overlay (`z-[9999]`). |
+| [`MobileChallenges.jsx`](file:///d:/Zenkai/src/components/mobile/MobileChallenges.jsx) | Mobile Challenges Hub | Split Campaign/Quest slots; neon progress bars; pulsing locked cards with remaining cooldown timer; Overdrive Camera upload; Flame Wager panel; RPG Skill Tree unlocks; custom `CONQUEROR WARNING` abandon overlay. |
+| [`MobileHome.jsx`](file:///d:/Zenkai/src/components/mobile/MobileHome.jsx) | Home dashboard trigger | Triggers the Sunday Weekly Recap banner and handles seen dismissal states. |
+| [`MobileProfile.jsx`](file:///d:/Zenkai/src/components/mobile/MobileProfile.jsx) | Profile Settings trigger | Adds a permanent "Weekly Recap" button to re-watch the current week's summary at any time. |
 
 ---
 

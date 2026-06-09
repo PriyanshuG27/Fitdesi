@@ -57,7 +57,7 @@ export const PWAInstallModal = () => {
             </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-lg uppercase tracking-wide leading-none">
-                Install FitDesi
+                Install Zenkai
               </span>
               <span className="text-[10px] font-mono text-[var(--secondary)] uppercase tracking-wider mt-1">
                 Native App Experience
@@ -71,14 +71,14 @@ export const PWAInstallModal = () => {
               <div className="flex flex-col items-center text-center py-4 gap-3">
                 <CheckCircle2 size={36} className="text-[var(--accent-xp)]" />
                 <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
-                  FitDesi is already installed on your device! You can run it directly from your home screen or app drawer.
+                  Zenkai is already installed on your device! You can run it directly from your home screen or app drawer.
                 </p>
               </div>
             ) : pwaInstallable ? (
               // Chrome / Android Auto Install Prompt
               <div className="flex flex-col gap-4">
                 <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
-                  Install FitDesi on your home screen for full-screen mode, smoother animations, offline workouts, and biometric tracking.
+                  Install Zenkai on your home screen for full-screen mode, smoother animations, offline workouts, and biometric tracking.
                 </p>
                 <button
                   onClick={handleInstallClick}
@@ -98,7 +98,7 @@ export const PWAInstallModal = () => {
               // iOS Safari Steps
               <div className="flex flex-col gap-4">
                 <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
-                  Safari doesn't support automatic installation, but you can add FitDesi to your home screen in 3 quick steps:
+                  Safari doesn't support automatic installation, but you can add Zenkai to your home screen in 3 quick steps:
                 </p>
 
                 <div className="flex flex-col gap-3 font-sans">
@@ -137,7 +137,7 @@ export const PWAInstallModal = () => {
               // Fallback / General Android Manual Install
               <div className="flex flex-col gap-4">
                 <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
-                  Add FitDesi to your device home screen manually using your browser menu:
+                  Add Zenkai to your device home screen manually using your browser menu:
                 </p>
 
                 <div className="flex flex-col gap-3 font-sans">
