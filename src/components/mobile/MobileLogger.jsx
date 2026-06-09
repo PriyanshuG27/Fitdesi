@@ -71,7 +71,7 @@ export const MobileLogger = () => {
   const [pastSessions, setPastSessions] = useState([]);
   const [loadingPastSessions, setLoadingPastSessions] = useState(true);
 
-  // Fetch past session metadata (parent documents only) on mount when session is not active
+  // Fetch past session metadata and exercises on mount when session is not active
   useEffect(() => {
     if (!user || isActive) return;
     const fetchPastSessions = async () => {
@@ -84,6 +84,11 @@ export const MobileLogger = () => {
         const temp = [];
         for (const docSnap of snap.docs) {
           const sessData = docSnap.data();
+          
+          // Fetch the exercises subcollection for this session
+          const exSnap = await getDocs(collection(db, 'users', user.uid, 'sessions', docSnap.id, 'exercises'));
+          const exercises = exSnap.docs.map(exDoc => exDoc.data());
+          
           const rawDate = sessData.date;
           let resolvedDate = new Date();
           if (rawDate) {
@@ -95,6 +100,7 @@ export const MobileLogger = () => {
             id: docSnap.id,
             ...sessData,
             date: resolvedDate,
+            exercises,
           });
         }
         setPastSessions(temp);

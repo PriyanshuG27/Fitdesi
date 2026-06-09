@@ -20,7 +20,7 @@ const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true' || (typeof
 
 if (useEmulator) {
   // Only force 'zenkai-test' for automated Playwright E2E tests.
-  // For local development, keep the project ID from env (e.g. zenkai-74283) so it matches the local emulator project ID.
+  // For local development, keep the project ID from env (e.g. fitdesi-74283) so it matches the local emulator project ID.
   if (typeof navigator !== 'undefined' && navigator.webdriver) {
     resolvedConfig.projectId = 'zenkai-test';
   }

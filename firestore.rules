@@ -45,7 +45,7 @@ service cloud.firestore {
         // Gamification — Phase 2
         'xp', 'level', 'levelName',
         'streak', 'streakLastDate',
-        'powerUps', 'badges',
+        'powerUps', 'badges', 'xpBoosterUntil',
         // Gamification — Phase 5
         'cooldowns', 'skills',
         // New Profile Fields
@@ -67,11 +67,11 @@ service cloud.firestore {
         (request.resource.data.level is int && request.resource.data.level >= 1);
     }
 
-    // equipmentList max 20 items (schema: max 10 distinct values but allow headroom)
+    // equipmentList max 50 items (schema: max 10 distinct values but allow headroom)
     function isValidEquipmentList() {
       return !('equipmentList' in request.resource.data) ||
         (request.resource.data.equipmentList is list &&
-          request.resource.data.equipmentList.size() <= 20);
+          request.resource.data.equipmentList.size() <= 50);
     }
 
     // ─── users/{uid} ─────────────────────────────────────────────────────────

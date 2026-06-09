@@ -1,8 +1,6 @@
 import React from 'react';
 import exerciseBank from '../../data/exercises.json';
-import { db } from '../../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { callZenkaiAPI } from '../../lib/apiClient';
+import strengthStandards from '../../data/strength_standards.json';
 
 // Helper to determine the primary target muscle for an exercise name
 export const getMuscleGroupForExercise = (exerciseName) => {
@@ -16,48 +14,24 @@ export const getMuscleGroupForExercise = (exerciseName) => {
   return match ? match.muscleGroup.toUpperCase() : 'CHEST';
 };
 
-// Asynchronous strength standards resolver with Firestore global cache
+// Asynchronous strength standards resolver using pre-generated local JSON database
 export const fetchStrengthStandards = async (exerciseName, oneRepMax, bodyweight, gender) => {
   const bw = bodyweight || 80;
   const genderKey = (gender || 'male').toLowerCase();
   const exerciseKey = exerciseName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  const docId = `${exerciseKey}_${genderKey}`;
 
   const ratio = oneRepMax / bw;
   const bwMultiplier = `${ratio.toFixed(2)}x`;
 
   let multipliers = null;
 
-  try {
-    const docRef = doc(db, 'strengthStandards', docId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const cacheData = snap.data();
-      const updatedAtDate = cacheData.updatedAt?.toDate() || new Date(0);
-      const ageInMs = Date.now() - updatedAtDate.getTime();
-      const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
-      if (ageInMs < thirtyDaysInMs) {
-        multipliers = cacheData.multipliers;
-      }
-    }
-  } catch (err) {
-    console.warn("[fetchStrengthStandards] Firestore cache check failed:", err);
+  // 1. Try instant local lookup from pre-generated JSON database
+  const entry = strengthStandards[exerciseKey];
+  if (entry) {
+    multipliers = entry[genderKey] || entry['male'];
   }
 
-  if (!multipliers) {
-    try {
-      const res = await callZenkaiAPI('getPRStats', {
-        exerciseName,
-        gender: genderKey
-      });
-      if (res?.data) {
-        multipliers = res.data;
-      }
-    } catch (err) {
-      console.warn("[fetchStrengthStandards] Backend API call failed, falling back to local formulas:", err);
-    }
-  }
-
+  // 2. Fall back to rule-based local classifier if exercise is not in the JSON database
   if (!multipliers) {
     let standards = {
       bench: [0.50, 0.75, 1.00, 1.30, 1.60],
@@ -87,11 +61,13 @@ export const fetchStrengthStandards = async (exerciseName, oneRepMax, bodyweight
       key = 'deadlift';
     } else if (nameLower.includes('overhead press') || nameLower.includes('shoulder press') || nameLower.includes('ohp')) {
       key = 'ohp';
-    } else if (nameLower.includes('dumbbell') || nameLower.includes('db') || nameLower.includes('curl') || nameLower.includes('extension') || nameLower.includes('lateral')) {
-      standards.generic = standards.generic.map(s => s * 0.5);
     }
 
-    const selected = standards[key] || standards.generic;
+    let selected = [...(standards[key] || standards.generic)];
+    if (nameLower.includes('dumbbell') || nameLower.includes('db') || nameLower.includes('curl') || nameLower.includes('extension') || nameLower.includes('lateral')) {
+      selected = selected.map(s => s * 0.5);
+    }
+
     multipliers = {
       beginner: selected[0],
       novice: selected[1],

@@ -70,6 +70,16 @@ module.exports = [authGuard, async (req, res) => {
 
     const multipliers = JSON.parse(completion.choices[0].message.content);
 
+    // Safeguard for dumbbell/isolation exercises: if the AI returned total weight multipliers (e.g. intermediate >= 0.6), divide them by 2
+    const isDumbbell = exerciseKey.includes('dumbbell') || exerciseKey.includes('db') || exerciseName.toLowerCase().includes('dumbbell') || exerciseName.toLowerCase().includes('db');
+    if (isDumbbell && multipliers.intermediate > 0.6) {
+      multipliers.beginner = Number((multipliers.beginner / 2).toFixed(3));
+      multipliers.novice = Number((multipliers.novice / 2).toFixed(3));
+      multipliers.intermediate = Number((multipliers.intermediate / 2).toFixed(3));
+      multipliers.advanced = Number((multipliers.advanced / 2).toFixed(3));
+      multipliers.elite = Number((multipliers.elite / 2).toFixed(3));
+    }
+
     // Save to Firestore cache
     await docRef.set({
       exerciseName,
