@@ -186,7 +186,7 @@ service cloud.firestore {
         allow create: if isOwner(uid)
           && request.resource.data.amount is number
           && request.resource.data.amount > 0
-          && request.resource.data.amount <= 2000; // raised: overdrive(1.5x) + booster(2x) + boss(200) can reach ~850+
+          && request.resource.data.amount <= 500;
         // update → implicitly DENIED
         // delete → implicitly DENIED
       }
@@ -255,12 +255,10 @@ service cloud.firestore {
       allow update: if isAuth() && (
         resource.data.creatorUid == request.auth.uid ||
         (
-          // Members can update challenge progress (activeChallenge.* fields) or membership
           (request.auth.uid in resource.data.memberUids || request.auth.uid in request.resource.data.memberUids) &&
           request.resource.data.creatorUid == resource.data.creatorUid &&
-          request.resource.data.squadName == resource.data.squadName
-          // Note: memberLimit check removed — increments on activeChallenge.* fields
-          // don't require memberLimit to match in the merged document snapshot
+          request.resource.data.squadName == resource.data.squadName &&
+          request.resource.data.memberLimit == resource.data.memberLimit
         )
       );
       allow delete: if isAuth() && resource.data.creatorUid == request.auth.uid;
