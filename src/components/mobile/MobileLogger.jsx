@@ -46,6 +46,27 @@ export const MobileLogger = () => {
   const [selectedMood, setSelectedMood] = useState('average');
   const [stomachFlag, setStomachFlag] = useState(false);
 
+  // Debrief flags state for AI Coach loop
+  const [debriefPain, setDebriefPain] = useState([]);
+  const [debriefEasy, setDebriefEasy] = useState([]);
+  const [debriefBroken, setDebriefBroken] = useState([]);
+
+  const toggleDebriefFlag = useCallback((type, exerciseKey) => {
+    if (type === 'pain') {
+      setDebriefPain((prev) =>
+        prev.includes(exerciseKey) ? prev.filter((k) => k !== exerciseKey) : [...prev, exerciseKey]
+      );
+    } else if (type === 'easy') {
+      setDebriefEasy((prev) =>
+        prev.includes(exerciseKey) ? prev.filter((k) => k !== exerciseKey) : [...prev, exerciseKey]
+      );
+    } else if (type === 'broken') {
+      setDebriefBroken((prev) =>
+        prev.includes(exerciseKey) ? prev.filter((k) => k !== exerciseKey) : [...prev, exerciseKey]
+      );
+    }
+  }, []);
+
   // Natural Language Dictation parser state
   const [nlpInput, setNlpInput] = useState('');
   const [parsedNLPResult, setParsedNLPResult] = useState(null);
@@ -65,30 +86,29 @@ export const MobileLogger = () => {
   // PR Mapping fetched from Firestore for highlighting PRs in SetRows
   const [prsMap, setPrsMap] = useState({});
 
+  const completedExercises = useMemo(() => {
+    return exercises.filter((ex) => ex.sets?.some((s) => s.done || s.completed));
+  }, [exercises]);
+
   const isActive = !!activeSession;
 
   // Past sessions for repeating workouts calendar
   const [pastSessions, setPastSessions] = useState([]);
   const [loadingPastSessions, setLoadingPastSessions] = useState(true);
 
-  // Fetch past session metadata and exercises on mount when session is not active
+  // Fetch past session METADATA only on mount — exercises are lazy-loaded by the calendar
+  // on cell click to avoid 60 serial subcollection reads on every page load.
   useEffect(() => {
     if (!user || isActive) return;
     const fetchPastSessions = async () => {
       setLoadingPastSessions(true);
       try {
         const sessionsRef = collection(db, 'users', user.uid, 'sessions');
-        // Retrieve last 60 workouts to populate the calendar
+        // Retrieve last 60 session headers (metadata only — no exercises subcollection)
         const q = query(sessionsRef, orderBy('date', 'desc'), limit(60));
         const snap = await getDocs(q);
-        const temp = [];
-        for (const docSnap of snap.docs) {
+        const temp = snap.docs.map((docSnap) => {
           const sessData = docSnap.data();
-          
-          // Fetch the exercises subcollection for this session
-          const exSnap = await getDocs(collection(db, 'users', user.uid, 'sessions', docSnap.id, 'exercises'));
-          const exercises = exSnap.docs.map(exDoc => exDoc.data());
-          
           const rawDate = sessData.date;
           let resolvedDate = new Date();
           if (rawDate) {
@@ -96,13 +116,15 @@ export const MobileLogger = () => {
             else if (rawDate.seconds) resolvedDate = new Date(rawDate.seconds * 1000);
             else resolvedDate = new Date(rawDate);
           }
-          temp.push({
+          return {
             id: docSnap.id,
             ...sessData,
             date: resolvedDate,
-            exercises,
-          });
-        }
+            // exercises is intentionally omitted here — fetched lazily on calendar tap
+            exercises: sessData.exercises ?? [], // inline exercises if stored (desktop format)
+            source: sessData.source ?? 'mobile',
+          };
+        });
         setPastSessions(temp);
       } catch (err) {
         console.error('[MobileLogger] Error fetching past sessions:', err);
@@ -396,9 +418,17 @@ export const MobileLogger = () => {
     setLocalError(null);
     setFinishError(null);
     try {
-      const summary = await finishSession(user.uid);
+      const debrief = {
+        pain: debriefPain,
+        easy: debriefEasy,
+        brokenEquipment: debriefBroken,
+      };
+      const summary = await finishSession(user.uid, debrief);
       setIsEndSheetOpen(false);
       setSessionSummary(summary);
+      setDebriefPain([]);
+      setDebriefEasy([]);
+      setDebriefBroken([]);
     } catch (err) {
       const cleanMsg = err.message ? err.message.replace(/\[useWorkoutLogger\]\s*/g, '') : 'Failed to save session.';
       setFinishError(cleanMsg);
@@ -421,10 +451,13 @@ export const MobileLogger = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, finishSession, retryCount]);
+  }, [user, finishSession, retryCount, debriefPain, debriefEasy, debriefBroken]);
 
   const handleDiscard = useCallback(() => {
     resetSession();
+    setDebriefPain([]);
+    setDebriefEasy([]);
+    setDebriefBroken([]);
     setIsEndSheetOpen(false);
     navigate('/home');
   }, [resetSession, navigate]);
@@ -905,6 +938,102 @@ export const MobileLogger = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* AI Coach Debrief Section */}
+                  {completedExercises.length > 0 && (
+                    <div className="bg-[var(--bg-input)] border border-[var(--border)] rounded-2xl p-4 mb-6 max-h-60 overflow-y-auto custom-scrollbar">
+                      <h4 className="font-display font-bold text-xs uppercase tracking-wider text-[var(--primary)] mb-3 flex items-center gap-1.5">
+                        <span>🧠</span> AI Coach Debrief
+                      </h4>
+                      <p className="font-body text-[11px] text-[var(--text-secondary)] mb-4 leading-relaxed">
+                        Flag exercises to customize next week's AI workout plan.
+                      </p>
+
+                      {/* Joint Pain */}
+                      <div className="mb-4">
+                        <span className="block font-body text-[10px] font-bold text-[var(--text-primary)] uppercase tracking-wider mb-2">
+                          💥 Joint Pain / Discomfort?
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {completedExercises.map((ex) => {
+                            const key = ex.exerciseKey || ex.exerciseId || ex.id;
+                            const isSelected = debriefPain.includes(key);
+                            return (
+                              <button
+                                key={`pain-${key}`}
+                                data-testid={`debrief-pain-${key}`}
+                                type="button"
+                                onClick={() => toggleDebriefFlag('pain', key)}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-body transition-colors cursor-pointer select-none ${
+                                  isSelected
+                                    ? 'bg-red-500/20 border-red-500 text-red-400 font-bold'
+                                    : 'bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-bright)]'
+                                }`}
+                              >
+                                {ex.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Too Easy */}
+                      <div className="mb-4">
+                        <span className="block font-body text-[10px] font-bold text-[var(--text-primary)] uppercase tracking-wider mb-2">
+                          ⚡ Too Easy? (Progression Suggested)
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {completedExercises.map((ex) => {
+                            const key = ex.exerciseKey || ex.exerciseId || ex.id;
+                            const isSelected = debriefEasy.includes(key);
+                            return (
+                              <button
+                                key={`easy-${key}`}
+                                data-testid={`debrief-easy-${key}`}
+                                type="button"
+                                onClick={() => toggleDebriefFlag('easy', key)}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-body transition-colors cursor-pointer select-none ${
+                                  isSelected
+                                    ? 'bg-green-500/20 border-green-500 text-green-400 font-bold'
+                                    : 'bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-bright)]'
+                                }`}
+                              >
+                                {ex.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Broken Equipment */}
+                      <div>
+                        <span className="block font-body text-[10px] font-bold text-[var(--text-primary)] uppercase tracking-wider mb-2">
+                          🛠️ Equipment Broken / Unavailable?
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {completedExercises.map((ex) => {
+                            const key = ex.exerciseKey || ex.exerciseId || ex.id;
+                            const isSelected = debriefBroken.includes(key);
+                            return (
+                              <button
+                                key={`broken-${key}`}
+                                data-testid={`debrief-broken-${key}`}
+                                type="button"
+                                onClick={() => toggleDebriefFlag('broken', key)}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-body transition-colors cursor-pointer select-none ${
+                                  isSelected
+                                    ? 'bg-amber-500/20 border-amber-500 text-amber-400 font-bold'
+                                    : 'bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-bright)]'
+                                }`}
+                              >
+                                {ex.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Inline Error Announcement */}
                   {localError && (

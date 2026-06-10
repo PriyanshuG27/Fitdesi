@@ -145,6 +145,202 @@ describe('useOnboarding Hook', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/home', { replace: true });
     });
   });
+
+  describe('toggleMedicalFlag()', () => {
+    it('toggles items in medicalFlags', () => {
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+      expect(result.current.state.medicalFlags).toEqual([]);
+
+      act(() => {
+        result.current.toggleMedicalFlag('bad_knees');
+      });
+      expect(result.current.state.medicalFlags).toEqual(['bad_knees']);
+
+      act(() => {
+        result.current.toggleMedicalFlag('bad_knees');
+      });
+      expect(result.current.state.medicalFlags).toEqual([]);
+    });
+  });
+
+  describe('toggleSupplement()', () => {
+    it('toggles items in currentSupplements', () => {
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+      expect(result.current.state.currentSupplements).toEqual([]);
+
+      act(() => {
+        result.current.toggleSupplement('Creatine');
+      });
+      expect(result.current.state.currentSupplements).toEqual(['Creatine']);
+
+      act(() => {
+        result.current.toggleSupplement('Creatine');
+      });
+      expect(result.current.state.currentSupplements).toEqual([]);
+    });
+  });
+
+  describe('selectAllEquipment()', () => {
+    it('adds all valid equipment to equipmentList', () => {
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+      expect(result.current.state.equipmentList).toEqual([]);
+
+      act(() => {
+        result.current.selectAllEquipment();
+      });
+      expect(result.current.state.equipmentList.length).toBeGreaterThan(10);
+    });
+  });
+
+  describe('advance()', () => {
+    it('fails to advance if step validation fails', async () => {
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+      expect(result.current.currentStep).toBe(0);
+
+      await act(async () => {
+        await result.current.advance();
+      });
+
+      expect(result.current.currentStep).toBe(0);
+      expect(result.current.error).toBe('Please fill out all required fields for this step.');
+    });
+
+    it('advances steps sequentially when data is valid', async () => {
+      mockUpdateDoc.mockResolvedValue(undefined);
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      act(() => {
+        result.current.updateState('userType', 'Beginner');
+      });
+      await act(async () => {
+        await result.current.advance();
+      });
+      expect(result.current.currentStep).toBe(1);
+
+      act(() => {
+        result.current.updateState('gender', 'Male');
+        result.current.updateState('age', '25');
+        result.current.updateState('heightCm', '175');
+        result.current.updateState('weightKg', '70');
+      });
+      await act(async () => {
+        await result.current.advance();
+      });
+      expect(result.current.currentStep).toBe(2);
+    });
+  });
+
+  describe('complete()', () => {
+    it('saves all selections on complete and navigates home', async () => {
+      mockUpdateDoc.mockResolvedValueOnce(undefined);
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      act(() => {
+        result.current.updateState('userType', 'Beginner');
+        result.current.updateState('age', '25');
+        result.current.updateState('gender', 'Male');
+        result.current.updateState('heightCm', '175');
+        result.current.updateState('weightKg', '70');
+        result.current.updateState('goal', 'Muscle Gain');
+        result.current.updateState('workoutFrequency', '3-4');
+        result.current.updateState('sessionDuration', '45');
+        result.current.updateState('dietType', 'Vegetarian');
+      });
+
+      await act(async () => {
+        await result.current.complete();
+      });
+
+      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/home', { replace: true });
+    });
+
+    it('sets error when complete() fails', async () => {
+      mockUpdateDoc.mockRejectedValueOnce(new Error('Firestore write failed'));
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      await act(async () => {
+        await result.current.complete();
+      });
+
+      expect(result.current.error).toBe('Failed to save onboarding selections. Please try again.');
+    });
+  });
+
+  describe('skip() error path', () => {
+    it('sets error when skip() fails', async () => {
+      mockUpdateDoc.mockRejectedValueOnce(new Error('Firestore write failed'));
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      await act(async () => {
+        await result.current.skip();
+      });
+
+      expect(result.current.error).toBe('Failed to skip onboarding. Please try again.');
+    });
+  });
+
+  describe('advance() comprehensive sequential steps and error handling', () => {
+    it('advances all steps from 0 to 5 and then navigates to home', async () => {
+      mockUpdateDoc.mockResolvedValue(undefined);
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      // Step 0: UserType
+      expect(result.current.currentStep).toBe(0);
+      act(() => { result.current.updateState('userType', 'Comeback'); });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(1);
+
+      // Step 1: Body info
+      act(() => {
+        result.current.updateState('gender', 'Female');
+        result.current.updateState('age', '30');
+        result.current.updateState('heightCm', '165');
+        result.current.updateState('weightKg', '60');
+      });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(2);
+
+      // Step 2: Goal
+      act(() => { result.current.updateState('goal', 'Fat Loss'); });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(3);
+
+      // Step 3: Gym Frequency, Duration & Equipment
+      act(() => {
+        result.current.updateState('workoutFrequency', '2-3');
+        result.current.updateState('sessionDuration', '60');
+        result.current.toggleEquipment('Barbell');
+      });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(4);
+
+      // Step 4: Diet
+      act(() => { result.current.updateState('dietType', 'Vegan'); });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(5);
+
+      // Step 5: Medical Flags (final step)
+      act(() => { result.current.updateState('medicalFlags', ['bad_knees']); });
+      await act(async () => { await result.current.advance(); });
+
+      // Navigated to /home
+      expect(mockNavigate).toHaveBeenCalledWith('/home', { replace: true });
+    });
+
+    it('sets error when updateDoc fails during advance()', async () => {
+      mockUpdateDoc.mockRejectedValueOnce(new Error('Firestore write failed'));
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      act(() => { result.current.updateState('userType', 'Comeback'); });
+      await act(async () => {
+        await result.current.advance();
+      });
+
+      expect(result.current.currentStep).toBe(0);
+      expect(result.current.error).toBe('Failed to save data. Please check your connection and try again.');
+    });
+  });
 });
 
 describe('firestoreUtils Writes', () => {

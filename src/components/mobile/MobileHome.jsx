@@ -190,34 +190,57 @@ export const MobileHome = () => {
       (profile.powerUps.planRefresh || 0)
     : 0;
 
+  const [isActivatingPowerUp, setIsActivatingPowerUp] = useState(false);
+
   const handleUsePowerUp = async (powerUpKey) => {
-    if (!uid || !profile?.powerUps) return;
+    if (!uid || !profile?.powerUps || isActivatingPowerUp) return;
     const currentCount = profile.powerUps[powerUpKey] || 0;
     if (currentCount <= 0) return;
 
+    setIsActivatingPowerUp(true);
     try {
       const userRef = doc(db, 'users', uid);
-      const activeUntil = Date.now() + 2 * 60 * 60 * 1000;
-      
+
+      // Only write xpBoosterUntil when activating the XP Booster specifically.
+      // Bug fix: previously ALL power-ups wrote xpBoosterUntil, silently activating
+      // the XP Booster whenever a Streak Shield, Plan Refresh, or Challenge Skip was used.
+      const extraFields = {};
+      let toastMsg = '';
+      if (powerUpKey === 'xpBooster') {
+        const activeUntil = Date.now() + 2 * 60 * 60 * 1000;
+        extraFields.xpBoosterUntil = activeUntil;
+        toastMsg = '⚡ XP Booster activated! Double XP for the next 2 hours!';
+      } else if (powerUpKey === 'streakShield') {
+        toastMsg = '🛡️ Streak Shield activated! Your streak is protected for tonight.';
+      } else if (powerUpKey === 'planRefresh') {
+        toastMsg = '🔄 Plan Refresh activated! Your weekly plan will be regenerated.';
+      } else if (powerUpKey === 'challengeSkip') {
+        toastMsg = '⏭️ Challenge Skip activated! Today\'s challenge step is skipped.';
+      } else {
+        toastMsg = '✅ Power-up activated!';
+      }
+
       await updateDoc(userRef, {
         [`powerUps.${powerUpKey}`]: currentCount - 1,
-        xpBoosterUntil: activeUntil
+        ...extraFields,
       });
-      
+
       useAuthStore.getState().setProfile({
         ...profile,
         powerUps: {
           ...profile.powerUps,
           [powerUpKey]: currentCount - 1
         },
-        xpBoosterUntil: activeUntil
+        ...extraFields,
       });
 
-      addToast(`⚡ XP Booster activated! Double XP for the next 2 hours!`, 'success');
+      addToast(toastMsg, 'success');
       setShowInventory(false);
     } catch (err) {
       console.error('Error using power up:', err);
       addToast('Failed to activate power-up. Try again.', 'error');
+    } finally {
+      setIsActivatingPowerUp(false);
     }
   };
 
@@ -317,8 +340,8 @@ export const MobileHome = () => {
           </div>
           <div className="flex gap-3 items-center">
             {/* App Icon */}
-            <div className="w-12 h-12 bg-[var(--primary)] text-black rounded-2xl border-2 border-black flex items-center justify-center font-display font-black text-xl shadow-[2px_2px_0px_rgba(0,0,0,0.2)] shrink-0 select-none">
-              FD
+            <div className="w-12 h-12 bg-black rounded-2xl border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_rgba(0,0,0,0.2)] shrink-0 select-none overflow-hidden">
+              <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
             </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-sm uppercase tracking-wide">

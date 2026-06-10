@@ -94,25 +94,42 @@ export const MobileProfile = () => {
         ? editGymName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_+|_+$)/g, '')
         : '';
       
-      await updateDoc(userRef, {
+      const oldGymId = profile.gymId || '';
+      let lookingForSquad = profile.lookingForSquad;
+      if (!computedGymId) {
+        lookingForSquad = false;
+      } else if (computedGymId !== oldGymId || lookingForSquad === undefined) {
+        lookingForSquad = true;
+      }
+
+      const updates = {
         equipmentList: editEquipment,
         medicalFlags: editMedicalFlags,
         gymName: editGymName.trim(),
         gymId: computedGymId,
         disableRestTimer: editDisableRestTimer,
-      });
+        lookingForSquad,
+      };
+
+      await updateDoc(userRef, updates);
 
       // Update local profile state
       useAuthStore.setState({
         profile: {
           ...profile,
-          equipmentList: editEquipment,
-          medicalFlags: editMedicalFlags,
-          gymName: editGymName.trim(),
-          gymId: computedGymId,
-          disableRestTimer: editDisableRestTimer,
+          ...updates
         }
       });
+
+      // Sync public squad_codes document
+      if (profile.squadCode) {
+        const codeRef = doc(db, 'squad_codes', profile.squadCode);
+        await updateDoc(codeRef, {
+          gymId: computedGymId,
+          gymName: editGymName.trim(),
+          lookingForSquad
+        }).catch(err => console.warn('[MobileProfile] Failed to update squad code doc:', err));
+      }
 
       addToast('Profile updated successfully!', 'success');
       setIsEditModalOpen(false);

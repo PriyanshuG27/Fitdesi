@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Users, Zap, Plus, Trash2, Search, CheckCircle, ShieldAlert, LogOut, Copy, Award, Key, Calendar, Vote, Bell, BellOff, TrendingUp, AlertTriangle, MessageSquare, Sliders, Flame } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, Zap, Plus, Trash2, Search, CheckCircle, ShieldAlert, LogOut, Copy, Award, Key, Calendar, Vote, Bell, BellOff, TrendingUp, AlertTriangle, MessageSquare, Sliders, Flame, ExternalLink } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, limit, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -12,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 
 export const SquadMatchmaker = () => {
+  const navigate = useNavigate();
   const { uid, profile } = useAuthStore();
   const { setSquadData } = useSquadStore();
 
@@ -52,29 +54,37 @@ export const SquadMatchmaker = () => {
   // Notifications
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Consent-based draft states
+  const [realFreeAgents, setRealFreeAgents] = useState([]);
+  const [sentInvites, setSentInvites] = useState([]);
+  const [incomingInvites, setIncomingInvites] = useState([]);
+
   // 1. Initialise & Sync Squad Code for current user
+  // Uses profile from useAuthStore (synced by App.jsx onSnapshot) — no extra getDoc.
   useEffect(() => {
     if (!uid || !profile) return;
     
     const syncMySquadCode = async () => {
       try {
         const userRef = doc(db, 'users', uid);
-        const userSnap = await getDoc(userRef);
-        let code = '';
+        let code = profile.squadCode || '';
+        let lookingForSquad = profile.lookingForSquad;
         
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          code = userData.squadCode;
+        // Only write if lookingForSquad is missing from profile
+        if (lookingForSquad === undefined) {
+          lookingForSquad = !!profile.gymId;
+          await setDoc(userRef, { lookingForSquad }, { merge: true });
+          useAuthStore.setState({
+            profile: { ...profile, lookingForSquad }
+          });
         }
         
         if (!code) {
           // Generate new squad code: FIT- + clean first 4 chars of name + 3 random digits
           const cleanName = (profile.name || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
           const padName = cleanName.padEnd(4, 'X');
-          const randomDigits = Math.floor(100 + Math.random() * 900); // 3 digits
+          const randomDigits = Math.floor(100 + Math.random() * 900);
           code = `FIT-${padName}${randomDigits}`;
-          
-          // Save code to user profile
           await setDoc(userRef, { squadCode: code }, { merge: true });
         }
         
@@ -95,6 +105,21 @@ export const SquadMatchmaker = () => {
         sessionsSnap.forEach((docSnap) => {
           calculatedWeeklyVolume += docSnap.data().totalVolume || 0;
         });
+
+        // Calculate 14-day consistency
+        const fourteenDaysAgo = new Date(today);
+        fourteenDaysAgo.setDate(today.getDate() - 14);
+        const consQ = query(sessionsRef, where('date', '>=', fourteenDaysAgo), limit(20));
+        const consSnap = await getDocs(consQ);
+        const consistency = Math.min(100, Math.round((consSnap.size / 6) * 100));
+
+        // Fetch PRs (only 2 specific docs, not a collection scan)
+        const benchRef = doc(db, 'users', uid, 'prs', 'barbell_bench_press');
+        const squatRef = doc(db, 'users', uid, 'prs', 'barbell_squat');
+        const [benchSnap, squatSnap] = await Promise.all([getDoc(benchRef), getDoc(squatRef)]);
+        
+        const benchPR = benchSnap.exists() ? (parseFloat(benchSnap.data().weight) || 0) : 0;
+        const squatPR = squatSnap.exists() ? (parseFloat(squatSnap.data().weight) || 0) : 0;
         
         // Sync public squad_codes document with latest stats
         const codeRef = doc(db, 'squad_codes', code);
@@ -108,7 +133,14 @@ export const SquadMatchmaker = () => {
           squadCode: code,
           badges: profile.badges || [],
           powerUps: profile.powerUps || {},
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          lookingForSquad: lookingForSquad !== undefined ? lookingForSquad : false,
+          gymId: profile.gymId || '',
+          gymName: profile.gymName || '',
+          benchPR,
+          squatPR,
+          consistency,
+          goal: profile.goal || 'Fitness'
         }, { merge: true });
         
       } catch (err) {
@@ -117,7 +149,8 @@ export const SquadMatchmaker = () => {
     };
     
     syncMySquadCode();
-  }, [uid, profile]);
+  }, [uid, profile?.squadCode, profile?.lookingForSquad]); // Only re-run when these specific fields change
+
 
   // 2. Real-time query for joined squads
   useEffect(() => {
@@ -276,6 +309,106 @@ export const SquadMatchmaker = () => {
       unsubPolls();
     };
   }, [activeSquadCode, uid]);
+
+  // 3c. Query real free agents at the same gym
+  useEffect(() => {
+    if (!uid || activeTab !== 'draft') return;
+
+    const gymIdToQuery = profile?.gymId || '';
+    if (!gymIdToQuery) {
+      setRealFreeAgents([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'squad_codes'),
+      where('lookingForSquad', '==', true),
+      where('gymId', '==', gymIdToQuery)
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const agents = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.uid !== uid) {
+          agents.push({
+            uid: data.uid,
+            name: data.name,
+            squadCode: data.squadCode,
+            consistency: data.consistency || 0,
+            squatPR: data.squatPR || 0,
+            benchPR: data.benchPR || 0,
+            goal: data.goal || 'Fitness',
+            streak: data.streak || 0,
+            attributes: [
+              { subject: 'Strength', A: Math.min(100, Math.round(((data.benchPR || 0) + (data.squatPR || 0)) / 3)), B: 100, fullMark: 100 },
+              { subject: 'Volume', A: Math.min(100, Math.round((data.volume || 0) / 100)), B: 100, fullMark: 100 },
+              { subject: 'Consistency', A: data.consistency || 0, B: 100, fullMark: 100 },
+              { subject: 'Level', A: Math.min(100, (data.level || 1) * 5), B: 100, fullMark: 100 },
+              { subject: 'Streak', A: Math.min(100, (data.streak || 0) * 5), B: 100, fullMark: 100 }
+            ]
+          });
+        }
+      });
+      setRealFreeAgents(agents);
+    }, (err) => {
+      console.error('[SquadMatchmaker] Free agents sync failed:', err);
+    });
+
+    return () => unsubscribe();
+  }, [uid, activeTab, profile?.gymId]);
+
+  // 3d. Query sent invites for active squad
+  useEffect(() => {
+    if (!uid || !activeSquadCode) {
+      setSentInvites([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'squad_invites'),
+      where('squadCode', '==', activeSquadCode),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const list = [];
+      snap.forEach((docSnap) => {
+        list.push(docSnap.data().inviteeUid);
+      });
+      setSentInvites(list);
+    }, (err) => {
+      console.error('[SquadMatchmaker] Sent invites sync failed:', err);
+    });
+
+    return () => unsubscribe();
+  }, [uid, activeSquadCode]);
+
+  // 3e. Query incoming invites for current user
+  useEffect(() => {
+    if (!uid) {
+      setIncomingInvites([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'squad_invites'),
+      where('inviteeUid', '==', uid),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const list = [];
+      snap.forEach((docSnap) => {
+        list.push(docSnap.data());
+      });
+      setIncomingInvites(list);
+    }, (err) => {
+      console.error('[SquadMatchmaker] Incoming invites sync failed:', err);
+    });
+
+    return () => unsubscribe();
+  }, [uid]);
 
   // 4. Sync active squad data with global useSquadStore
   useEffect(() => {
@@ -704,49 +837,8 @@ export const SquadMatchmaker = () => {
     });
   }, [activeSquadMembers, uid]);
 
-  // Moneyball Draft Room list of simulated free agents
-  const freeAgentsList = useMemo(() => {
-    return [
-      { uid: 'fa-rohan', name: "Rohan 'Quadzilla' Sharma", squadCode: 'FIT-ROHA491', consistency: 92, squatPR: 180, benchPR: 120, goal: 'Strength', streak: 12, attributes: [
-        { subject: 'Strength', A: 90, B: 100, fullMark: 100 },
-        { subject: 'Volume', A: 85, B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: 92, B: 100, fullMark: 100 },
-        { subject: 'Level', A: 75, B: 100, fullMark: 100 },
-        { subject: 'Streak', A: 60, B: 100, fullMark: 100 }
-      ]},
-      { uid: 'fa-aarav', name: "Aarav 'LatLord' Patel", squadCode: 'FIT-AARA212', consistency: 88, squatPR: 140, benchPR: 110, goal: 'Hypertrophy', streak: 8, attributes: [
-        { subject: 'Strength', A: 75, B: 100, fullMark: 100 },
-        { subject: 'Volume', A: 90, B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: 88, B: 100, fullMark: 100 },
-        { subject: 'Level', A: 70, B: 100, fullMark: 100 },
-        { subject: 'Streak', A: 50, B: 100, fullMark: 100 }
-      ]},
-      { uid: 'fa-kabir', name: "Kabir 'BenchBeast' Mehta", squadCode: 'FIT-KABI893', consistency: 95, squatPR: 130, benchPR: 145, goal: 'Powerlifting', streak: 15, attributes: [
-        { subject: 'Strength', A: 95, B: 100, fullMark: 100 },
-        { subject: 'Volume', A: 80, B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: 95, B: 100, fullMark: 100 },
-        { subject: 'Level', A: 85, B: 100, fullMark: 100 },
-        { subject: 'Streak', A: 75, B: 100, fullMark: 100 }
-      ]},
-      { uid: 'fa-ishaan', name: "Ishaan 'Flex' Verma", squadCode: 'FIT-ISHA301', consistency: 64, squatPR: 100, benchPR: 80, goal: 'Weight Loss', streak: 2, attributes: [
-        { subject: 'Strength', A: 50, B: 100, fullMark: 100 },
-        { subject: 'Volume', A: 40, B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: 64, B: 100, fullMark: 100 },
-        { subject: 'Level', A: 30, B: 100, fullMark: 100 },
-        { subject: 'Streak', A: 20, B: 100, fullMark: 100 }
-      ]},
-      { uid: 'fa-siddharth', name: "Siddharth 'Iron' Sen", squadCode: 'FIT-SIDD774', consistency: 78, squatPR: 150, benchPR: 95, goal: 'Muscle Gain', streak: 5, attributes: [
-        { subject: 'Strength', A: 80, B: 100, fullMark: 100 },
-        { subject: 'Volume', A: 70, B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: 78, B: 100, fullMark: 100 },
-        { subject: 'Level', A: 60, B: 100, fullMark: 100 },
-        { subject: 'Streak', A: 45, B: 100, fullMark: 100 }
-      ]}
-    ];
-  }, []);
-
   const sortedFreeAgents = useMemo(() => {
-    return [...freeAgentsList].sort((a, b) => {
+    return [...realFreeAgents].sort((a, b) => {
       let valA = a[sortField];
       let valB = b[sortField];
       if (typeof valA === 'string') {
@@ -754,7 +846,7 @@ export const SquadMatchmaker = () => {
       }
       return sortAsc ? valA - valB : valB - valA;
     });
-  }, [freeAgentsList, sortField, sortAsc]);
+  }, [realFreeAgents, sortField, sortAsc]);
 
   const handleDraftAgent = async (agent) => {
     if (!activeSquad) return;
@@ -768,22 +860,19 @@ export const SquadMatchmaker = () => {
     }
 
     try {
-      const docRef = doc(db, 'shared_squads', activeSquad.squadCode);
-      const newMember = {
-        uid: agent.uid,
-        name: agent.name,
-        squadCode: agent.squadCode,
-        joinedAt: new Date()
-      };
-
-      const updatedSquad = {
-        ...activeSquad,
-        memberUids: [...activeSquad.memberUids, agent.uid],
-        members: [...activeSquad.members, newMember]
-      };
-
-      await setDoc(docRef, updatedSquad, { merge: true });
-      setSuccessMsg(`Draft Successful! ${agent.name} has joined the squad!`);
+      const inviteId = `${activeSquad.squadCode}_${agent.uid}`;
+      const inviteRef = doc(db, 'squad_invites', inviteId);
+      await setDoc(inviteRef, {
+        inviteId,
+        squadCode: activeSquad.squadCode,
+        squadName: activeSquad.squadName,
+        inviterUid: uid,
+        inviterName: profile?.name || 'Anonymous Bro',
+        inviteeUid: agent.uid,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      setSuccessMsg(`Draft Invite Sent to ${agent.name}!`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Draft failed:', err);
@@ -801,27 +890,151 @@ export const SquadMatchmaker = () => {
       const remainingMembers = activeSquad.members.filter(m => m.uid !== tradeTargetUid);
       const remainingUids = activeSquad.memberUids.filter(id => id !== tradeTargetUid);
 
-      const newMember = {
-        uid: selectedAgent.uid,
-        name: selectedAgent.name,
-        squadCode: selectedAgent.squadCode,
-        joinedAt: new Date()
-      };
+      // Remove teammate
+      await setDoc(docRef, {
+        memberUids: remainingUids,
+        members: remainingMembers
+      }, { merge: true });
 
-      const updatedSquad = {
-        ...activeSquad,
-        memberUids: [...remainingUids, selectedAgent.uid],
-        members: [...remainingMembers, newMember]
-      };
+      // Send invite
+      const inviteId = `${activeSquad.squadCode}_${selectedAgent.uid}`;
+      const inviteRef = doc(db, 'squad_invites', inviteId);
+      await setDoc(inviteRef, {
+        inviteId,
+        squadCode: activeSquad.squadCode,
+        squadName: activeSquad.squadName,
+        inviterUid: uid,
+        inviterName: profile?.name || 'Anonymous Bro',
+        inviteeUid: selectedAgent.uid,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
 
-      await setDoc(docRef, updatedSquad, { merge: true });
       setTradeModalOpen(false);
-      setSuccessMsg(`Trade Executed! Released ${targetMemberName} and drafted ${selectedAgent.name}!`);
+      setSelectedAgent(null);
+      setSuccessMsg(`Released ${targetMemberName} and sent invite to ${selectedAgent.name}!`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Trade failed:', err);
       alert('Trade execution failed.');
     }
+  };
+
+  const handleAcceptInvite = async (invite) => {
+    try {
+      const squadRef = doc(db, 'shared_squads', invite.squadCode);
+      const squadSnap = await getDoc(squadRef);
+      if (!squadSnap.exists()) {
+        alert('Squad no longer exists.');
+        return;
+      }
+      const squadData = squadSnap.data();
+      if (squadData.members.length >= squadData.memberLimit) {
+        alert('Squad is full!');
+        return;
+      }
+
+      const newMember = {
+        uid,
+        name: `${profile?.name || 'Priyanshu'} (You)`,
+        squadCode: mySquadCode,
+        joinedAt: new Date()
+      };
+
+      const updatedSquad = {
+        ...squadData,
+        memberUids: [...(squadData.memberUids || []), uid],
+        members: [...(squadData.members || []), newMember]
+      };
+
+      await setDoc(squadRef, updatedSquad, { merge: true });
+
+      const inviteRef = doc(db, 'squad_invites', invite.inviteId);
+      await setDoc(inviteRef, { status: 'accepted' }, { merge: true });
+
+      setSuccessMsg(`Joined squad "${squadData.squadName}"!`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setActiveSquadCode(invite.squadCode);
+    } catch (err) {
+      console.error('[SquadMatchmaker] Accept invite failed:', err);
+      alert('Failed to accept invite.');
+    }
+  };
+
+  const handleDeclineInvite = async (invite) => {
+    try {
+      const inviteRef = doc(db, 'squad_invites', invite.inviteId);
+      await setDoc(inviteRef, { status: 'declined' }, { merge: true });
+      setSuccessMsg('Invitation declined.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      console.error('[SquadMatchmaker] Decline invite failed:', err);
+    }
+  };
+
+  const handleDeclineAndMuteInvite = async (invite) => {
+    try {
+      const inviteRef = doc(db, 'squad_invites', invite.inviteId);
+      await setDoc(inviteRef, { status: 'declined' }, { merge: true });
+
+      const userRef = doc(db, 'users', uid);
+      await setDoc(userRef, { lookingForSquad: false }, { merge: true });
+
+      useAuthStore.setState({
+        profile: {
+          ...profile,
+          lookingForSquad: false
+        }
+      });
+
+      if (mySquadCode) {
+        const codeRef = doc(db, 'squad_codes', mySquadCode);
+        await setDoc(codeRef, { lookingForSquad: false }, { merge: true });
+      }
+
+      setSuccessMsg('Invite declined and Free Agent registry turned off.');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error('[SquadMatchmaker] Decline and mute failed:', err);
+      alert('Failed to decline invite.');
+    }
+  };
+
+  const handleToggleLookingForSquad = async () => {
+    if (!uid || !profile) return;
+    const currentStatus = profile.lookingForSquad;
+    const newStatus = !currentStatus;
+
+    try {
+      const userRef = doc(db, 'users', uid);
+      await setDoc(userRef, { lookingForSquad: newStatus }, { merge: true });
+
+      useAuthStore.setState({
+        profile: {
+          ...profile,
+          lookingForSquad: newStatus
+        }
+      });
+
+      if (mySquadCode) {
+        const codeRef = doc(db, 'squad_codes', mySquadCode);
+        await setDoc(codeRef, { lookingForSquad: newStatus }, { merge: true });
+      }
+
+      setSuccessMsg(newStatus ? 'Registered as Free Agent!' : 'Unregistered from Free Agent list.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      console.error('[SquadMatchmaker] Failed to toggle lookingForSquad:', err);
+      alert('Failed to update status.');
+    }
+  };
+
+  const isAgentInSquad = (agentUid) => {
+    return activeSquad?.memberUids?.includes(agentUid);
+  };
+
+  const isAgentInvitePending = (agentUid) => {
+    return sentInvites.includes(agentUid);
   };
 
   return (
@@ -873,6 +1086,65 @@ export const SquadMatchmaker = () => {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
+
+          {/* Incoming Invites Panel */}
+          {incomingInvites.length > 0 && (
+            <div className="border-2 border-black bg-yellow-950/20 p-4 rounded-xl shadow-[3px_3px_0px_black] flex flex-col gap-3 border-yellow-500 text-left">
+              <span className="font-display font-black text-xs text-yellow-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Bell size={14} className="text-yellow-500 animate-bounce" />
+                <span>Pending Squad Invitations ({incomingInvites.length})</span>
+              </span>
+              {/* No gym configured warning inside invite panel */}
+              {!profile?.gymId && (
+                <div className="border border-orange-500/40 bg-orange-950/20 p-2.5 rounded-lg flex items-center justify-between gap-3 text-xs font-mono">
+                  <span className="text-orange-400 flex items-center gap-1.5">
+                    <AlertTriangle size={12} className="shrink-0" />
+                    You need a Home Gym set to accept squad invites.
+                  </span>
+                  <button
+                    onClick={() => navigate('/profile')}
+                    className="shrink-0 flex items-center gap-1 bg-orange-500 hover:bg-orange-400 text-black font-display font-black text-[10px] px-3 py-1.5 border border-black rounded shadow-[1.5px_1.5px_0px_black] uppercase cursor-pointer transition-all"
+                  >
+                    <ExternalLink size={10} />
+                    Set Up Gym
+                  </button>
+                </div>
+              )}
+              <div className="flex flex-col gap-2.5">
+                {incomingInvites.map((invite) => (
+                  <div key={invite.inviteId} className="border border-yellow-500/30 bg-black/40 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs font-mono text-white">
+                    <div className="flex flex-col text-left">
+                      <span><strong>{invite.inviterName}</strong> invited you to join <strong>{invite.squadName}</strong></span>
+                      <span className="text-[9px] text-neutral-500 uppercase mt-0.5">Code: {invite.squadCode}</span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleAcceptInvite(invite)}
+                        disabled={!profile?.gymId}
+                        title={!profile?.gymId ? 'Configure your Home Gym first' : ''}
+                        className="bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-black font-display font-black text-[10px] px-3 py-1.5 border border-black rounded shadow-[1.5px_1.5px_0px_black] uppercase cursor-pointer transition-all"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleDeclineInvite(invite)}
+                        className="bg-red-500 hover:bg-red-600 text-black font-display font-black text-[10px] px-3 py-1.5 border border-black rounded shadow-[1.5px_1.5px_0px_black] uppercase cursor-pointer transition-all"
+                      >
+                        Decline
+                      </button>
+                      <button
+                        onClick={() => handleDeclineAndMuteInvite(invite)}
+                        className="bg-neutral-800 hover:bg-neutral-700 text-white font-display font-black text-[10px] px-3 py-1.5 border border-black rounded shadow-[1.5px_1.5px_0px_black] uppercase cursor-pointer transition-all"
+                        title="Decline invite and opt out from Free Agent registry"
+                      >
+                        Decline & Turn Off Invites
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* Roster Switcher Dropdown */}
           {joinedSquads.length > 0 && (
@@ -1605,6 +1877,47 @@ export const SquadMatchmaker = () => {
                       </span>
                     </div>
 
+                    {/* Free Agent Opt-In Registry / Home Gym Warning */}
+                    {!profile?.gymId ? (
+                      <div className="border border-red-500/30 bg-red-950/20 p-3 rounded-lg flex items-start justify-between gap-3 text-xs font-mono text-red-500">
+                        <div className="flex items-start gap-2.5">
+                          <AlertTriangle className="shrink-0 text-red-500 mt-0.5" size={16} />
+                          <div className="flex flex-col text-left">
+                            <span className="font-bold uppercase">Gym Configuration Required</span>
+                            <span className="text-[10px] text-neutral-400 font-sans mt-0.5 leading-relaxed">
+                              Set your Home Gym in your Profile to register as a Free Agent and appear in the Scouting Matrix.
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => navigate('/profile')}
+                          className="shrink-0 flex items-center gap-1.5 bg-red-500 hover:bg-red-400 text-black font-display font-black text-[10px] px-3 py-1.5 border border-black rounded shadow-[1.5px_1.5px_0px_black] uppercase cursor-pointer transition-all"
+                        >
+                          <ExternalLink size={10} />
+                          Go to Profile
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-black/30 p-3.5 rounded-lg border border-neutral-900 text-xs font-mono text-white">
+                        <div className="flex flex-col text-left">
+                          <span className="font-bold">Register as Free Agent (Open to Squad Invites)</span>
+                          <span className="text-[9px] text-neutral-500 mt-0.5">
+                            Currently matching with other lifters at <strong className="text-white">{profile.gymName || 'your gym'}</strong>.
+                          </span>
+                        </div>
+                        <button
+                          onClick={handleToggleLookingForSquad}
+                          className={`px-3.5 py-1.5 border border-black rounded shadow-[2px_2px_0px_black] uppercase font-bold transition-all cursor-pointer ${
+                            profile.lookingForSquad
+                              ? 'bg-[var(--secondary)] text-black font-black hover:brightness-110'
+                              : 'bg-neutral-800 text-white hover:bg-neutral-700'
+                          }`}
+                        >
+                          {profile.lookingForSquad ? 'ON (Looking for Squad)' : 'OFF (Not looking)'}
+                        </button>
+                      </div>
+                    )}
+
                     {/* Sorting Controls */}
                     <div className="flex flex-wrap gap-2.5 items-center bg-black/30 p-3 rounded-lg border border-neutral-900 text-xs font-mono">
                       <span className="text-neutral-500 uppercase text-[9px] font-extrabold">Sort Matrix:</span>
@@ -1646,30 +1959,56 @@ export const SquadMatchmaker = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedFreeAgents.map((agent) => (
-                            <tr key={agent.uid} className="border-b border-[#222] hover:bg-black/30 transition-all">
-                              <td className="py-3.5 px-3 text-white font-bold">{agent.name}</td>
-                              <td className="py-3.5 px-3 text-[var(--accent-xp)] font-bold">{agent.consistency}%</td>
-                              <td className="py-3.5 px-3">{agent.squatPR} kg</td>
-                              <td className="py-3.5 px-3">{agent.benchPR} kg</td>
-                              <td className="py-3.5 px-3 uppercase text-[10px]">{agent.goal}</td>
-                              <td className="py-3.5 px-3 font-bold">{agent.streak} Days</td>
-                              <td className="py-3.5 px-3 text-right flex justify-end gap-2.5">
-                                <button
-                                  onClick={() => setSelectedAgent(agent)}
-                                  className="px-3 py-1 bg-black hover:bg-neutral-900 border-2 border-black text-[10px] text-white font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] transition-all cursor-pointer"
-                                >
-                                  Scout
-                                </button>
-                                <button
-                                  onClick={() => handleDraftAgent(agent)}
-                                  className="px-3 py-1 bg-[var(--primary)] hover:brightness-110 border-2 border-black text-[10px] text-black font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] transition-all cursor-pointer"
-                                >
-                                  Draft
-                                </button>
+                          {sortedFreeAgents.length === 0 ? (
+                            <tr>
+                              <td colSpan="7" className="py-8 text-center text-neutral-500 font-sans text-xs italic">
+                                {!profile?.gymId 
+                                  ? "Please set your Home Gym in your profile to scout lifters." 
+                                  : "No other free agents found at your gym right now."}
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            sortedFreeAgents.map((agent) => (
+                              <tr key={agent.uid} className="border-b border-[#222] hover:bg-black/30 transition-all">
+                                <td className="py-3.5 px-3 text-white font-bold">{agent.name}</td>
+                                <td className="py-3.5 px-3 text-[var(--accent-xp)] font-bold">{agent.consistency}%</td>
+                                <td className="py-3.5 px-3">{agent.squatPR} kg</td>
+                                <td className="py-3.5 px-3">{agent.benchPR} kg</td>
+                                <td className="py-3.5 px-3 uppercase text-[10px]">{agent.goal}</td>
+                                <td className="py-3.5 px-3 font-bold">{agent.streak} Days</td>
+                                <td className="py-3.5 px-3 text-right flex justify-end gap-2.5">
+                                  <button
+                                    onClick={() => setSelectedAgent(agent)}
+                                    className="px-3 py-1 bg-black hover:bg-neutral-900 border-2 border-black text-[10px] text-white font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] transition-all cursor-pointer"
+                                  >
+                                    Scout
+                                  </button>
+                                  {isAgentInSquad(agent.uid) ? (
+                                    <button
+                                      disabled
+                                      className="px-3 py-1 bg-neutral-800 border-2 border-black text-[10px] text-neutral-500 font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] cursor-not-allowed"
+                                    >
+                                      Member
+                                    </button>
+                                  ) : isAgentInvitePending(agent.uid) ? (
+                                    <button
+                                      disabled
+                                      className="px-3 py-1 bg-neutral-900 border-2 border-black text-[10px] text-neutral-500 font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] cursor-not-allowed"
+                                    >
+                                      Pending Invite
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleDraftAgent(agent)}
+                                      className="px-3 py-1 bg-[var(--primary)] hover:brightness-110 border-2 border-black text-[10px] text-black font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] transition-all cursor-pointer"
+                                    >
+                                      Draft
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -1722,12 +2061,28 @@ export const SquadMatchmaker = () => {
                             >
                               Close
                             </button>
-                            <button
-                              onClick={() => handleDraftAgent(selectedAgent)}
-                              className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-[var(--primary)] hover:brightness-110 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                            >
-                              Draft Agent
-                            </button>
+                            {isAgentInSquad(selectedAgent.uid) ? (
+                              <button
+                                disabled
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-neutral-500 bg-neutral-800 rounded shadow-[2px_2px_0px_black] uppercase cursor-not-allowed"
+                              >
+                                Member
+                              </button>
+                            ) : isAgentInvitePending(selectedAgent.uid) ? (
+                              <button
+                                disabled
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-neutral-500 bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-not-allowed"
+                              >
+                                Pending Invite
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleDraftAgent(selectedAgent)}
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-[var(--primary)] hover:brightness-110 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
+                              >
+                                Draft Agent
+                              </button>
+                            )}
                           </div>
                         </motion.div>
                       </div>

@@ -137,3 +137,51 @@ describe('Routing — Redirect state preservation', () => {
     expect(screen.queryByText('Home Page')).not.toBeInTheDocument();
   });
 });
+
+describe('GuestRoute — Loading state', () => {
+  beforeEach(resetAll);
+
+  it('renders spinner when loading is true', () => {
+    useAuthStore.setState({ user: null, loading: true });
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <GuestRoute>
+                <div data-testid="login-form">Login Form</div>
+              </GuestRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Hydrating Session...')).toBeInTheDocument();
+    expect(screen.queryByTestId('login-form')).not.toBeInTheDocument();
+  });
+
+  it('renders children when user is null and loading is false', () => {
+    useAuthStore.setState({ user: null, loading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <GuestRoute>
+                <div data-testid="login-form">Login Form</div>
+              </GuestRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('login-form')).toBeInTheDocument();
+    expect(screen.getByText('Login Form')).toBeInTheDocument();
+  });
+});

@@ -12,12 +12,12 @@ export const LandingPage = () => {
 
       {/* Header */}
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 flex justify-between items-center border-b border-border-base/40">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded bg-primary flex items-center justify-center font-display font-extrabold text-xl text-white tracking-tighter">
-            FD
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded bg-black border border-border-base flex items-center justify-center overflow-hidden shrink-0">
+            <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
           </div>
           <span className="font-display text-2xl font-bold tracking-wider text-text-primary">
-            FIT<span className="text-primary">DESI</span>
+            ZENKAI
           </span>
         </div>
         <Link 

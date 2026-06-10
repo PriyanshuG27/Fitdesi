@@ -3,16 +3,28 @@ import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { updatePR } from '../lib/firestoreUtils';
 
-// Cache to store PR values for the session duration
-const prCache = new Map();
-
 /**
  * usePRDetection Hook
  * Called when a set is marked done. Checks if the weight/reps is a new PR for that exercise.
- * 
+ *
+ * PRIVACY FIX: Cache is now scoped per (uid, exerciseKey) so that if a user logs out
+ * and a different user logs in on the same browser, they never see the previous user's cached PRs.
+ *
  * Returns checkForPR function:
  *   checkForPR(uid, exerciseKey, weight, reps) -> Promise<{ isPR: boolean, prevPR: object | null }>
  */
+
+// Key: `${uid}:${exerciseKey}` — scoped per user session to prevent cross-user cache leakage
+const prCache = new Map();
+
+/**
+ * Call this on logout to clear the per-user PR cache.
+ * Prevents user A's PRs from appearing in user B's session.
+ */
+export function clearPRCache() {
+  prCache.clear();
+}
+
 export function usePRDetection() {
   const checkForPR = useCallback(async (uid, exerciseKey, weight, reps) => {
     if (!uid || !exerciseKey) {
@@ -24,12 +36,15 @@ export function usePRDetection() {
     const newWeight = weight === 'BW' ? 0 : (parseFloat(weight) || 0);
     const newReps = parseInt(reps, 10) || 0;
 
+    // Cache key is uid-scoped — prevents cross-user data bleed
+    const cacheKey = `${uid}:${exerciseKey}`;
+
     try {
       let existing = null;
 
-      if (prCache.has(exerciseKey)) {
+      if (prCache.has(cacheKey)) {
         // Read from cache if it exists
-        existing = prCache.get(exerciseKey);
+        existing = prCache.get(cacheKey);
       } else {
         // First check for an exercise: read from Firestore
         const prRef = doc(db, 'users', uid, 'prs', exerciseKey);
@@ -43,14 +58,14 @@ export function usePRDetection() {
           };
         }
         // Cache the result (can be null if it doesn't exist)
-        prCache.set(exerciseKey, existing);
+        prCache.set(cacheKey, existing);
       }
 
       // If document doesn't exist: this IS a PR (first time ever)
       if (!existing) {
         // Update cache
         const prData = { weight: newWeight, reps: newReps };
-        prCache.set(exerciseKey, prData);
+        prCache.set(cacheKey, prData);
 
         // Update database
         await updatePR(uid, exerciseKey, {
@@ -75,9 +90,8 @@ export function usePRDetection() {
       };
 
       if (isNewPR) {
-        // Update cache
-        const prData = { weight: newWeight, reps: newReps };
-        prCache.set(exerciseKey, prData);
+        // Update cache with new PR
+        prCache.set(cacheKey, { weight: newWeight, reps: newReps, originalData: prevPRData });
 
         // Update database
         await updatePR(uid, exerciseKey, {

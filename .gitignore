@@ -6,6 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+firestore-debug.log
+firestore-debug.log.*
+
+# JVM crash dumps (from Firebase emulator or Java process)
+hs_err_pid*.log
+replay_pid*.log
 
 node_modules
 dist
@@ -19,6 +25,8 @@ dist-ssr
 .env.test.local
 .env.production.local
 functions/.env
+backend/.env
+backend/.env.local
 
 # Editor directories and files
 .vscode/*

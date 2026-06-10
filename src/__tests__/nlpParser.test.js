@@ -41,4 +41,25 @@ describe('nlpParser - Offline natural Language Logging', () => {
     const result = parseWorkoutText('xyz 3x10 50kg');
     expect(result).toBeNull();
   });
+
+  it('should parse sets and reps separately', () => {
+    const result = parseWorkoutText('bench press 60kg 4 sets 15 reps');
+    expect(result).not.toBeNull();
+    expect(result.sets).toHaveLength(4);
+    expect(result.sets[0].reps).toBe('15');
+  });
+
+  it('should match exact name', () => {
+    const result = parseWorkoutText('barbell bench press 3x10');
+    expect(result).not.toBeNull();
+    expect(result.exerciseKey).toBe('barbell_bench_press');
+  });
+
+  it('should return null for empty text or non-string', () => {
+    expect(parseWorkoutText(null)).toBeNull();
+    expect(parseWorkoutText(123)).toBeNull();
+    expect(parseWorkoutText('')).toBeNull();
+    expect(parseWorkoutText('   ')).toBeNull();
+    expect(parseWorkoutText('a')).toBeNull();
+  });
 });

@@ -28,7 +28,14 @@ export const mockDoc = vi.fn((_db, ...pathSegments) => {
 export const mockSetDoc = vi.fn();
 export const mockGetDoc = vi.fn();
 export const mockGetDocs = vi.fn();
-export const mockCollection = vi.fn();
+export const mockCollection = vi.fn((_db, ...pathSegments) => {
+  const path = pathSegments.join('/');
+  const lastSegment = pathSegments[pathSegments.length - 1];
+  return {
+    _path: path,
+    id: lastSegment || 'mock-auto-id',
+  };
+});
 export const mockUpdateDoc = vi.fn();
 export const mockAddDoc = vi.fn();
 export const mockServerTimestamp = vi.fn(() => ({ _type: 'serverTimestamp' }));
@@ -87,7 +94,7 @@ vi.mock('firebase/firestore', () => ({
   onSnapshot: mockOnSnapshot,
   writeBatch: vi.fn(),
   getFirestore: vi.fn(() => mockDb),
-  query: vi.fn(),
+  query: vi.fn((colRef) => colRef),
   orderBy: vi.fn(),
   limit: vi.fn(),
   where: vi.fn(),

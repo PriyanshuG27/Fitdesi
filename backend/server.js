@@ -4,8 +4,21 @@ const cors = require('cors');
 
 const app = express();
 
-// Set permissive CORS layer to receive requests from web and mobile viewports
-app.use(cors({ origin: true }));
+// CORS: in dev allow any origin; in production lock to the deployed domain.
+// VITE_ALLOWED_ORIGINS env var can be a comma-separated list, e.g.:
+//   https://zenkai.app,https://www.zenkai.app
+const isProd = process.env.NODE_ENV === 'production';
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : [];
+
+app.use(cors(isProd && allowedOrigins.length > 0
+  ? {
+      origin: allowedOrigins,
+      credentials: true,
+    }
+  : { origin: true }  // dev: allow all
+));
 
 // Expand parsing capacity to safely handle baseline Base64 compressed image strings
 app.use(express.json({ limit: '10mb' }));

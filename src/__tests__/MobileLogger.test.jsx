@@ -331,7 +331,48 @@ describe('MobileLogger — Finish Session Flow', () => {
     await waitFor(() => {
       expect(screen.getByTestId('session-complete-screen')).toBeInTheDocument();
     });
-    expect(mockFinishSession).toHaveBeenCalledWith('test-uid-123');
+    expect(mockFinishSession).toHaveBeenCalledWith('test-uid-123', {
+      pain: [],
+      easy: [],
+      brokenEquipment: [],
+    });
+  });
+
+  it('toggles debrief options and passes selected keys to finishSession', async () => {
+    mockFinishSession.mockResolvedValueOnce({
+      sessionId:      'sess-abc',
+      totalVolume:    800,
+      totalSets:      1,
+      durationMinutes: 1,
+      exerciseCount:  1,
+      prCount:        0,
+      prNames:        [],
+      xpEarned:       50,
+      levelUp:        false,
+      newLevel:       1,
+      newLevelName:   'Rookie',
+    });
+
+    renderLogger();
+    fireEvent.click(screen.getByText('END'));
+
+    // Check that debrief card is visible
+    expect(screen.getByText('AI Coach Debrief')).toBeInTheDocument();
+
+    // Click on Joint Pain and Too Easy chips for barbell_squat
+    fireEvent.click(screen.getByTestId('debrief-pain-barbell_squat'));
+    fireEvent.click(screen.getByTestId('debrief-easy-barbell_squat'));
+
+    fireEvent.click(screen.getByText('Finish Session'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('session-complete-screen')).toBeInTheDocument();
+    });
+    expect(mockFinishSession).toHaveBeenCalledWith('test-uid-123', {
+      pain: ['barbell_squat'],
+      easy: ['barbell_squat'],
+      brokenEquipment: [],
+    });
   });
 
   it('finishSession failure preserves session state — exercises still in store', async () => {

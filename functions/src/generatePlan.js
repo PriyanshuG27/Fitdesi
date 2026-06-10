@@ -63,9 +63,28 @@ exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, asy
       .limit(14)
       .get();
 
+    const exerciseNamesMap = {};
+    const painSet = new Set();
+    const easySet = new Set();
+    const brokenSet = new Set();
+
     const sessions = await Promise.all(
       sessionsSnap.docs.map(async (sessionDoc) => {
         const sessionData = sessionDoc.data();
+        
+        // Accumulate debrief flags
+        if (sessionData.debrief) {
+          if (Array.isArray(sessionData.debrief.pain)) {
+            sessionData.debrief.pain.forEach(k => painSet.add(k));
+          }
+          if (Array.isArray(sessionData.debrief.easy)) {
+            sessionData.debrief.easy.forEach(k => easySet.add(k));
+          }
+          if (Array.isArray(sessionData.debrief.brokenEquipment)) {
+            sessionData.debrief.brokenEquipment.forEach(k => brokenSet.add(k));
+          }
+        }
+
         const exercisesSnap = await adminDb
           .collection(`users/${uid}/sessions/${sessionDoc.id}/exercises`)
           .get();
@@ -74,6 +93,10 @@ exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, asy
           safeMode: Boolean(sessionData.safeMode || sessionData.deload), // safeMode deload tag
           exercises: exercisesSnap.docs.map((ex) => {
             const exData = ex.data();
+            const exKey = exData.exerciseKey || ex.id;
+            if (exKey && exData.name) {
+              exerciseNamesMap[exKey] = exData.name;
+            }
             return {
               name: exData.exerciseKey || exData.name,
               sets: (exData.sets || []).filter(s => s.done).map(s => ({
@@ -86,12 +109,59 @@ exports.generatePlan = onCall({ region: 'asia-south2', timeoutSeconds: 60 }, asy
       })
     );
 
+    const painList = Array.from(painSet).map(k => exerciseNamesMap[k] ? `${exerciseNamesMap[k]} (${k})` : k);
+    const easyList = Array.from(easySet).map(k => exerciseNamesMap[k] ? `${exerciseNamesMap[k]} (${k})` : k);
+    const brokenList = Array.from(brokenSet).map(k => exerciseNamesMap[k] ? `${exerciseNamesMap[k]} (${k})` : k);
+
+    // Fetch previous week's plan (most recent generated plan)
+    const weeklyPlansSnap = await adminDb
+      .collection(`users/${uid}/weeklyPlans`)
+      .orderBy('generatedAt', 'desc')
+      .limit(1)
+      .get();
+    const previousPlan = !weeklyPlansSnap.empty ? weeklyPlansSnap.docs[0].data() : null;
+
     let sessionsSummaryString = JSON.stringify(sessions);
     if (sessionsSummaryString.length > 4000) {
       sessionsSummaryString = sessionsSummaryString.substring(0, 4000) + '... (truncated)';
     }
 
-    const prompt = `You are an elite fitness coach generating a highly customized weekly workout plan.
+    let prompt;
+    if (previousPlan && previousPlan.plan) {
+      prompt = `You are an elite fitness coach and Strength Coach. You MUST take the user's PREVIOUS WEEK'S WORKOUT PLAN and output the EXACT SAME PLAN, but make surgical modifications only to the flagged exercises based on the user's recent feedback.
+
+PREVIOUS WEEK'S PLAN:
+${JSON.stringify(previousPlan.plan)}
+
+USER FEEDBACK / DEBRIEF FLAGS FROM THE LAST 14 DAYS:
+- Joint Pain/Discomfort (Substitute these exercises with joint-friendly, biomechanically similar movements): [${painList.join(', ')}]
+- Too Easy (Apply a precise 2.5% to 5.0% progressive overload weight increase, rounded to the nearest 2.5kg, or increase target reps): [${easyList.join(', ')}]
+- Broken Equipment (Substitute these exercises with equivalent free-weight or alternative machine exercises using available equipment): [${brokenList.join(', ')}]
+
+USER PROFILE & CONSTRAINTS: 
+- Experience Level: ${userType}
+- Primary Goal: ${goal}
+- Diet Type: ${dietType}
+- Target Frequency: ${workoutFrequency}
+- Max Session Duration: ${sessionDuration}
+- Available Equipment: [${equipmentList.length > 0 ? equipmentList.join(', ') : 'Bodyweight only'}]
+- Medical Restrictions: [${medicalFlags.length > 0 ? medicalFlags.join(', ') : 'None'}]
+
+${request.data?.personalRequirements ? `USER'S PERSONAL REQUIREMENTS FOR THIS WEEK:\n"${request.data.personalRequirements}"\nYou MUST incorporate these requirements into the plan.\n` : ''}
+
+STRICT RULES FOR MODIFICATION:
+1. Copy the PREVIOUS WEEK'S PLAN exactly (same days, same focus, same exercises, same sets/reps/weights), EXCEPT for exercises flagged in the feedback/debrief list or affected by user's personal requirements.
+2. For any exercise in the Joint Pain list: Replace it with a joint-friendly, biomechanically similar alternative that targets the same muscle group. Do NOT prescribe the original exercise.
+3. For any exercise in the Too Easy list: Increase the targetWeight by 2.5% to 5.0% (rounded to the nearest 2.5 kg, e.g. from 60 kg to 62.5 kg). If it's a bodyweight exercise, increase the target reps instead.
+4. For any exercise in the Broken Equipment list: Replace it with a free-weight or alternative machine exercise that targets the same muscles and is compatible with the Available Equipment.
+5. Ensure all prescribed exercises comply with the Available Equipment list and Medical Restrictions.
+6. Absolutely do not change any other exercises or focuses. Keep the structure identical.
+
+OUTPUT FORMAT:
+Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
+JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
+    } else {
+      prompt = `You are an elite fitness coach generating a highly customized weekly workout plan.
 USER PROFILE: 
 - Experience Level: ${userType}
 - Primary Goal: ${goal}
@@ -124,6 +194,7 @@ ${request.data?.personalRequirements ? `USER'S PERSONAL REQUIREMENTS FOR THIS WE
 OUTPUT FORMAT:
 Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
 JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
+    }
 
     let rawText = '';
     let successModel = '';

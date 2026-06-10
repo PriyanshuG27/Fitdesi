@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -14,21 +14,51 @@ function getISOWeek(date) {
   return `${tempDate.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
+/**
+ * Returns the Monday of the current ISO week (start of week boundary).
+ * Fixes the old "last 7 days" cutoff which would include days from a different ISO week
+ * and exclude days from the current week that are more than 7 days ago.
+ */
+function getISOWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function useWeeklyRecap() {
   const { uid } = useAuthStore();
-  const { streak } = useXPStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [recap, setRecap] = useState(null);
 
-  const today = new Date();
-  const weekId = getISOWeek(today);
-  const isRecapDay = today.getDay() === 0;
+  // Compute date values once in a stable ref — avoids re-renders at midnight resetting these
+  const dateRef = useRef(null);
+  if (!dateRef.current) {
+    const today = new Date();
+    dateRef.current = {
+      today,
+      weekId:      getISOWeek(today),
+      isRecapDay:  today.getDay() === 0,    // Sunday = recap day
+      weekStart:   getISOWeekStart(today),  // Monday 00:00:00 of current ISO week
+    };
+  }
+
+  const { today, weekId, isRecapDay, weekStart } = dateRef.current;
 
   const [hasSeen, setHasSeen] = useState(() => {
     return localStorage.getItem(`recap_seen_${weekId}`) === 'true';
   });
+
+  // Read streak from the hook at render time.
+  // We store it in a ref so loadRecapData can read the latest value
+  // WITHOUT being a useCallback dependency (which caused a re-fetch on every session save).
+  const { streak } = useXPStore();
+  const streakRef = useRef(streak);
+  streakRef.current = streak;
 
   const loadRecapData = useCallback(async () => {
     if (!uid) {
@@ -38,15 +68,12 @@ export function useWeeklyRecap() {
     setLoading(true);
     setError(null);
     try {
-      const cutoff = new Date(today);
-      cutoff.setDate(cutoff.getDate() - 7);
-      cutoff.setHours(0, 0, 0, 0);
-
-      // Query sessions in the last 7 days
+      // FIX: Use ISO week start (Monday 00:00) as cutoff instead of "7 days ago".
+      // "7 days ago" would include sessions from last week and exclude early-week sessions.
       const sessionsRef = collection(db, 'users', uid, 'sessions');
       const q = query(
         sessionsRef,
-        where('date', '>=', cutoff),
+        where('date', '>=', weekStart),
         orderBy('date', 'desc'),
         limit(7)
       );
@@ -54,54 +81,25 @@ export function useWeeklyRecap() {
 
       let totalVolume = 0;
       let xpEarned = 0;
-      let maxWeight = 0;
-      let bestLiftName = '';
-      let maxBWReps = 0;
-      let bestBWName = '';
       const sessionsCount = sessSnap.size;
 
-      // Iterate through sessions to sum volume/XP and find the best lift
-      for (const docSnap of sessSnap.docs) {
+      // bestLift is stored directly on the session doc by useWorkoutLogger (bestLift field)
+      let bestLiftObj = null;
+
+      sessSnap.docs.forEach((docSnap) => {
         const sessionData = docSnap.data();
         totalVolume += sessionData.totalVolume || 0;
         xpEarned += sessionData.xpEarned || 0;
 
-        const exercisesRef = collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises');
-        const exSnap = await getDocs(exercisesRef);
+        // Prefer session-level bestLift summary; fall back gracefully if not present
+        if (!bestLiftObj && sessionData.bestLift) {
+          bestLiftObj = sessionData.bestLift;
+        }
+      });
 
-        exSnap.docs.forEach((exDoc) => {
-          const exData = exDoc.data();
-          (exData.sets || []).forEach((set) => {
-            if (set.done || set.completed) {
-              const isBW = set.weight === 'BW';
-              const weightVal = isBW ? 0 : (parseFloat(set.weight) || 0);
-              const repsVal = parseInt(set.reps, 10) || 0;
-
-              if (weightVal > maxWeight) {
-                maxWeight = weightVal;
-                bestLiftName = exData.name || '';
-              } else if (isBW && repsVal > maxBWReps) {
-                maxBWReps = repsVal;
-                bestBWName = exData.name || '';
-              }
-            }
-          });
-        });
-      }
-
-      let bestLiftObj = null;
-      if (bestLiftName && maxWeight > 0) {
-        bestLiftObj = { name: bestLiftName, weight: maxWeight, isBW: false };
-      } else if (bestBWName && maxBWReps > 0) {
-        bestLiftObj = { name: bestBWName, weight: 'BW', reps: maxBWReps, isBW: true };
-      }
-
-      // Query PRs broken in the last 7 days
+      // Query PRs broken this week
       const prsRef = collection(db, 'users', uid, 'prs');
-      const prQuery = query(
-        prsRef,
-        where('date', '>=', cutoff)
-      );
+      const prQuery = query(prsRef, where('date', '>=', weekStart));
       const prSnap = await getDocs(prQuery);
       const prsBrokenCount = prSnap.size;
 
@@ -122,7 +120,7 @@ export function useWeeklyRecap() {
         totalVolume,
         prsBrokenCount,
         xpEarned,
-        streak,
+        streak: streakRef.current ?? 0,
         bestLift: bestLiftObj,
         motivationalLine,
       });
@@ -132,7 +130,7 @@ export function useWeeklyRecap() {
     } finally {
       setLoading(false);
     }
-  }, [uid, streak]);
+  }, [uid, weekStart]); // streak removed from deps — it was causing re-fetch on every session save
 
   useEffect(() => {
     loadRecapData();

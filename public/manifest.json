@@ -4,21 +4,21 @@
   "description": "AI-powered gym workout planner and telemetric tracker.",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any"
-    },
-    {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
+      "src": "/logos/zenkai_official_logo.png",
+      "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
+      "src": "/logos/zenkai_official_logo.png",
+      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logos/zenkai_official_logo.png",
+      "type": "image/png",
+      "sizes": "any"
     }
   ],
   "start_url": "/home",

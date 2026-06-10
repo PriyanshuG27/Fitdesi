@@ -90,10 +90,9 @@ describe('Weekly Recap System', () => {
     it('queries sessions and PRs and aggregates stats correctly', async () => {
       vi.setSystemTime(new Date('2026-06-07T12:00:00Z'));
 
-      // Setup sequential mock responses for:
-      // 1. Sessions query
-      // 2. Session 1 Exercises query
-      // 3. PRs query
+      // New approach: no exercises subcollection reads.
+      // bestLift is stored directly on the session doc.
+      // Mock: 1st call = sessions, 2nd call = PRs
       mockGetDocs
         .mockResolvedValueOnce({
           size: 1,
@@ -104,27 +103,13 @@ describe('Weekly Recap System', () => {
                 totalVolume: 4200,
                 xpEarned: 80,
                 date: new Date(),
+                bestLift: { name: 'Barbell Squat', weight: 150, isBW: false },
               }),
             },
           ],
         })
         .mockResolvedValueOnce({
-          docs: [
-            {
-              id: 'ex-squat',
-              data: () => ({
-                name: 'Barbell Squat',
-                sets: [
-                  { weight: 140, reps: 5, done: true },
-                  { weight: 150, reps: 3, done: true },
-                  { weight: 160, reps: 2, done: false }, // not done, should be ignored
-                ],
-              }),
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          size: 3, // 3 PRs broken
+          size: 3,
           docs: [
             { id: 'pr-1', data: () => ({ date: new Date() }) },
             { id: 'pr-2', data: () => ({ date: new Date() }) },
@@ -134,7 +119,6 @@ describe('Weekly Recap System', () => {
 
       const { result } = renderHook(() => useWeeklyRecap());
 
-      // Wait for async loadRecapData to complete
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
@@ -153,7 +137,117 @@ describe('Weekly Recap System', () => {
         motivationalLine: '1 session logged. A small step is still progress! 🚀',
       });
     });
+
+    it('returns immediately if uid is missing', async () => {
+      useAuthStore.setState({ uid: null, user: null });
+
+      const { result } = renderHook(() => useWeeklyRecap());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.recap).toBeNull();
+      expect(result.current.error).toBeNull();
+    });
+
+    it('sets error state when loadRecapData fails', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Recap read failed'));
+
+      const { result } = renderHook(() => useWeeklyRecap());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.error).toBe('Recap read failed');
+      expect(result.current.recap).toBeNull();
+    });
+
+    it('aggregates bodyweight exercises and maps bestLift correctly, and matches all motivational lines', async () => {
+      vi.setSystemTime(new Date('2026-06-07T12:00:00Z'));
+
+      // Test 1: 0 sessions
+      mockGetDocs
+        .mockResolvedValueOnce({ size: 0, docs: [] }) // sessions
+        .mockResolvedValueOnce({ size: 0, docs: [] }); // PRs
+
+      const { result: resZero } = renderHook(() => useWeeklyRecap());
+
+      await waitFor(() => {
+        expect(resZero.current.loading).toBe(false);
+      });
+
+      expect(resZero.current.recap.sessionsCount).toBe(0);
+      expect(resZero.current.recap.motivationalLine).toBe("No workouts logged. Let's make next week count! ⚡");
+      expect(resZero.current.recap.bestLift).toBeNull();
+
+      // Test 2: Bodyweight bestLift (stored on session doc) + 2 sessions motivational line
+      mockGetDocs.mockReset();
+      mockGetDocs
+        .mockResolvedValueOnce({
+          size: 2,
+          docs: [
+            {
+              id: 'sess-bw1',
+              data: () => ({
+                totalVolume: 0,
+                xpEarned: 50,
+                bestLift: null, // no bestLift on first session
+              }),
+            },
+            {
+              id: 'sess-bw2',
+              data: () => ({
+                totalVolume: 0,
+                xpEarned: 50,
+                bestLift: { name: 'Pull-Ups', weight: 'BW', reps: 15, isBW: true },
+              }),
+            },
+          ],
+        }) // sessions
+        .mockResolvedValueOnce({ size: 0, docs: [] }); // PRs
+
+      const { result: resBW } = renderHook(() => useWeeklyRecap());
+
+      await waitFor(() => {
+        expect(resBW.current.loading).toBe(false);
+      });
+
+      expect(resBW.current.recap.sessionsCount).toBe(2);
+      expect(resBW.current.recap.motivationalLine).toBe('2 sessions logged. Nice work, keep building momentum! 🔥');
+      expect(resBW.current.recap.bestLift).toEqual({
+        name: 'Pull-Ups',
+        weight: 'BW',
+        reps: 15,
+        isBW: true,
+      });
+
+      // Test 3: >= 4 sessions motivational line
+      mockGetDocs.mockReset();
+      mockGetDocs
+        .mockResolvedValueOnce({
+          size: 4,
+          docs: [
+            { id: 's1', data: () => ({ totalVolume: 0, xpEarned: 0, bestLift: null }) },
+            { id: 's2', data: () => ({ totalVolume: 0, xpEarned: 0, bestLift: null }) },
+            { id: 's3', data: () => ({ totalVolume: 0, xpEarned: 0, bestLift: null }) },
+            { id: 's4', data: () => ({ totalVolume: 0, xpEarned: 0, bestLift: null }) },
+          ],
+        }) // sessions
+        .mockResolvedValueOnce({ size: 0, docs: [] }); // PRs
+
+      const { result: resFour } = renderHook(() => useWeeklyRecap());
+
+      await waitFor(() => {
+        expect(resFour.current.loading).toBe(false);
+      });
+
+      expect(resFour.current.recap.sessionsCount).toBe(4);
+      expect(resFour.current.recap.motivationalLine).toBe('4 sessions logged. Absolute machine! 🏆');
+    });
   });
+
 
   describe('WeeklyRecapScreen UI and Sharing', () => {
     const defaultRecap = {

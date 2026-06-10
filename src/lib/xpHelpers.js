@@ -36,8 +36,9 @@ export function deriveLevelFromXP(xp) {
   const next = LEVEL_THRESHOLDS[tierIdx + 1] ?? null;
 
   if (!next) {
-    // Elite tier (31+) — keep counting upward
-    const eliteXPPerLevel = 1000; // 1 000 XP per level beyond 31
+    // Elite tier (31+): 2000 XP/level so it's always harder than Athlete (~1533 XP/level).
+    // Previously was 1000 XP/level which made Elite cheaper — broken progression.
+    const eliteXPPerLevel = 2000;
     const xpIntoElite = raw - current.xpRequired;
     const levelsIntoElite = Math.floor(xpIntoElite / eliteXPPerLevel);
     const level = current.level + levelsIntoElite;
@@ -47,7 +48,7 @@ export function deriveLevelFromXP(xp) {
 
   // Interpolate within tier
   const tierXPSpan = next.xpRequired - current.xpRequired;
-  const levelCount = next.level - current.level; // number of sub-levels in this tier
+  const levelCount = next.level - current.level;
   const xpPerLevel = Math.floor(tierXPSpan / levelCount);
   const xpIntoTier = raw - current.xpRequired;
   const levelsIntoTier = Math.min(Math.floor(xpIntoTier / xpPerLevel), levelCount - 1);
@@ -62,6 +63,10 @@ export function deriveLevelFromXP(xp) {
 /**
  * Given the last workout date and current streak, returns the new streak count
  * and any bonus XP source keys that should fire.
+ *
+ * Bonus fires ONLY when crossing a milestone for the first time (currentStreak < threshold).
+ * Bug fix: previously `|| diffDays === 1` caused the bonus to fire EVERY consecutive day
+ * once you exceeded the threshold — an unlimited XP exploit.
  *
  * @param {Date|null} lastDate  - Date of last recorded session (or null)
  * @param {number}    currentStreak
@@ -82,18 +87,18 @@ export function evaluateStreak(lastDate, currentStreak) {
 
   let newStreak;
   if (diffDays === 0) {
-    // Already logged today — no change
-    newStreak = currentStreak;
+    newStreak = currentStreak;      // Already logged today — no change
   } else if (diffDays === 1) {
-    newStreak = currentStreak + 1;
+    newStreak = currentStreak + 1;  // Consecutive day
   } else {
-    newStreak = 1; // streak broken
+    newStreak = 1;                  // Streak broken
   }
 
+  // Fire ONLY on the exact day the streak crosses the milestone.
   const streakBonuses = [];
-  if (newStreak >= 30 && (currentStreak < 30 || diffDays === 1)) {
+  if (newStreak >= 30 && currentStreak < 30) {
     streakBonuses.push('streak_30');
-  } else if (newStreak >= 7 && (currentStreak < 7 || diffDays === 1)) {
+  } else if (newStreak >= 7 && currentStreak < 7) {
     streakBonuses.push('streak_7');
   }
 

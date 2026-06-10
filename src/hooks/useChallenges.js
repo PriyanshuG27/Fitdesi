@@ -50,6 +50,10 @@ function calculateProgressPct(challenge, uid) {
 
 // Module-level variable to prevent parallel calls to the generator Cloud Function
 let isGeneratingChallenges = false;
+// Prevent Re-ignition quest duplication: set true before the write, cleared when user logs in again.
+// Without this, writing inside onSnapshot creates a feedback loop:
+//   write → new snapshot fires → hasReignition check may fail before data propagates → write again.
+let reignitionScheduled = false;
 
 export function useChallenges() {
   const { user, profile } = useAuthStore();
@@ -62,6 +66,11 @@ export function useChallenges() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [deletedChallengeIds, setDeletedChallengeIds] = useState(new Set());
+  // personalTemplates fetched once on mount, not on every challenge snapshot
+  const [personalTemplates, setPersonalTemplates] = useState([]);
+  // Last session date fetched once, used by snapshot to decide re-ignition quest
+  const [lastSessionDate, setLastSessionDate] = useState(null);
+  const [sessionDataLoaded, setSessionDataLoaded] = useState(false);
 
   // Helper to compute progress percentage for component consumption
   const getProgressPercent = useCallback((challengeOrId, uid) => {
@@ -78,6 +87,107 @@ export function useChallenges() {
     // no-op
   }, []);
 
+  // ─── ONE-TIME: fetch last 5 sessions for avg hour + re-ignition check ────────
+  // Uses a 24-hour localStorage cache so this only costs 1 read per day per user.
+  useEffect(() => {
+    if (!user?.uid || sessionDataLoaded) return;
+    const CACHE_KEY = `zenkai_session_hour_${user.uid}`;
+    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const { avgHour, lastDate, ts } = JSON.parse(cached);
+        if (Date.now() - ts < CACHE_TTL) {
+          setAvgWorkoutHour(avgHour ?? 18);
+          setLastSessionDate(lastDate ? new Date(lastDate) : null);
+          setSessionDataLoaded(true);
+          return;
+        }
+      } catch (_) { /* stale/corrupt cache — refetch */ }
+    }
+    const fetchSessionMeta = async () => {
+      try {
+        const sessionsRef = collection(db, 'users', user.uid, 'sessions');
+        const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(5));
+        const sessSnap = await getDocs(sessQuery);
+        let calculatedAvgHour = 18;
+        let latestDate = null;
+        if (!sessSnap.empty) {
+          const latestData = sessSnap.docs[0].data();
+          latestDate = latestData.date?.toDate ? latestData.date.toDate() : new Date(latestData.date || Date.now());
+          const hours = sessSnap.docs.map(d => {
+            const sData = d.data();
+            const date = sData.date?.toDate ? sData.date.toDate() : new Date(sData.date || Date.now());
+            return date.getHours();
+          });
+          calculatedAvgHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
+        }
+        setAvgWorkoutHour(calculatedAvgHour);
+        setLastSessionDate(latestDate);
+        setSessionDataLoaded(true);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          avgHour: calculatedAvgHour,
+          lastDate: latestDate ? latestDate.toISOString() : null,
+          ts: Date.now(),
+        }));
+      } catch (err) {
+        console.warn('[useChallenges] Could not fetch session meta:', err);
+        setSessionDataLoaded(true);
+      }
+    };
+    fetchSessionMeta();
+  }, [user?.uid, sessionDataLoaded]);
+
+  // ─── ONE-TIME: fetch personalTemplates on mount (not inside snapshot) ────────
+  useEffect(() => {
+    if (!user?.uid) return;
+    const fetchTemplates = async () => {
+      try {
+        const personalTemplatesCol = collection(db, 'users', user.uid, 'personalTemplates');
+        const personalTemplatesSnap = await getDocs(personalTemplatesCol);
+        const loaded = [];
+        const dupRefs = [];
+        personalTemplatesSnap.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          const muscle = (data.goal?.muscleGroup || 'Core').toLowerCase();
+          const isDup = loaded.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
+          if (!isDup) {
+            loaded.push({ id: docSnap.id, ...data, durationDays: data.durationDays || 28 });
+          } else {
+            dupRefs.push(doc(db, 'users', user.uid, 'personalTemplates', docSnap.id));
+          }
+        });
+        // Clean up duplicates in the background
+        dupRefs.forEach(ref => deleteDoc(ref).catch(() => {}));
+
+        // If empty and no active weak_point, trigger Cloud Function
+        const hasWeakPoint = challenges.some(c => c.type === 'weak_point' && c.status === 'active');
+        if (loaded.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
+          isGeneratingChallenges = true;
+          try {
+            const res = await callZenkaiAPI('generateChallenge');
+            if (res.data && Array.isArray(res.data)) {
+              res.data.forEach(tpl => {
+                const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();
+                const isDup = loaded.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
+                if (!isDup) loaded.push({ id: tpl.id, ...tpl, durationDays: tpl.durationDays || 28 });
+              });
+            }
+          } catch (fnErr) {
+            console.error('[useChallenges] Failed to generate challenge via Express API:', fnErr);
+          } finally {
+            isGeneratingChallenges = false;
+          }
+        }
+        setPersonalTemplates(loaded);
+      } catch (err) {
+        console.warn('[useChallenges] Could not load personalTemplates:', err);
+      }
+    };
+    fetchTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+  // Real-time challenges listener — pure snapshot processing, zero extra reads
   useEffect(() => {
     if (!user?.uid) {
       setChallenges([]);
@@ -129,7 +239,9 @@ export function useChallenges() {
           } else if (data.type === 'streak') {
             const currentWeek = userProg.currentWeek || 1;
             const weekCount = userProg.weeklyCount?.[currentWeek - 1] || 0;
-            currentMission = `Week ${currentWeek}: Log 3 workouts (Week count: ${weekCount}/3)`;
+            // Fix: use actual workoutsPerWeek from goal, not hardcoded 3
+            const targetPerWeek = data.goal?.workoutsPerWeek || 3;
+            currentMission = `Week ${currentWeek}: Log ${targetPerWeek} workouts (This week: ${weekCount}/${targetPerWeek})`;
           } else if (data.type === 'weak_point') {
             const targetSets = data.goal?.targetSets || 15;
             const completed = userProg.completedSets || 0;
@@ -168,28 +280,9 @@ export function useChallenges() {
           };
         }
 
-        // Check last session date and compute average hour from last 5 sessions
-        const sessionsRef = collection(db, 'users', user.uid, 'sessions');
-        const sessQuery = query(sessionsRef, orderBy('date', 'desc'), limit(5));
-        const sessSnap = await getDocs(sessQuery);
-        let lastSessionDate = null;
-        let calculatedAvgHour = 18;
-
-        if (!sessSnap.empty) {
-          const latestDoc = sessSnap.docs[0];
-          const latestData = latestDoc.data();
-          lastSessionDate = latestData.date?.toDate ? latestData.date.toDate() : new Date(latestData.date || Date.now());
-
-          const hours = sessSnap.docs.map(d => {
-            const sData = d.data();
-            const date = sData.date?.toDate ? sData.date.toDate() : new Date(sData.date || Date.now());
-            return date.getHours();
-          });
-          calculatedAvgHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
-        }
-        setAvgWorkoutHour(calculatedAvgHour);
-
-        if (lastSessionDate) {
+        // Re-ignition quest check — uses lastSessionDate from the separate mount-only effect
+        // (zero extra reads here on each snapshot fire)
+        if (lastSessionDate && !reignitionScheduled) {
           const diffMs = Date.now() - lastSessionDate.getTime();
           const diffDays = diffMs / (1000 * 60 * 60 * 24);
           if (diffDays > 4) {
@@ -197,86 +290,53 @@ export function useChallenges() {
               c => c.type === 'weak_point' && c.subtype === 'quest' && c.name === 'Re-ignition' && c.status === 'active'
             );
             if (!hasReignition) {
-              const newQuestRef = doc(collection(db, 'challenges'));
-              const questDoc = {
-                type: 'weak_point',
-                subtype: 'quest',
-                name: 'Re-ignition',
-                description: 'Log 1 workout within 48 hours to get back on track! 🔥',
-                creatorUid: user.uid,
-                participants: [user.uid],
-                startDate: serverTimestamp(),
-                endDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
-                status: 'active',
-                durationDays: 2,
-                goal: { targetSets: 1, muscleGroup: 'any' },
-                rewardXP: 100,
-                progress: {
-                  [user.uid]: { completedSets: 0, badgeEarned: false }
-                }
-              };
-              await setDoc(newQuestRef, questDoc);
+              // Set flag BEFORE the write to prevent duplication if snapshot fires again
+              // before Firestore propagates the new doc back to us.
+              reignitionScheduled = true;
+              try {
+                const newQuestRef = doc(collection(db, 'challenges'));
+                const questDoc = {
+                  type: 'weak_point',
+                  subtype: 'quest',
+                  name: 'Re-ignition',
+                  description: 'Log 1 workout within 48 hours to get back on track! 🔥',
+                  creatorUid: user.uid,
+                  participants: [user.uid],
+                  startDate: serverTimestamp(),
+                  endDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
+                  status: 'active',
+                  durationDays: 2,
+                  goal: { targetSets: 1, muscleGroup: 'any' },
+                  rewardXP: 100,
+                  progress: {
+                    [user.uid]: { completedSets: 0, badgeEarned: false }
+                  }
+                };
+                await setDoc(newQuestRef, questDoc);
 
-              userChallenges.push({
-                id: newQuestRef.id,
-                ...questDoc,
-                subtype: 'quest',
-                durationDays: 2,
-                weeksRemaining: 1,
-                progressPct: 0,
-                currentMission: 'Complete 1 set of any workout (Progress: 0/1)',
-              });
+                userChallenges.push({
+                  id: newQuestRef.id,
+                  ...questDoc,
+                  subtype: 'quest',
+                  durationDays: 2,
+                  weeksRemaining: 1,
+                  progressPct: 0,
+                  currentMission: 'Complete 1 set of any workout (Progress: 0/1)',
+                });
+              } catch (reignErr) {
+                // If write fails, clear flag so it can retry on next snapshot
+                reignitionScheduled = false;
+                console.error('[useChallenges] Failed to create Re-ignition quest:', reignErr);
+              }
+            } else {
+              // Quest already exists — suppress future checks this session
+              reignitionScheduled = true;
             }
           }
         }
 
-        // Load personalized templates from Firestore subcollection users/{uid}/personalTemplates
-        const personalTemplatesCol = collection(db, 'users', user.uid, 'personalTemplates');
-        const personalTemplatesSnap = await getDocs(personalTemplatesCol);
-        const personalTemplates = [];
-
-        personalTemplatesSnap.docs.forEach((docSnap) => {
-          const data = docSnap.data();
-          const muscle = (data.goal?.muscleGroup || 'Core').toLowerCase();
-          const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
-          if (!isDup) {
-            personalTemplates.push({
-              id: docSnap.id,
-              ...data,
-              durationDays: data.durationDays || 28,
-            });
-          } else {
-            const dupRef = doc(db, 'users', user.uid, 'personalTemplates', docSnap.id);
-            deleteDoc(dupRef).catch(err => console.error('[useChallenges] Failed to clean duplicate template:', err));
-          }
-        });
-
-        // Trigger Cloud Function generation if empty and no active weak point challenge
-        const hasWeakPoint = userChallenges.some(c => c.type === 'weak_point' && c.status === 'active');
-        if (personalTemplates.length === 0 && !hasWeakPoint && !isGeneratingChallenges) {
-          isGeneratingChallenges = true;
-          try {
-            const res = await callZenkaiAPI('generateChallenge');
-            if (res.data && Array.isArray(res.data)) {
-              res.data.forEach(tpl => {
-                const muscle = (tpl.goal?.muscleGroup || 'Core').toLowerCase();
-                const isDup = personalTemplates.some(t => (t.goal?.muscleGroup || 'Core').toLowerCase() === muscle);
-                if (!isDup) {
-                  personalTemplates.push({
-                    id: tpl.id,
-                    ...tpl,
-                    durationDays: tpl.durationDays || 28,
-                  });
-                }
-              });
-            }
-          } catch (fnErr) {
-            console.error('[useChallenges] Failed to generate challenge via Express API:', fnErr);
-          } finally {
-            isGeneratingChallenges = false;
-          }
-        }
-
+        // Build template list using already-fetched personalTemplates state
+        // (no getDocs call here — templates are loaded separately on mount)
         const templates = [...personalTemplates];
         const joinedTypes = userChallenges.map((c) => c.type);
         if (!joinedTypes.includes('comeback') && profile?.userType === 'Comeback') {
@@ -313,7 +373,8 @@ export function useChallenges() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid, profile?.userType, deletedChallengeIds]);
+  }, [user?.uid, profile?.userType, deletedChallengeIds, lastSessionDate, personalTemplates]);
+
 
   // startChallenge(uid, type)
   const startChallenge = useCallback(async (uid, type) => {

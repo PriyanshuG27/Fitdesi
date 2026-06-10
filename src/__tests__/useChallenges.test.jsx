@@ -3,6 +3,9 @@ import {
   mockGetDocs,
   mockSetDoc,
   mockRunTransaction,
+  mockGetDoc,
+  mockDeleteDoc,
+  mockCollection,
 } from '../__mocks__/firebase';
 
 import { renderHook, act } from '@testing-library/react';
@@ -184,23 +187,32 @@ describe('useChallenges Hook', () => {
 
     it('does not increment comeback progress if another session was logged on the same calendar day', async () => {
       const sameDay = new Date();
+      // The new useChallenges on mount fires:
+      //   1. onSnapshot for challenges (handled by mockGetDocs default empty)
+      //   2. getDocs for avgHour sessions cache (mount-time effect)
+      //   3. getDocs for personalTemplates (mount-time effect)
+      // Then updateProgress fires:
+      //   4. getDocs for latest 2 sessions (to check isSameDaySession)
+      //   5. getDocs for exercises of latest session
+      // We need to mock 2-5 in order.
       mockGetDocs
-        .mockResolvedValueOnce({ empty: true, docs: [] }) // 1st: mount challenges
-        .mockResolvedValueOnce({ // 2nd: sessions query
+        .mockResolvedValueOnce({ empty: true, docs: [] })    // 1: challenges onSnapshot (mount)
+        .mockResolvedValueOnce({ empty: true, docs: [] })    // 2: avgHour sessions (mount effect)
+        .mockResolvedValueOnce({ empty: true, docs: [] })    // 3: personalTemplates (mount effect)
+        .mockResolvedValueOnce({                             // 4: latest 2 sessions for isSameDaySession
           empty: false,
           docs: [
             {
               id: 'session-2',
-              data: () => ({ date: sameDay }),
-              ref: { collection: () => ({ get: () => Promise.resolve({ docs: [] }) }) }
+              data: () => ({ date: { toDate: () => sameDay } }),
             },
             {
               id: 'session-1',
-              data: () => ({ date: sameDay }),
-              ref: { collection: () => ({ get: () => Promise.resolve({ docs: [] }) }) }
+              data: () => ({ date: { toDate: () => sameDay } }),
             }
           ]
-        });
+        })
+        .mockResolvedValueOnce({ docs: [] });                // 5: exercises for latest session
 
       const mockTx = {
         get: vi.fn().mockResolvedValue({
@@ -234,7 +246,7 @@ describe('useChallenges Hook', () => {
       const updatePayload = mockTx.update.mock.calls[0][1];
       expect(updatePayload['progress.user-123']).toEqual({
         currentWeek: 1,
-        completedSessions: 2,
+        completedSessions: 2, // NOT incremented — same day blocked
         badgeEarned: false,
       });
     });
@@ -464,6 +476,337 @@ describe('useChallenges Hook', () => {
       // Verify challenge document update (incremented session)
       const challengeUpdate = mockTx.update.mock.calls[1][1];
       expect(challengeUpdate['progress.user-123'].completedSessions).toBe(3);
+    });
+
+    it('throws an error and triggers error toast when user has no challenge skips', async () => {
+      const mockTx = {
+        get: vi.fn().mockImplementation((ref) => {
+          if (ref._path.includes('users/user-123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({ powerUps: { challengeSkip: 0 } })
+            });
+          }
+          return Promise.resolve({ exists: () => false });
+        }),
+        update: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await expect(
+        act(async () => {
+          await result.current.useChallengeSkip('valid_challenge_123');
+        })
+      ).rejects.toThrow('No Challenge Skips remaining');
+
+      expect(mockAddToast).toHaveBeenCalledWith('No Challenge Skips remaining', 'error');
+    });
+  });
+
+  describe('leaveChallenge', () => {
+    it('successfully abandons a challenge, writes cooldowns, and updates local state', async () => {
+      // Setup mock data for getDoc
+      mockGetDoc
+        .mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({ type: 'comeback' }),
+        }) // 1st getDoc: get challenge document to find type
+        .mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({ cooldowns: {} }),
+        }); // 2nd getDoc: get user document to read current cooldowns
+
+      mockSetDoc.mockResolvedValue(undefined);
+
+      // Setup user profile in authStore
+      useAuthStore.setState({
+        user: { uid: 'user-123' },
+        uid: 'user-123',
+        profile: { cooldowns: {} },
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.leaveChallenge('challenge-to-leave');
+      });
+
+      // Assertions
+      expect(mockGetDoc).toHaveBeenCalledTimes(2);
+      expect(mockSetDoc).toHaveBeenCalledTimes(2);
+
+      // Check status set to abandoned
+      expect(mockSetDoc.mock.calls[0][1]).toEqual({ status: 'abandoned' });
+
+      // Check cooldown written to user profile
+      const userCooldownPayload = mockSetDoc.mock.calls[1][1];
+      expect(userCooldownPayload.cooldowns.comeback).toBeDefined();
+
+      // Check local auth store profile updated
+      const updatedProfile = useAuthStore.getState().profile;
+      expect(updatedProfile.cooldowns.comeback).toBeDefined();
+
+      expect(mockAddToast).toHaveBeenCalledWith('Challenge removed! 🗑️', 'info');
+    });
+
+    it('rolls back and toasts error when leaving a challenge fails', async () => {
+      mockGetDoc.mockRejectedValueOnce(new Error('Firestore error'));
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.leaveChallenge('challenge-to-leave');
+      });
+
+      expect(mockAddToast).toHaveBeenCalledWith('Failed to remove challenge: Failed to read challenge document: Firestore error', 'error');
+    });
+  });
+
+  describe('createWager', () => {
+    it('successfully places a wager when user has sufficient XP', async () => {
+      const mockTx = {
+        get: vi.fn().mockResolvedValue({
+          exists: () => true,
+          data: () => ({ xp: 1200, powerUps: {} })
+        }),
+        update: vi.fn(),
+        set: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      let wagerId;
+      await act(async () => {
+        wagerId = await result.current.createWager('user-123', 500);
+      });
+
+      expect(wagerId).toBeDefined();
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.update).toHaveBeenCalledWith(expect.any(Object), { xp: 700 });
+      expect(mockTx.set).toHaveBeenCalledTimes(1);
+      
+      const wagerDoc = mockTx.set.mock.calls[0][1];
+      expect(wagerDoc.subtype).toBe('wager');
+      expect(wagerDoc.wagerAmount).toBe(500);
+      expect(wagerDoc.rewardXP).toBe(1000);
+      expect(mockAddToast).toHaveBeenCalledWith(expect.stringContaining('Wager placed successfully!'), 'success');
+    });
+
+    it('throws an error and rejects transaction when user has insufficient XP', async () => {
+      const mockTx = {
+        get: vi.fn().mockResolvedValue({
+          exists: () => true,
+          data: () => ({ xp: 200, powerUps: {} })
+        }),
+        update: vi.fn(),
+        set: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await expect(
+        act(async () => {
+          await result.current.createWager('user-123', 500);
+        })
+      ).rejects.toThrow('Insufficient XP for wager');
+
+      expect(mockTx.update).not.toHaveBeenCalled();
+      expect(mockTx.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('joinChallenge', () => {
+    it('joins standard comeback challenge when no campaign is running', async () => {
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false });
+      // Mock getActiveChallenges to return empty
+      mockGetDocs.mockResolvedValueOnce({ empty: true, docs: [] });
+      mockSetDoc.mockResolvedValueOnce(undefined);
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.joinChallenge('comeback');
+      });
+
+      expect(mockAddToast).toHaveBeenCalledWith('Challenge joined successfully! 🔥', 'success');
+    });
+
+    it('joins personalized weak point challenge, deleting template', async () => {
+      // Mock personal templates getDoc
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          type: 'weak_point',
+          subtype: 'campaign',
+          name: 'Core Crusher',
+          description: '15 sets of core',
+          goal: { targetSets: 15, muscleGroup: 'Core' },
+          rewardXP: 300,
+        })
+      });
+
+      // Mock getActiveChallenges to return empty
+      mockGetDocs.mockResolvedValueOnce({ empty: true, docs: [] });
+      mockSetDoc.mockResolvedValueOnce(undefined);
+      mockDeleteDoc.mockResolvedValueOnce(undefined);
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.joinChallenge('personal-template-id');
+      });
+
+      expect(mockSetDoc).toHaveBeenCalledTimes(1);
+      expect(mockDeleteDoc).toHaveBeenCalledTimes(1);
+      expect(mockAddToast).toHaveBeenCalledWith(expect.stringContaining('Challenge accepted!'), 'success');
+    });
+
+    it('toasts error if personalized challenge subtype already active', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          type: 'weak_point',
+          subtype: 'campaign',
+        })
+      });
+
+      // Mock getActiveChallenges to return an active campaign
+      mockGetDocs.mockResolvedValue({
+        empty: false,
+        docs: [
+          {
+            id: 'active-camp',
+            data: () => ({ subtype: 'campaign', status: 'active' }),
+          }
+        ]
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.joinChallenge('personal-template-id');
+      });
+
+      expect(mockAddToast).toHaveBeenCalledWith('You already have an active campaign running.', 'error');
+    });
+  });
+
+  describe('updateProgress for weak_point', () => {
+    it('increments weak_point challenge progress inside transaction', async () => {
+      mockCollection.mockImplementation((_db, ...pathSegments) => {
+        return {
+          _path: pathSegments.join('/'),
+        };
+      });
+
+      mockGetDocs.mockImplementation((q) => {
+        const path = q?._path || '';
+        if (path.includes('personalTemplates')) {
+          return Promise.resolve({ empty: true, docs: [] });
+        }
+        if (path.includes('sessions') && path.includes('exercises')) {
+          // exercises query
+          return Promise.resolve({
+            empty: false,
+            docs: [
+              {
+                id: 'ex-wp-1',
+                data: () => ({
+                  muscleGroup: 'Abs',
+                  sets: [{ completed: true }, { completed: true }, { completed: false }]
+                })
+              }
+            ]
+          });
+        }
+        if (path.includes('sessions')) {
+          // sessions query
+          return Promise.resolve({
+            empty: false,
+            docs: [
+              { id: 'session-wp-1', data: () => ({ date: new Date() }) }
+            ]
+          });
+        }
+        return Promise.resolve({ empty: true, docs: [] });
+      });
+
+      const mockTx = {
+        get: vi.fn().mockImplementation((ref) => {
+          if (ref._path.includes('challenges/wp_challenge_123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({
+                type: 'weak_point',
+                status: 'active',
+                goal: { targetSets: 15, muscleGroup: 'Core' },
+                progress: {
+                  'user-123': { completedSets: 2, badgeEarned: false }
+                }
+              })
+            });
+          }
+          return Promise.resolve({ exists: () => false });
+        }),
+        update: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.updateProgress('user-123', 'wp_challenge_123', new Date());
+      });
+
+      expect(mockTx.update).toHaveBeenCalledTimes(1);
+      const wpUpdate = mockTx.update.mock.calls[0][1];
+      expect(wpUpdate['progress.user-123'].completedSets).toBe(4); // 2 existing + 2 completed sets
+    });
+  });
+
+  describe('getProgressPercent', () => {
+    it('calculates progress percentage correctly for different challenge types', () => {
+      const { result } = renderHook(() => useChallenges());
+
+      // 1. comeback type
+      const cbProgress = result.current.getProgressPercent({
+        type: 'comeback',
+        goal: { durationWeeks: 12 },
+        progress: { 'user-123': { completedSessions: 18 } }
+      }, 'user-123');
+      expect(cbProgress).toBe(50); // 18 / 36
+
+      // 2. streak type
+      const streakProgress = result.current.getProgressPercent({
+        type: 'streak',
+        goal: { workoutsPerWeek: 3, durationWeeks: 8 },
+        progress: { 'user-123': { weeklyCount: [3, 3, 3, 3, 0, 0, 0, 0] } }
+      }, 'user-123');
+      expect(streakProgress).toBe(50); // 12 / 24
+
+      // 3. weak_point type
+      const wpProgress = result.current.getProgressPercent({
+        type: 'weak_point',
+        goal: { targetSets: 20 },
+        progress: { 'user-123': { completedSets: 5 } }
+      }, 'user-123');
+      expect(wpProgress).toBe(25); // 5 / 20
     });
   });
 });

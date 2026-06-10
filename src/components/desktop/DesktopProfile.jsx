@@ -99,12 +99,21 @@ export const DesktopProfile = () => {
         ? editGymName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_+|_+$)/g, '')
         : '';
 
+      const oldGymId = profile.gymId || '';
+      let lookingForSquad = profile.lookingForSquad;
+      if (!computedGymId) {
+        lookingForSquad = false;
+      } else if (computedGymId !== oldGymId || lookingForSquad === undefined) {
+        lookingForSquad = true;
+      }
+
       const updates = {
         equipmentList: editEquipment,
         medicalFlags: editMedicalFlags,
         gymName: editGymName.trim(),
         gymId: computedGymId,
         disableRestTimer: editDisableRestTimer,
+        lookingForSquad,
       };
 
       await updateDoc(userRef, updates);
@@ -116,6 +125,16 @@ export const DesktopProfile = () => {
           ...updates
         }
       });
+
+      // Sync public squad_codes document
+      if (profile.squadCode) {
+        const codeRef = doc(db, 'squad_codes', profile.squadCode);
+        await updateDoc(codeRef, {
+          gymId: computedGymId,
+          gymName: editGymName.trim(),
+          lookingForSquad
+        }).catch(err => console.warn('[Profile] Failed to update squad code doc:', err));
+      }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);

@@ -18,16 +18,19 @@
  *   const { awardXP } = useXPEngine();
  *   const result = await awardXP(uid, 'session_logged', 55);
  *   // { newXP: 55, levelUp: false, newLevel: 1, newLevelName: 'Rookie' }
+ *
+ * TRANSACTION FIX: awardXP now uses runTransaction to atomically read → compute → write XP.
+ * This prevents concurrent XP awards (e.g. session_logged + streak_7 firing back-to-back)
+ * from racing: without a transaction both reads see the same currentXP and one award is lost.
  */
 
 import { useCallback } from 'react';
 import {
   doc,
-  getDoc,
-  updateDoc,
   addDoc,
   collection,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useXPStore } from '../stores/useXPStore';
@@ -55,10 +58,8 @@ export function useXPEngine() {
   /**
    * Awards XP to a user for a given source event.
    *
-   * 1. Reads current XP from Firestore (or falls back to xpStore).
-   * 2. Computes new total and derives level.
-   * 3. Writes updateDoc on users/{uid} and addDoc to xpLog subcollection.
-   * 4. Syncs xpStore locally.
+   * Uses a Firestore transaction to atomically read → compute → write XP,
+   * preventing concurrent awards from silently losing one another.
    *
    * @param {string} uid
    * @param {string} source      - Must be a key of XP_AWARDS or pass a custom amount.
@@ -76,25 +77,30 @@ export function useXPEngine() {
     }
 
     try {
-      // 1. Read current XP from Firestore
       const userRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userRef);
-      const userData = userSnap.exists() ? userSnap.data() : {};
-      const currentXP = typeof userData.xp === 'number' ? userData.xp : 0;
 
-      // 2. Compute new level
-      const newXP = currentXP + xpAmount;
-      const prevDerived = deriveLevelFromXP(currentXP);
-      const newDerived = deriveLevelFromXP(newXP);
-      const levelUp = newDerived.level > prevDerived.level;
+      // Atomic transaction: read current XP → compute new XP → write — all in one round trip.
+      // No other concurrent write can interleave between the read and write.
+      const result = await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        const currentXP = typeof userData.xp === 'number' ? userData.xp : 0;
 
-      // 3. Batch: update user doc + add xpLog entry
-      const updatePayload = {
-        xp:        newXP,
-        level:     newDerived.level,
-        levelName: newDerived.levelName,
-      };
+        const newXP = currentXP + xpAmount;
+        const prevDerived = deriveLevelFromXP(currentXP);
+        const newDerived  = deriveLevelFromXP(newXP);
+        const levelUp     = newDerived.level > prevDerived.level;
 
+        transaction.update(userRef, {
+          xp:        newXP,
+          level:     newDerived.level,
+          levelName: newDerived.levelName,
+        });
+
+        return { newXP, levelUp, newDerived, userData };
+      });
+
+      // Write xpLog entry AFTER transaction (outside transaction to avoid contention)
       const logEntry = {
         source,
         amount:    xpAmount,
@@ -102,25 +108,22 @@ export function useXPEngine() {
         ...(meta.sessionId   ? { sessionId:   meta.sessionId }   : {}),
         ...(meta.challengeId ? { challengeId: meta.challengeId } : {}),
       };
+      addDoc(collection(db, 'users', uid, 'xpLog'), logEntry).catch((err) => {
+        // Non-critical: log write failure doesn't affect XP correctness
+        console.warn('[useXPEngine] xpLog write failed (XP already saved):', err.message);
+      });
 
-      // Execute writes concurrently — they're independent docs
-      await Promise.all([
-        updateDoc(userRef, updatePayload),
-        addDoc(collection(db, 'users', uid, 'xpLog'), logEntry),
-      ]);
-
-      // 4. Sync local store
-      // awardXPLocally just adds the delta; setXP hydrates the full state.
-      setXP(newXP, userData.streak ?? 0);
+      // Sync local store from transaction result
+      setXP(result.newXP, result.userData.streak ?? 0);
 
       return {
-        newXP,
-        levelUp,
-        newLevel:     newDerived.level,
-        newLevelName: newDerived.levelName,
+        newXP:        result.newXP,
+        levelUp:      result.levelUp,
+        newLevel:     result.newDerived.level,
+        newLevelName: result.newDerived.levelName,
       };
     } catch (err) {
-      console.error('[useXPEngine] awardXP failed:', err);
+      console.error('[useXPEngine] awardXP transaction failed:', err);
       // Optimistic local update so UI isn't blocked by a network hiccup
       awardXPLocally(xpAmount);
       return null;
@@ -135,7 +138,8 @@ export function useXPEngine() {
   const loadXP = useCallback(async (uid) => {
     if (!uid) return;
     try {
-      const userSnap = await getDoc(doc(db, 'users', uid));
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await runTransaction(db, async (t) => t.get(userRef));
       if (userSnap.exists()) {
         const data = userSnap.data();
         setXP(data.xp ?? 0, data.streak ?? 0);

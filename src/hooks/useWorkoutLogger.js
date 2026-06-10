@@ -49,9 +49,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useWorkoutStore } from '../stores/useWorkoutStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { useXPStore } from '../stores/useXPStore';
 import { useUIStore } from '../stores/useUIStore';
 import { evaluateStreak, deriveLevelFromXP } from '../lib/xpHelpers';
+import { getBWEffectiveFraction } from '../utils/bwEffectiveLoad';
 import { useChallenges } from './useChallenges';
 import { clearStrengthCache } from './useProgress';
 
@@ -94,9 +96,12 @@ export function useWorkoutLogger() {
   // Cache built payload across retries (avoids re-calculating on retry)
   const pendingBatchRef = useRef(null);
   const retryCountRef   = useRef(0);
+  // Track whether optimistic XP has already been awarded for the current session.
+  // Prevents double-award when finishSession() is called again after a network failure.
+  const xpAwardedRef    = useRef(false);
 
   // ── _buildBatchPayload ──────────────────────────────────────────────────────
-  const _buildBatchPayload = useCallback(async (uid) => {
+  const _buildBatchPayload = useCallback(async (uid, debrief) => {
     // ── a. Snapshot current state directly from useWorkoutStore ──────────────
     const { activeSession: session, exercises: exercisesSnapshot } = useWorkoutStore.getState();
 
@@ -125,11 +130,15 @@ export function useWorkoutLogger() {
     const squadsColRef = collection(db, 'shared_squads');
     const squadsQuery = query(squadsColRef, where('memberUids', 'array-contains', uid));
 
+    // Skip the squad getDocs if user has no squad — saves 1 Firestore read per session save.
+    // Use profile from useAuthStore (already synced via App.jsx onSnapshot).
+    const profileSquadCode = useAuthStore.getState().profile?.squadCode;
+
     const [userSnap, prsSnap, weeklySessionsSnap, squadsSnap] = await Promise.all([
       getDoc(userRef),
       getDocs(prsColRef),
       getDocs(weeklySessionsQuery),
-      getDocs(squadsQuery),
+      profileSquadCode ? getDocs(squadsQuery) : Promise.resolve({ docs: [] }),
     ]);
 
     if (!userSnap.exists()) {
@@ -151,7 +160,12 @@ export function useWorkoutLogger() {
         // Support both 'done' and 'completed' flags (legacy compat)
         if (s.done || s.completed) {
           totalSets += 1;
-          const w = s.weight === 'BW' ? 0 : (parseFloat(s.weight) || 0);
+          // BW volume: use research-backed effective fraction of bodyweight per exercise
+          // (push-ups load ~64% BW, pull-ups ~100%, squats ~85%, etc.)
+          // Previously used 100% which inflated calisthenics volume vs barbell users.
+          const w = s.weight === 'BW'
+            ? userBodyweight * getBWEffectiveFraction(ex.exerciseKey ?? ex.exerciseId ?? '')
+            : (parseFloat(s.weight) || 0);
           totalVolume += w * (parseInt(s.reps, 10) || 0);
         }
       });
@@ -195,7 +209,12 @@ export function useWorkoutLogger() {
           done:   true,
         })),
         volume: doneSets.reduce(
-          (sum, s) => sum + (s.weight === 'BW' ? 0 : (parseFloat(s.weight) || 0)) * (parseInt(s.reps, 10) || 0),
+          (sum, s) => {
+            const w = s.weight === 'BW'
+              ? userBodyweight * getBWEffectiveFraction(exerciseKey)
+              : (parseFloat(s.weight) || 0);
+            return sum + w * (parseInt(s.reps, 10) || 0);
+          },
           0
         ),
       });
@@ -282,6 +301,20 @@ export function useWorkoutLogger() {
     const newDerived  = deriveLevelFromXP(newXP);
     const levelUp     = newDerived.level > prevDerived.level;
 
+    // ── h-1. Compute bestLift for recap (stored on session doc, avoids subcollection reads in useWeeklyRecap)
+    let bestLiftObj = null;
+    let maxW = 0;
+    let maxBWReps = 0;
+    exercisesSnapshot.forEach((ex) => {
+      const isBW = isBodyweightEx(ex.exerciseKey ?? ex.exerciseId ?? '');
+      (ex.sets || []).filter(s => s.done || s.completed).forEach((s) => {
+        const w = s.weight === 'BW' ? 0 : (parseFloat(s.weight) || 0);
+        const r = parseInt(s.reps, 10) || 0;
+        if (!isBW && w > maxW) { maxW = w; bestLiftObj = { name: ex.name, weight: w, isBW: false }; }
+        if (isBW && r > maxBWReps) { maxBWReps = r; bestLiftObj = { name: ex.name, weight: 'BW', reps: r, isBW: true }; }
+      });
+    });
+
     // ── h. Session document fields ─────────────────────────────────────────────
     const sessionDoc = {
       planDayId:       session.planDayId      ?? 'custom',
@@ -307,6 +340,12 @@ export function useWorkoutLogger() {
       prCount:         newPRs.length,
       isOverdrive,
       isXPBoosterActive: isBoosterActive,
+      bestLift: bestLiftObj, // recap summary — avoids exercises subcollection reads in useWeeklyRecap
+      debrief: {
+        pain: debrief?.pain || [],
+        easy: debrief?.easy || [],
+        brokenEquipment: debrief?.brokenEquipment || [],
+      },
     };
 
     // Compile latest lifts dictionary for profile caching
@@ -564,17 +603,23 @@ export function useWorkoutLogger() {
   }, []);
 
   // ── finishSession ───────────────────────────────────────────────────────────
-  const finishSession = useCallback(async (uid) => {
+  const finishSession = useCallback(async (uid, debrief) => {
     try {
       // Build payload once; reuse on retry
       let payload = pendingBatchRef.current;
       if (!payload) {
-        payload = await _buildBatchPayload(uid);
+        payload = await _buildBatchPayload(uid, debrief);
         pendingBatchRef.current = payload;
       }
 
-      // Optimistic XP update — animates immediately before network round-trip
-      useXPStore.getState().awardXP(payload.xpEarned);
+      // Optimistic XP update — animates immediately before network round-trip.
+      // Guard: only award once per session attempt. On retry (pendingBatchRef is set
+      // but xpAwardedRef is true), the XP was already awarded and rolled back on fail,
+      // so we re-award it here exactly once before the next commit attempt.
+      if (!xpAwardedRef.current) {
+        useXPStore.getState().awardXP(payload.xpEarned);
+        xpAwardedRef.current = true;
+      }
 
       // Atomic Firestore write
       await _commitBatch(payload);
@@ -582,6 +627,7 @@ export function useWorkoutLogger() {
       // SUCCESS — clear cache, reset session, return summary
       pendingBatchRef.current = null;
       retryCountRef.current   = 0;
+      xpAwardedRef.current    = false; // reset for next session
       clearStrengthCache();
       useWorkoutStore.getState().resetSession();
 
@@ -630,8 +676,9 @@ export function useWorkoutLogger() {
       console.error('[useWorkoutLogger] finishSession failed:', err);
 
       // Roll back the optimistic XP we speculatively added
-      if (pendingBatchRef.current) {
+      if (pendingBatchRef.current && xpAwardedRef.current) {
         useXPStore.getState().rollbackXP(pendingBatchRef.current.xpEarned);
+        xpAwardedRef.current = false; // allow re-award on next retry attempt
       }
 
       retryCountRef.current += 1;

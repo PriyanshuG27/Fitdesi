@@ -162,6 +162,52 @@ const SetRowComponent = ({
     }
   };
 
+  // Keep a ref to the latest input values to avoid re-registering unload listeners on every keystroke
+  const latestValuesRef = React.useRef({ localWeight, localReps });
+  useEffect(() => {
+    latestValuesRef.current = { localWeight, localReps };
+  }, [localWeight, localReps]);
+
+  useEffect(() => {
+    const handleSaveUncommitted = () => {
+      const { localWeight: w, localReps: r } = latestValuesRef.current;
+      
+      // Commit Weight
+      const trimmedW = typeof w === 'string' ? w.trim() : String(w);
+      if (isBodyweight && /^bw$/i.test(trimmedW)) {
+        onUpdate(exerciseId, setIndex, 'weight', 'BW');
+      } else {
+        let parsedW = parseFloat(w);
+        if (isNaN(parsedW) || parsedW < 0) parsedW = 0;
+        parsedW = parseFloat(parsedW.toFixed(2));
+        if (isBodyweight && parsedW === 0) {
+          onUpdate(exerciseId, setIndex, 'weight', 'BW');
+        } else {
+          onUpdate(exerciseId, setIndex, 'weight', parsedW);
+        }
+      }
+
+      // Commit Reps
+      let parsedR = parseInt(r, 10);
+      if (isNaN(parsedR) || parsedR < 0) parsedR = 0;
+      onUpdate(exerciseId, setIndex, 'reps', parsedR);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleSaveUncommitted();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleSaveUncommitted);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleSaveUncommitted);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [exerciseId, setIndex, isBodyweight, onUpdate]);
+
   // ─── Button Actions ──────────────────────────────────────────────────────────
 
   const handleWeightDecrement = () => {

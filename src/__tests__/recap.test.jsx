@@ -34,29 +34,27 @@ describe('Weekly Recap System TDD', () => {
     localStorage.clear();
   });
 
-  it('1. useWeeklyRecap() aggregates session count correctly for last 7 days', async () => {
+  it('1. useWeeklyRecap() aggregates session count, volume, xpEarned from session docs', async () => {
     vi.setSystemTime(new Date('2026-06-07T12:00:00Z')); // Sunday
 
-    // 1 call for sessions, followed by N calls for exercises, 1 for PRs
-    mockGetDocs.mockResolvedValueOnce({
-      size: 3,
-      docs: [
-        { id: 'sess1', data: () => ({ totalVolume: 1000, xpEarned: 150 }) },
-        { id: 'sess2', data: () => ({ totalVolume: 1200, xpEarned: 150 }) },
-        { id: 'sess3', data: () => ({ totalVolume: 800, xpEarned: 150 }) }
-      ]
-    }).mockResolvedValueOnce({
-      docs: [] // ex sess1
-    }).mockResolvedValueOnce({
-      docs: [] // ex sess2
-    }).mockResolvedValueOnce({
-      docs: [] // ex sess3
-    }).mockResolvedValueOnce({
-      size: 2 // pr count
-    });
+    // New approach: 1 call for sessions (reads totalVolume/xpEarned from session doc),
+    // then 1 call for PRs. No exercises subcollection reads.
+    mockGetDocs
+      .mockResolvedValueOnce({
+        size: 3,
+        docs: [
+          { id: 'sess1', data: () => ({ totalVolume: 1000, xpEarned: 150, bestLift: null }) },
+          { id: 'sess2', data: () => ({ totalVolume: 1200, xpEarned: 150, bestLift: null }) },
+          { id: 'sess3', data: () => ({ totalVolume: 800, xpEarned: 150, bestLift: null }) },
+        ],
+      })
+      .mockResolvedValueOnce({
+        size: 2, // PRs broken this week
+        docs: [],
+      });
 
     const { result } = renderHook(() => useWeeklyRecap());
-    
+
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
@@ -65,7 +63,7 @@ describe('Weekly Recap System TDD', () => {
       sessionsCount: 3,
       totalVolume: 3000,
       xpEarned: 450,
-      prsBrokenCount: 2
+      prsBrokenCount: 2,
     }));
   });
 
@@ -82,13 +80,13 @@ describe('Weekly Recap System TDD', () => {
   it('3. After viewing, localStorage key prevents re-showing same week', () => {
     vi.setSystemTime(new Date('2026-06-07T12:00:00Z'));
     const { result } = renderHook(() => useWeeklyRecap());
-    
+
     expect(result.current.hasSeen).toBe(false);
-    
+
     act(() => {
       result.current.markAsSeen();
     });
-    
+
     expect(result.current.hasSeen).toBe(true);
     expect(localStorage.getItem(`recap_seen_${result.current.weekId}`)).toBe('true');
   });
@@ -99,10 +97,10 @@ describe('Weekly Recap System TDD', () => {
 
     const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
     render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="2026-W23" markAsSeen={vi.fn()} onClose={vi.fn()} />);
-    
+
     const shareBtn = screen.getByText(/Share Recap/i);
     fireEvent.click(shareBtn);
-    
+
     await waitFor(() => {
       expect(html2canvas).toHaveBeenCalled();
       expect(global.navigator.share).toHaveBeenCalled();
@@ -113,16 +111,16 @@ describe('Weekly Recap System TDD', () => {
     global.navigator.share = undefined;
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
     global.URL.revokeObjectURL = vi.fn();
-    
+
     const appendSpy = vi.spyOn(document.body, 'appendChild');
     const removeSpy = vi.spyOn(document.body, 'removeChild');
 
     const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
     render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="2026-W23" markAsSeen={vi.fn()} onClose={vi.fn()} />);
-    
+
     const shareBtn = screen.getByText(/Share Recap/i);
     fireEvent.click(shareBtn);
-    
+
     await waitFor(() => {
       expect(html2canvas).toHaveBeenCalled();
       expect(appendSpy).toHaveBeenCalled();

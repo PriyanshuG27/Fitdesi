@@ -5,11 +5,13 @@ import html2canvas from 'html2canvas';
 
 export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }) => {
   const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState(null);
   const recapCardRef = useRef(null);
 
   if (!isOpen || !recap) return null;
 
-  const weekNumber = weekId.split('-W')[1] || '';
+  // Guard: weekId may be undefined if recap exists but weekId isn't passed through
+  const weekNumber = weekId?.split('-W')[1] || '';
 
   const handleClose = () => {
     markAsSeen();
@@ -53,6 +55,8 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
       }
     } catch (err) {
       console.error('Error sharing recap:', err);
+      setShareError('Could not generate image. Please try again.');
+      setTimeout(() => setShareError(null), 4000);
     } finally {
       setSharing(false);
     }
@@ -180,7 +184,11 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
           </div>
 
           {/* Actions Footer */}
-          <div className="flex gap-4 mt-6 border-t-2 border-[var(--border)] pt-4">
+          <div className="flex flex-col gap-2 mt-6 border-t-2 border-[var(--border)] pt-4">
+            {shareError && (
+              <p className="text-xs text-red-400 font-mono text-center">{shareError}</p>
+            )}
+            <div className="flex gap-4">
             <button
               onClick={shareRecap}
               disabled={sharing}
@@ -194,7 +202,8 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
               className="flex-1 py-3 rounded-md border-2 border-[var(--border)] bg-[var(--surface)] hover:border-[var(--text-primary)] text-[var(--text-primary)] font-display font-extrabold text-sm uppercase tracking-wide transition-colors cursor-pointer select-none active:scale-95"
             >
               Done
-            </button>
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

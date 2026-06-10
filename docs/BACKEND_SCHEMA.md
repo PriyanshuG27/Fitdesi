@@ -76,6 +76,11 @@ totalVolume       number      yes        Sum of (weight × reps) across all sets
 totalSets         number      yes        Total completed sets
 durationMinutes   number      no         Session duration in minutes
 xpEarned          number      yes        XP awarded for this session
+debrief           map         no         AI Coach post-workout debrief:
+  pain            string[]               Exercise keys causing joint pain
+  easy            string[]               Exercise keys that felt too easy
+  brokenEquipment string[]               Exercise keys with broken/unavailable machines
+
 ```
 
 ---

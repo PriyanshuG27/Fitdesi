@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Dumbbell, Zap, Flame, Film, Trash2 } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { useAuthStore } from '../../stores/useAuthStore';
 
 export const NeubrutalistCalendar = ({ sessions = [], onSelectSession = null, isMobile = false }) => {
@@ -10,6 +10,9 @@ export const NeubrutalistCalendar = ({ sessions = [], onSelectSession = null, is
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deletedSessionIds, setDeletedSessionIds] = useState(new Set());
+  // Cache: sessionId -> exercises[] (lazy-loaded on cell click for mobile sessions)
+  const [exerciseCache, setExerciseCache] = useState({});
+  const [loadingExercisesFor, setLoadingExercisesFor] = useState(null); // sessionId being loaded
 
   // Filter out deleted session IDs locally to guarantee instant UI removal
   const activeSessions = useMemo(() => {
@@ -109,13 +112,40 @@ export const NeubrutalistCalendar = ({ sessions = [], onSelectSession = null, is
     return daysGrid.find(cell => cell.dateKey === selectedDateKey && !cell.isFiller) || null;
   }, [daysGrid, selectedDateKey]);
 
-  const handleCellClick = (cell) => {
+  const handleCellClick = useCallback(async (cell) => {
     if (cell.isFiller || !cell.sessionsList.length) {
       setSelectedDateKey(null);
       return;
     }
     setSelectedDateKey(cell.dateKey);
-  };
+
+    // Lazy-load exercises for any mobile session that doesn't have them cached yet
+    if (!isMobile) return;
+    const sessionsToLoad = cell.sessionsList.filter(
+      (s) => s.id && !exerciseCache[s.id] && (!s.exercises || s.exercises.length === 0)
+    );
+    if (!sessionsToLoad.length || !uid) return;
+
+    // Load them all in parallel (one getDocs per session, but only on first tap)
+    setLoadingExercisesFor(cell.dateKey);
+    try {
+      const results = await Promise.all(
+        sessionsToLoad.map(async (sess) => {
+          const exSnap = await getDocs(collection(db, 'users', uid, 'sessions', sess.id, 'exercises'));
+          return { id: sess.id, exercises: exSnap.docs.map((d) => d.data()) };
+        })
+      );
+      setExerciseCache((prev) => {
+        const next = { ...prev };
+        results.forEach(({ id, exercises }) => { next[id] = exercises; });
+        return next;
+      });
+    } catch (err) {
+      console.error('[Calendar] Failed to lazy-load exercises:', err);
+    } finally {
+      setLoadingExercisesFor(null);
+    }
+  }, [isMobile, uid, exerciseCache]);
 
   const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const todayKey = getYYYYMMDD(new Date());
@@ -271,17 +301,23 @@ export const NeubrutalistCalendar = ({ sessions = [], onSelectSession = null, is
                         </div>
                       </div>
 
-                      {/* Exercises short summary */}
+                      {/* Exercises short summary — lazy-loaded for mobile sessions */}
                       <div className="text-[10px] text-neutral-300 font-sans leading-relaxed pl-2 border-l-2 border-[var(--primary)]">
-                        {sess.exercises && sess.exercises.length > 0 ? (
-                          sess.exercises.map((ex, exIdx) => (
-                            <div key={exIdx} className="truncate">
-                              • <span className="font-bold text-white">{ex.name}</span> ({ex.sets?.length || 0} sets)
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-neutral-500 italic">No movements recorded.</span>
-                        )}
+                        {loadingExercisesFor === selectedDateKey ? (
+                          <span className="text-neutral-500 italic animate-pulse">⚙️ Loading exercises...</span>
+                        ) : (() => {
+                          // For mobile sessions: use cache; for desktop: use inline exercises
+                          const exList = exerciseCache[sess.id] ?? sess.exercises ?? [];
+                          return exList.length > 0 ? (
+                            exList.map((ex, exIdx) => (
+                              <div key={exIdx} className="truncate">
+                                • <span className="font-bold text-white">{ex.name}</span> ({ex.sets?.length || 0} sets)
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-neutral-500 italic">No movements recorded.</span>
+                          );
+                        })()}
                       </div>
 
                       {/* Action Row */}

@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-// Module-level cache for strength data
-const strengthCache = new Map();
+// Module-level cache for strength data — entries expire after 5 minutes
+// so a newly logged PR shows on the next Progress tab open without a full clear.
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const strengthCache = new Map(); // key -> { data, expiresAt }
 
 export function clearStrengthCache() {
   strengthCache.clear();
@@ -47,8 +49,9 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
     }
 
     const cacheKey = `${uid}_${exerciseKey}_${rangeDays}`;
-    if (strengthCache.has(cacheKey)) {
-      setData(strengthCache.get(cacheKey));
+    const cached = strengthCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      setData(cached.data);
       setLoading(false);
       return;
     }
@@ -61,7 +64,8 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
       setError(null);
       try {
         const sessionsRef = collection(db, 'users', uid, 'sessions');
-        const q = query(sessionsRef, orderBy('date', 'desc'), limit(60));
+        // Limit 20 is enough for a trend chart; was 60 which caused excess reads
+        const q = query(sessionsRef, orderBy('date', 'desc'), limit(20));
         const sessSnap = await getDocs(q);
 
         if (signal.aborted) return;
@@ -70,48 +74,59 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
         cutoff.setDate(cutoff.getDate() - rangeDays);
         const cutoffTime = cutoff.getTime();
 
-        const records = [];
+        // Filter sessions within date range first to skip subcollection reads for old sessions
+        const relevantDocs = sessSnap.docs.filter((docSnap) => {
+          const sessionData = docSnap.data();
+          const sessionDate = sessionData.date?.toDate?.() ?? new Date(sessionData.date);
+          return sessionDate.getTime() >= cutoffTime;
+        });
 
-        // For each session within rangeDays, fetch its exercises
-        for (const docSnap of sessSnap.docs) {
-          if (signal.aborted) return;
+        if (signal.aborted) return;
+
+        // Fetch all exercises subcollections in PARALLEL (not serial) — major read time reduction
+        const exerciseResults = await Promise.all(
+          relevantDocs.map(async (docSnap) => {
+            const exSnap = await getDocs(
+              collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises')
+            );
+            return { docSnap, exSnap };
+          })
+        );
+
+        if (signal.aborted) return;
+
+        const records = [];
+        for (const { docSnap, exSnap } of exerciseResults) {
           const sessionData = docSnap.data();
           const sessionDate = sessionData.date?.toDate?.() ?? new Date(sessionData.date);
 
-          if (sessionDate.getTime() >= cutoffTime) {
-            const exercisesRef = collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises');
-            const exSnap = await getDocs(exercisesRef);
+          const targetExercise = exSnap.docs
+            .map((d) => d.data())
+            .find((ex) => ex.exerciseKey === exerciseKey);
 
-            if (signal.aborted) return;
+          if (targetExercise && targetExercise.sets) {
+            let maxWeight = 0;
+            let maxReps = 0;
 
-            const targetExercise = exSnap.docs
-              .map((d) => d.data())
-              .find((ex) => ex.exerciseKey === exerciseKey);
+            for (const set of targetExercise.sets) {
+              const isBW = set.weight === 'BW';
+              const w = isBW ? 0 : (parseFloat(set.weight) || 0);
+              const r = parseInt(set.reps, 10) || 0;
 
-            if (targetExercise && targetExercise.sets) {
-              let maxWeight = 0;
-              let maxReps = 0;
-
-              for (const set of targetExercise.sets) {
-                const isBW = set.weight === 'BW';
-                const w = isBW ? 0 : (parseFloat(set.weight) || 0);
-                const r = parseInt(set.reps, 10) || 0;
-
-                if (w > maxWeight) {
-                  maxWeight = w;
-                  maxReps = r;
-                } else if (w === maxWeight && r > maxReps) {
-                  maxReps = r;
-                }
+              if (w > maxWeight) {
+                maxWeight = w;
+                maxReps = r;
+              } else if (w === maxWeight && r > maxReps) {
+                maxReps = r;
               }
-
-              records.push({
-                date: sessionData.dateString || formatDate(sessionDate),
-                maxWeight,
-                maxReps,
-                timestamp: sessionDate.getTime(),
-              });
             }
+
+            records.push({
+              date: sessionData.dateString || formatDate(sessionDate),
+              maxWeight,
+              maxReps,
+              timestamp: sessionDate.getTime(),
+            });
           }
         }
 
@@ -120,7 +135,7 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
           .sort((a, b) => a.timestamp - b.timestamp)
           .map(({ date, maxWeight, maxReps }) => ({ date, maxWeight, maxReps }));
 
-        strengthCache.set(cacheKey, sortedData);
+        strengthCache.set(cacheKey, { data: sortedData, expiresAt: Date.now() + CACHE_TTL_MS });
 
         if (!signal.aborted) {
           setData(sortedData);
@@ -143,9 +158,7 @@ export function useStrengthData(uid, exerciseKey, rangeDays = 30) {
     };
   }, [uid, exerciseKey, rangeDays]);
 
-  const memoizedData = useMemo(() => data, [data]);
-
-  return { data: memoizedData, loading, error };
+  return { data, loading, error };
 }
 
 /**
@@ -195,10 +208,15 @@ export function useVolumeData(uid, rangeWeeks = 12) {
         const current = new Date(cutoff.getTime());
         const today = new Date();
 
+        // FIX: Step by one day at a time and register the ISO week for each Monday.
+        // Stepping by +7 days from an arbitrary cutoff date would skip ISO weeks if cutoff
+        // isn't itself a Monday (which it usually isn't).
         while (current <= today) {
-          const wStr = getISOWeek(current);
-          weeksMap[wStr] = 0;
-          current.setDate(current.getDate() + 7);
+          if (current.getDay() === 1) { // Only register Mondays (ISO week starts)
+            const wStr = getISOWeek(current);
+            if (!weeksMap[wStr]) weeksMap[wStr] = 0;
+          }
+          current.setDate(current.getDate() + 1);
         }
 
         // Ensure current week is in the map
@@ -242,9 +260,7 @@ export function useVolumeData(uid, rangeWeeks = 12) {
     };
   }, [uid, rangeWeeks]);
 
-  const memoizedData = useMemo(() => data, [data]);
-
-  return { data: memoizedData, loading, error };
+  return { data, loading, error };
 }
 
 /**
@@ -321,7 +337,5 @@ export function usePRList(uid) {
     };
   }, [uid, refreshTrigger]);
 
-  const memoizedPRs = useMemo(() => prs, [prs]);
-
-  return { prs: memoizedPRs, loading, error, refresh };
+  return { prs, loading, error, refresh };
 }

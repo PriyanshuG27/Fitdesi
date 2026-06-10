@@ -2,11 +2,12 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { mockGetDocs } from '../__mocks__/firebase';
-import { useStrengthData, useVolumeData, usePRList } from '../hooks/useProgress';
+import { useStrengthData, useVolumeData, usePRList, clearStrengthCache } from '../hooks/useProgress';
 
 describe('useProgress Hooks Test Suite', () => {
   beforeEach(() => {
     mockGetDocs.mockReset();
+    clearStrengthCache();
   });
 
   describe('useStrengthData Hook', () => {
@@ -94,6 +95,60 @@ describe('useProgress Hooks Test Suite', () => {
         { date: '2026-05-30', maxWeight: 65, maxReps: 6 },
         { date: '2026-06-05', maxWeight: 70, maxReps: 4 },
       ]);
+    });
+
+    it('handles bodyweight sets, sets with equal weight but higher reps, timestamp objects, and error states', async () => {
+      const now = new Date('2026-06-08T12:00:00');
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'sess1',
+            data: () => ({
+              date: { toDate: () => now },
+            }),
+          },
+        ],
+      });
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            data: () => ({
+              exerciseKey: 'pullup',
+              sets: [
+                { weight: 'BW', reps: 10, done: true },
+                { weight: 10, reps: 5, done: true },
+                { weight: 10, reps: 8, done: true },
+              ],
+            }),
+          },
+        ],
+      });
+
+      const { result } = renderHook(() => useStrengthData('user-123', 'pullup', 30));
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(result.current.loading).toBe(false);
+      expect(result.current.error).toBeNull();
+      expect(result.current.data).toEqual([
+        { date: '2026-06-08', maxWeight: 10, maxReps: 8 },
+      ]);
+    });
+
+    it('sets error when fetching strength data fails', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useStrengthData('user-123', 'bench_press', 30));
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(result.current.loading).toBe(false);
+      expect(result.current.error).toBe('Network error');
     });
 
     it('returns cached results when same exerciseKey is re-queried', async () => {
@@ -206,6 +261,25 @@ describe('useProgress Hooks Test Suite', () => {
       expect(currentWeek.totalVolume).toBe(5000);
       expect(gapWeek.totalVolume).toBe(0); // Intermediate week is filled with 0
     });
+
+    it('sets error when fetching volume data fails', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Volume read failed'));
+
+      const { result } = renderHook(() => useVolumeData('user-123', 3));
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(result.current.loading).toBe(false);
+      expect(result.current.error).toBe('Volume read failed');
+    });
+
+    it('returns empty array immediately if uid is missing', () => {
+      const { result } = renderHook(() => useVolumeData(null, 3));
+      expect(result.current.data).toEqual([]);
+      expect(result.current.loading).toBe(false);
+    });
   });
 
   describe('usePRList Hook', () => {
@@ -277,6 +351,68 @@ describe('useProgress Hooks Test Suite', () => {
       expect(result.current.prs.length).toBe(1);
       expect(result.current.prs[0].exerciseKey).toBe('squat');
       expect(mockGetDocs).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles missing uid, fetch failures, and different PR date formats', async () => {
+      // 1. missing uid
+      const { result: resNullUid } = renderHook(() => usePRList(null));
+      expect(resNullUid.current.prs).toEqual([]);
+      expect(resNullUid.current.loading).toBe(false);
+
+      // 2. fetch failure
+      mockGetDocs.mockRejectedValue(new Error('PR fetch failed'));
+      const { result: resError } = renderHook(() => usePRList('user-123'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(resError.current.loading).toBe(false);
+      expect(resError.current.error).toBe('PR fetch failed');
+
+      // 3. different date formats (toDate() timestamp, Date object, string date, missing date)
+      const now = new Date();
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'wp1',
+            data: () => ({
+              name: 'W1',
+              weight: 50,
+              reps: 10,
+              date: { toDate: () => now },
+            }),
+          },
+          {
+            id: 'wp2',
+            data: () => ({
+              name: 'W2',
+              weight: 60,
+              reps: 8,
+              date: '2026-06-05',
+            }),
+          },
+          {
+            id: 'wp3',
+            data: () => ({
+              name: 'W3',
+              weight: 70,
+              reps: 5,
+              date: null,
+            }),
+          },
+        ],
+      });
+
+      const { result: resDates } = renderHook(() => usePRList('user-123'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(resDates.current.loading).toBe(false);
+      expect(resDates.current.prs.length).toBe(3);
+      // Sorted by date DESC: now, then '2026-06-05', then null
+      expect(resDates.current.prs[0].exerciseKey).toBe('wp1');
+      expect(resDates.current.prs[1].exerciseKey).toBe('wp2');
+      expect(resDates.current.prs[2].exerciseKey).toBe('wp3');
     });
   });
 });

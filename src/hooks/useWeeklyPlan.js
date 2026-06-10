@@ -13,12 +13,23 @@ import { useAuthStore }           from '../stores/useAuthStore';
 import { usePlanStore }           from '../stores/usePlanStore';
 import { useUIStore }             from '../stores/useUIStore';
 
-const ERROR_MAP = {
-  'functions/resource-exhausted': 'Plan already generated for this week.',
-  'functions/deadline-exceeded':  'Plan generation timed out. Please try again.',
-  'functions/unavailable':        'AI service is temporarily unavailable.',
-  'functions/internal':           'Plan generation failed. Please try again.',
-};
+// Maps error message substrings to user-friendly messages.
+// callZenkaiAPI throws plain Error objects (not Firebase HttpsCallable errors),
+// so we match on err.message content rather than err.code.
+const ERROR_MESSAGES = [
+  { match: 'resource-exhausted', msg: 'Plan already generated for this week.' },
+  { match: 'deadline-exceeded',  msg: 'Plan generation timed out. Please try again.' },
+  { match: 'unavailable',        msg: 'AI service is temporarily unavailable.' },
+  { match: 'rate limit',         msg: 'Too many requests. Please wait a moment.' },
+];
+
+function getFriendlyError(err) {
+  const msgLower = (err?.message || '').toLowerCase();
+  for (const { match, msg } of ERROR_MESSAGES) {
+    if (msgLower.includes(match)) return msg;
+  }
+  return err?.message || 'Plan generation failed. Please try again.';
+}
 
 export function useWeeklyPlan() {
   const { user } = useAuthStore();
@@ -43,11 +54,12 @@ export function useWeeklyPlan() {
   }, [user?.uid, weekId, setPlan, setPlanLoading, setPlanError]);
 
   // Fetch existing plan on mount if not already loaded for this week
+  // Also re-fetch when weekId changes (week rollover in long-running PWA sessions)
   useEffect(() => {
     if (user && !currentPlan) {
       getCurrentPlan();
     }
-  }, [user?.uid, currentPlan, getCurrentPlan]);
+  }, [user?.uid, weekId, currentPlan, getCurrentPlan]);
 
   const generatePlan = useCallback(async (personalRequirements = '', usePowerUp = false) => {
     if (!user) return;
@@ -67,7 +79,7 @@ export function useWeeklyPlan() {
         addToast('New weekly plan generated! 🏋️', 'success');
       }
     } catch (err) {
-      const msg = err.message || ERROR_MAP[err.code] || 'Plan generation failed. Please try again.';
+      const msg = getFriendlyError(err);
       setPlanError(msg);
       addToast(msg, 'error');
     } finally {

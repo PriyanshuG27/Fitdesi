@@ -49,7 +49,7 @@ service cloud.firestore {
         // Gamification — Phase 5
         'cooldowns', 'skills',
         // New Profile Fields
-        'latestLiftsMap', 'latestRestTimesMap', 'gymId', 'gymName', 'disableRestTimer',
+        'latestLiftsMap', 'latestRestTimesMap', 'gymId', 'gymName', 'disableRestTimer', 'lookingForSquad',
         // Metadata
         'createdAt'
       ]);
@@ -115,7 +115,8 @@ service cloud.firestore {
       // Fields: date, dateString, moodTag, stomachFlag, totalVolume,
       //         totalSets, durationMinutes, xpEarned, prCount,
       //         planDayId (Phase 5 plan day reference),
-      //         isOverdrive (Phase 5 Overdrive Hour flag)
+      //         isOverdrive (Phase 5 Overdrive Hour flag),
+      //         bestLift (recap cache — { name, weight, isBW, reps? })
       match /sessions/{sessionId} {
         allow read, write: if isOwner(uid);
 
@@ -157,13 +158,18 @@ service cloud.firestore {
         allow write: if false;           // Admin SDK bypasses rules by design
       }
 
-      // ── xpLog/{entryId} — Phase 2 ───────────────────────────────────────
+      // ── xpLog/{entryId} — Phase 2 ────────────────────────────────────────────
       // Append-only audit log.
       // update and delete are NEVER permitted — tamper-proof XP history.
       // Written by useXPEngine.js (client addDoc) and _commitBatch (batch.set).
+      // Amount is capped at 500 to prevent clients forging massive XP log entries
+      // (the actual user.xp field is still bounded by isValidXP() on the user doc).
       match /xpLog/{entryId} {
         allow read:   if isOwner(uid);
-        allow create: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.amount <= 500;
         // update → implicitly DENIED
         // delete → implicitly DENIED
       }
@@ -182,25 +188,69 @@ service cloud.firestore {
       }
     }
 
-    // ─── squads/{squadId} — Phase 6 ──────────────────────────────────────────
+    // ─── squads/{squadId} — Phase 6 ─────────────────────────────────────────────────
+    // Read: any auth'd user (needed to join/view squads).
+    // Write: only the squad creator (uid field must match auth.uid).
+    // Create: auth'd user creating their own squad (uid field validated).
     match /squads/{squadId} {
-      allow read, write: if isAuth();
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
 
-    // ─── squad_codes/{code} — Phase 6 ────────────────────────────────────────
+    // ─── squad_codes/{code} — Phase 6 ──────────────────────────────────────────────
+    // Read: any authenticated user (needed for free-agent discovery & leaderboard).
+    // Queries must include limit <= 50 to prevent collection dumps.
+    // Create: FIX - uid field must equal request.auth.uid to prevent code squatting.
+    // Update/delete: only the code owner.
     match /squad_codes/{code} {
-      allow read, write: if isAuth();
+      allow get:    if isAuth();
+      allow list:   if isAuth() && request.query.limit != null && request.query.limit <= 50;
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
     }
 
-    // ─── shared_squads/{squadCode} ───────────────────────────────────────────
-    match /shared_squads/{squadCode} {
-      allow read, write: if isAuth();
+    // ─── squad_invites/{inviteId} — Phase 6 ──────────────────────────────────
+    // inviteId format: {squadCode}_{inviteeUid}
+    // - read:   invitee OR inviter (checking stored fields)
+    // - create: authenticated user who is the inviter (inviterUid == auth.uid)
+    // - update: invitee (to accept/decline) OR inviter (to cancel)
+    // - delete: inviter only (cancelling a sent invite)
+    match /squad_invites/{inviteId} {
+      allow read:   if isAuth() && (
+        request.auth.uid == resource.data.inviteeUid ||
+        request.auth.uid == resource.data.inviterUid
+      );
+      allow create: if isAuth() && request.auth.uid == request.resource.data.inviterUid;
+      allow update: if isAuth() && (
+        request.auth.uid == resource.data.inviteeUid ||
+        request.auth.uid == resource.data.inviterUid
+      );
+      allow delete: if isAuth() && request.auth.uid == resource.data.inviterUid;
+    }
 
+    // ─── shared_squads/{squadCode} ────────────────────────────────────────────────────
+    // Read: any auth'd user (to see squad data).
+    // Write: only the squad root doc owner (creator).
+    // Presence sub-docs: each user only writes their own presence (uid-scoped).
+    // Polls: any squad participant (relaxed — tighten if abuse occurs).
+    match /shared_squads/{squadCode} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.creatorUid == request.auth.uid;
+      allow update, delete: if isAuth() && resource.data.creatorUid == request.auth.uid;
+
+      // Each user only writes their own presence document
       match /presence/{uid} {
-        allow read, write: if isAuth();
+        allow read:  if isAuth();
+        allow write: if isOwner(uid);
       }
+      // Polls: any auth'd user can read/vote; creator can write
       match /polls/{pollId} {
-        allow read, write: if isAuth();
+        allow read:   if isAuth();
+        allow create: if isAuth();
+        allow update: if isAuth() && resource.data.creatorUid == request.auth.uid;
+        allow delete: if isAuth() && resource.data.creatorUid == request.auth.uid;
       }
     }
 

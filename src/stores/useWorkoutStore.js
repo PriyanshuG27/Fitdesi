@@ -226,7 +226,12 @@ export const useWorkoutStore = create(
           return { exercises };
         }),
 
-      tick: () => set((state) => ({ elapsedSeconds: state.elapsedSeconds + 1 })),
+      tick: () => set((state) => {
+        if (!state.activeSession || !state.activeSession.startedAt) {
+          return { elapsedSeconds: state.elapsedSeconds + 1 };
+        }
+        return { elapsedSeconds: Math.floor((Date.now() - state.activeSession.startedAt) / 1000) };
+      }),
 
       setSessionLoading: (sessionLoading) => set({ sessionLoading }),
       setSessionError:   (sessionError)   => set({ sessionError }),
@@ -234,6 +239,7 @@ export const useWorkoutStore = create(
       clearSession: () =>
         set({ activeSession: null, exercises: [], elapsedSeconds: 0, sessionLoading: false, sessionError: null, isOverdrive: false }),
 
+      // resetSession is an alias for clearSession (kept for backward compat with existing callers)
       resetSession: () =>
         set({ activeSession: null, exercises: [], elapsedSeconds: 0, sessionLoading: false, sessionError: null, isOverdrive: false }),
 

@@ -1,4 +1,9 @@
 <div align="center">
+  <!-- Official Zenkai Logo -->
+  <img src="public/logos/zenkai_official_logo.png" alt="Zenkai Logo" width="160" style="border-radius: 20%;" />
+
+  <br /><br />
+
   <!-- 🔥 Animated Typing Headline 🔥 -->
   <a href="https://github.com/PriyanshuG27/Zenkai">
     <img src="https://readme-typing-svg.herokuapp.com?font=Barlow+Condensed&weight=900&size=65&pause=1000&color=FF5C00&center=true&vCenter=true&width=800&lines=ZENKAI+⚡;TRAIN+SMARTER.+🧠;COME+BACK+STRONGER.+🏋️;POWERED+BY+GEMINI+3+🚀" alt="Typing SVG" />

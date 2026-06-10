@@ -78,7 +78,7 @@ export function getIndividualMuscle(exerciseKey, muscleGroup) {
     }
     return 'quads';
   }
-  return 'chest'; // Fallback
+  return null; // Unknown muscle group — caller handles null; don't silently inflate chest scores
 }
 
 /**
@@ -126,9 +126,27 @@ export function getMultipliersForExercise(exerciseKey, gender = 'male') {
     }
   }
 
-  // Adjust standards for isolation lifts
-  if (!nameLower.includes('dumbbell') && !nameLower.includes('db') && 
-      (nameLower.includes('curl') || nameLower.includes('raise') || nameLower.includes('extension') || nameLower.includes('kickback'))) {
+  // Halve standards for isolation exercises (curls, raises, extensions, kickbacks).
+  // These exercises are single-joint and lift far less weight than compounds,
+  // so they need their own scale relative to bodyweight.
+  // Fix: previously only halved for NON-dumbbell — which was backwards.
+  // Both 'barbell curl' and 'dumbbell curl' should be scaled the same way.
+  const isIsolation = (
+    nameLower.includes('curl') ||
+    nameLower.includes('raise') ||
+    nameLower.includes('extension') ||
+    nameLower.includes('kickback')
+  );
+  // Don't double-apply to compound movements that happen to contain these words
+  const isCompound = (
+    nameLower.includes('bench_press') ||
+    nameLower.includes('chest_press') ||
+    nameLower.includes('squat') ||
+    nameLower.includes('deadlift') ||
+    nameLower.includes('overhead_press') ||
+    nameLower.includes('shoulder_press')
+  );
+  if (isIsolation && !isCompound) {
     selected = selected.map(s => s * 0.5);
   }
 
@@ -228,7 +246,7 @@ export function calculateDetailedMuscleStrength(prs = [], profile = {}) {
     }
 
     const indivGroup = getIndividualMuscle(exKey, genGroup);
-    if (scoresByIndividualGroup[indivGroup] !== undefined) {
+    if (indivGroup && scoresByIndividualGroup[indivGroup] !== undefined) {
       scoresByIndividualGroup[indivGroup].push(score);
     }
   });

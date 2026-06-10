@@ -69,8 +69,13 @@ export const DesktopDashboard = () => {
 
         setSessions(merged);
 
-        // Compute muscle fatigue using merged log list
-        const fatigue = calculateMuscleFatigue(merged);
+        // Compute muscle fatigue — only pass sessions that have exercise data.
+        // Sessions 4-20 were fetched without subcollection exercises (read optimization)
+        // so passing them with exercises:[] would dilute the chronic baseline to near-zero,
+        // making the fatigue chart show almost nothing. Filter them out first.
+        const sessionsWithExercises = merged.filter(s => s.exercises && s.exercises.length > 0);
+        const bwKg = parseFloat(profile?.weightKg) || 70;
+        const fatigue = calculateMuscleFatigue(sessionsWithExercises, bwKg);
         setFatigueData(fatigue);
       } catch (err) {
         console.error('[DesktopDashboard] Error merging sessions and calculating fatigue:', err);
@@ -86,11 +91,19 @@ export const DesktopDashboard = () => {
       
       unsubMobile = onSnapshot(qMobile, async (snapMobile) => {
         const tempMobile = [];
-        for (const docSnap of snapMobile.docs) {
+        const docsArray = snapMobile.docs || [];
+        
+        for (let i = 0; i < docsArray.length; i++) {
+          const docSnap = docsArray[i];
           try {
             const sessData = docSnap.data();
-            const exSnap = await getDocs(collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises'));
-            const exercises = exSnap.docs.map(exDoc => exDoc.data());
+            
+            // Only fetch exercises subcollection for the top 3 displayed sessions to optimize reads
+            let exercises = [];
+            if (i < 3) {
+              const exSnap = await getDocs(collection(db, 'users', uid, 'sessions', docSnap.id, 'exercises'));
+              exercises = exSnap.docs.map(exDoc => exDoc.data());
+            }
             
             const rawDate = sessData.date;
             let resolvedDate = new Date();

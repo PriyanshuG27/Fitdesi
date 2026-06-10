@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { clearPRCache } from './usePRDetection';
+import { clearStrengthCache } from './useProgress';
 
 // ─── Error code → human-readable message ─────────────────────────────────────
 const ERROR_MESSAGES = {
@@ -218,6 +220,9 @@ export function useAuth() {
       const { auth } = await import('../lib/firebase');
       const { signOut } = await import('firebase/auth');
       await signOut(auth);
+      // Clear per-user caches so a different user logging in doesn't see stale data
+      clearPRCache();
+      clearStrengthCache();
       setUser(null);           // immediate local reset
       setLoading(false);
     } catch (err) {

@@ -36,8 +36,9 @@ const PROFILE_WHITELIST = [
 
 // Mapped XP sources from backend schema
 const ALLOWED_XP_SOURCES = [
-  'session_logged', 'pr_hit', 'challenge_mission', 'streak_3', 'streak_7',
-  'streak_30', 'body_measurement', 'onboarding_complete', 'level_up_bonus', 'social_invite'
+  'session_logged', 'pr_hit', 'challenge_mission', 'challenge_complete',
+  'streak_3', 'streak_7', 'streak_30',
+  'body_measurement', 'onboarding_complete', 'level_up_bonus', 'social_invite'
 ];
 
 // ─── Main Utility Functions ───────────────────────────────────────────────────
@@ -68,8 +69,23 @@ export const updateUserProfile = async (uid, data) => {
       } else if (typeof data[key] === 'boolean') {
         sanitisedData[key] = data[key];
       } else if (typeof data[key] === 'object' && data[key] !== null) {
-        // Handle maps like powerUps
-        sanitisedData[key] = data[key];
+        // Deep-sanitize map fields like powerUps to prevent value injection.
+        // Numeric fields are clamped to [0, 10] (max 10 of any power-up — no infinite stacking).
+        // Only allow string and number values — reject nested objects or arrays.
+        const sanitizedMap = {};
+        Object.entries(data[key]).forEach(([k, v]) => {
+          const cleanKey = sanitizeString(k, 50);
+          if (!cleanKey) return;
+          if (typeof v === 'number' && isFinite(v)) {
+            sanitizedMap[cleanKey] = Math.max(0, Math.min(10, Math.floor(v)));
+          } else if (typeof v === 'string') {
+            sanitizedMap[cleanKey] = sanitizeString(v, 100);
+          } else if (typeof v === 'boolean') {
+            sanitizedMap[cleanKey] = v;
+          }
+          // Silently drop nested objects, arrays, NaN, Infinity
+        });
+        sanitisedData[key] = sanitizedMap;
       }
     }
   });
@@ -148,9 +164,13 @@ export const writeSession = async (uid, sessionData, exercises) => {
     }
 
     const sanitisedSets = ex.sets.map((s, idx) => {
-      const weight = sanitizeNumber(s.weight);
+      const isBW = s.weight === 'BW' || s.isBW === true;
+      const weight = isBW ? 'BW' : sanitizeNumber(s.weight);
       const reps = sanitizeNumber(s.reps, true);
-      if (weight <= 0) {
+      // Fix: bodyweight exercises (weight='BW') are valid with weight=0.
+      // Previously sanitizeNumber('BW') returned 0, then the <= 0 check threw,
+      // crashing writeSession for ALL calisthenics exercises.
+      if (!isBW && typeof weight === 'number' && weight <= 0) {
         throw new Error(`Validation Error: Weight must be greater than 0 (Exercise: ${cleanName}, Set: ${idx + 1}).`);
       }
       if (reps <= 0) {

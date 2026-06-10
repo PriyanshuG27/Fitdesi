@@ -1,8 +1,57 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
+import { useXPStore } from './stores/useXPStore';
 import { useDeviceLayout } from './hooks/useDeviceLayout';
 import { useUIStore } from './stores/useUIStore';
+
+// ─── Global Error Boundary ────────────────────────────────────────────────────
+// Catches any unhandled React render error and shows a recovery screen
+// instead of the entire app going blank (white screen of death).
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary] Uncaught render error:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', height: '100dvh',
+          background: '#0a0a0a', color: '#f0f0f0', fontFamily: 'sans-serif',
+          gap: '16px', padding: '24px', textAlign: 'center'
+        }}>
+          <span style={{ fontSize: '2rem' }}>⚠️</span>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Something went wrong</h1>
+          <p style={{ fontSize: '0.85rem', color: '#888', margin: 0 }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '8px', padding: '10px 24px',
+              background: '#FF5C00', color: '#fff', border: 'none',
+              borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem'
+            }}
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Layout Shells
 const MobileApp = React.lazy(() => import('./components/mobile/MobileApp'));
@@ -183,7 +232,10 @@ function App() {
               doc(db, 'users', firebaseUser.uid),
               (snap) => {
                 if (snap.exists()) {
-                  setProfile(snap.data());
+                  const data = snap.data();
+                  setProfile(data);
+                  // Sync XP store with real-time profile data on mount & updates
+                  useXPStore.getState().setXP(data.xp ?? 0, data.streak ?? 0);
                 } else {
                   setProfile(null);
                 }
@@ -219,14 +271,16 @@ function App() {
   }, [setUser, setLoading, setProfile]);
 
   return (
-    // ONE BrowserRouter — both MobileApp and DesktopApp share this router context.
-    // Swapping layout shells (on resize) does NOT reset router state.
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AppRoutes layout={layout} />
-      <PWAInstallBanner />
-      <PWAInstallModal />
-      <ToastStack />
-    </BrowserRouter>
+    <ErrorBoundary>
+      {/* ONE BrowserRouter — both MobileApp and DesktopApp share this router context. */}
+      {/* Swapping layout shells (on resize) does NOT reset router state. */}
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AppRoutes layout={layout} />
+        <PWAInstallBanner />
+        <PWAInstallModal />
+        <ToastStack />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

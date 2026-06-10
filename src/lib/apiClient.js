@@ -1,8 +1,14 @@
 import { auth } from './firebase';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV 
-  ? 'http://localhost:10000' 
-  : 'https://zenkai-engine.onrender.com');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (
+  import.meta.env.DEV
+    ? 'http://localhost:10000'
+    : '' // In production, VITE_API_BASE_URL must be set in environment variables
+);
+
+if (!API_BASE_URL && !import.meta.env.DEV) {
+  console.error('[apiClient] VITE_API_BASE_URL is not set. API calls will fail.');
+}
 
 /**
  * Dispatches a POST query to the Render compute nodes with dynamic auth token injection.
@@ -13,8 +19,9 @@ export const callZenkaiAPI = async (endpointName, payload = {}, timeoutMs = 3000
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("Operation blocked: Missing authenticated profile context.");
 
-  // Retrieve JWT authorization signature dynamically
-  const idToken = await currentUser.getIdToken(true);
+  // Use cached token (valid 1hr) — only refreshes when actually expired.
+  // Previously used getIdToken(true) which forced a network round-trip on every call (+400ms).
+  const idToken = await currentUser.getIdToken();
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

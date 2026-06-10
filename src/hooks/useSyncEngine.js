@@ -1,31 +1,49 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, doc, writeBatch, query, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { usePlanStore } from '../stores/usePlanStore';
 
+/**
+ * useSyncEngine.js
+ *
+ * Provides:
+ *   - online/offline status detection
+ *   - Real-time listener for planned_targets (syncs latest plan to store)
+ *
+ * NOTE: The old `triggerDeltaSync` function was removed. It fetched 10 executed_sessions
+ * and 1 planned_target doc from Firestore, then did NOTHING with them (the reconciliation
+ * block had `changed = false` hardcoded, so the batch write never ran). This was 11 reads
+ * per call with zero benefit. Removed to save Firestore quota.
+ *
+ * If session→plan reconciliation (progressive overload tracking) is implemented in the
+ * future, it should live in a Cloud Function, not in the client.
+ */
 export const useSyncEngine = () => {
   const { uid } = useAuthStore();
   const { setPlan } = usePlanStore();
-  const [syncing, setSyncing] = useState(false);
-  const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [online, setOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
+  // Track online/offline state
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const goOnline = () => setOnline(true);
+    const goOnline  = () => setOnline(true);
     const goOffline = () => setOnline(false);
 
-    window.addEventListener('online', goOnline);
+    window.addEventListener('online',  goOnline);
     window.addEventListener('offline', goOffline);
 
     return () => {
-      window.removeEventListener('online', goOnline);
+      window.removeEventListener('online',  goOnline);
       window.removeEventListener('offline', goOffline);
     };
   }, []);
 
-  // Listen to planned targets
+  // Real-time listener for planned_targets — syncs the latest plan into the store.
+  // Uses onSnapshot so the plan automatically updates when the Cloud Function writes a new one.
   useEffect(() => {
     if (!uid) return;
 
@@ -40,54 +58,12 @@ export const useSyncEngine = () => {
         const latestPlan = snapshot.docs[0].data();
         setPlan({ id: snapshot.docs[0].id, ...latestPlan });
       }
+    }, (err) => {
+      console.error('[SyncEngine] planned_targets listener error:', err);
     });
 
     return () => unsubscribe();
   }, [uid, setPlan]);
 
-  const triggerDeltaSync = async () => {
-    if (!uid || !online) return;
-    setSyncing(true);
-    try {
-      // Fetch latest executed sessions and plan targets to reconcile deltas
-      const execRef = collection(db, 'users', uid, 'executed_sessions');
-      const execQuery = query(execRef, orderBy('date', 'desc'), limit(10));
-      const execSnap = await getDocs(execQuery);
-      
-      const planRef = collection(db, 'users', uid, 'planned_targets');
-      const planQuery = query(planRef, orderBy('epoch', 'desc'), limit(1));
-      const planSnap = await getDocs(planQuery);
-
-      if (execSnap.empty || planSnap.empty) {
-        setSyncing(false);
-        return;
-      }
-
-      const latestExec = execSnap.docs[0].data();
-      const latestPlanDoc = planSnap.docs[0];
-      const latestPlan = latestPlanDoc.data();
-
-      // Check if executed session completed a planned target
-      // Reconciliation logic: if the execution matches the planned focus, mark day complete and calculate progressive overload
-      let updatedPlan = { ...latestPlan };
-      let changed = false;
-
-      // Increment epoch to notify client changes
-      if (changed) {
-        const batch = writeBatch(db);
-        const planDocRef = doc(db, 'users', uid, 'planned_targets', latestPlanDoc.id);
-        batch.set(planDocRef, {
-          ...updatedPlan,
-          epoch: Date.now()
-        }, { merge: true });
-        await batch.commit();
-      }
-    } catch (err) {
-      console.error('[SyncEngine] Delta sync failed:', err);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  return { online, syncing, triggerDeltaSync };
+  return { online };
 };

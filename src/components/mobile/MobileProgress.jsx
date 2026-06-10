@@ -74,6 +74,18 @@ export const MobileProgress = () => {
   const { data: strengthData, loading: strengthLoading } = useStrengthData(uid, selectedExercise, strengthRange, refreshTrigger);
   const { data: volumeData, loading: volumeLoading } = useVolumeData(uid, 12);
 
+  // Derive how many days of actual data the user has for this exercise.
+  // strengthData is already in memory — zero extra Firestore reads.
+  const oldestDataDaysAgo = useMemo(() => {
+    if (!strengthData || strengthData.length === 0) return 0;
+    const oldest = strengthData[0]?.date; // sorted ascending — first entry = oldest
+    if (!oldest) return 0;
+    return Math.floor((Date.now() - new Date(oldest).getTime()) / (1000 * 60 * 60 * 24));
+  }, [strengthData]);
+
+  // 90D view unlocked only once user has 30+ days of history for this specific exercise
+  const can90D = oldestDataDaysAgo >= 30;
+
   // Muscle volume distribution state
   const [muscleDistribution, setMuscleDistribution] = useState({});
   const [muscleDistLoading, setMuscleDistLoading] = useState(true);
@@ -177,7 +189,11 @@ export const MobileProgress = () => {
             const key = ex.exerciseKey || ex.exerciseId || '';
             const keyBase = key.split('_').slice(0, -1).join('_');
             const muscleGroup = exerciseToMuscleMap[key] || exerciseToMuscleMap[keyBase] || exerciseToMuscleMap[ex.name?.toLowerCase()] || 'other';
-            const completedSetsCount = ex.sets ? ex.sets.length : 0;
+            // Fix: filter for COMPLETED sets only (done or completed flag).
+            // Previously counted ex.sets.length which included sets that were added but never done.
+            const completedSetsCount = ex.sets
+              ? ex.sets.filter(s => s.done || s.completed).length
+              : 0;
             
             if (completedSetsCount > 0) {
               distribution[muscleGroup] = (distribution[muscleGroup] || 0) + completedSetsCount;
@@ -186,12 +202,23 @@ export const MobileProgress = () => {
           });
         });
 
-        // Convert set counts to percentage trained
+        // Convert set counts to percentage trained.
+        // Fix: use largest-remainder method so percentages always sum to exactly 100%.
+        // Math.round() applied independently can give totals of 99% or 101%.
         const finalDist = {};
         if (totalSets > 0) {
-          Object.entries(distribution).forEach(([muscle, count]) => {
-            finalDist[muscle] = Math.round((count / totalSets) * 100);
-          });
+          const entries = Object.entries(distribution);
+          const exactValues = entries.map(([muscle, count]) => ({
+            muscle,
+            exact: (count / totalSets) * 100,
+            floor: Math.floor((count / totalSets) * 100),
+          }));
+          const totalFloor = exactValues.reduce((s, e) => s + e.floor, 0);
+          const remainder = 100 - totalFloor;
+          // Distribute remaining points to entries with largest fractional parts
+          const sorted = [...exactValues].sort((a, b) => (b.exact - b.floor) - (a.exact - a.floor));
+          sorted.forEach((e, i) => { e.floor += i < remainder ? 1 : 0; });
+          exactValues.forEach(e => { finalDist[e.muscle] = e.floor; });
         }
         
         // Sort by percentage descending
@@ -207,11 +234,22 @@ export const MobileProgress = () => {
       }
     }
     fetchMuscleDistribution();
-  }, [uid, prs]); // Refetch when PRs (and therefore sessions) might update
+  }, [uid]); // Fix: removed 'prs' dependency — PRs have nothing to do with muscle distribution.
+             // Previously this triggered an expensive N+1 Firestore refetch on every PR logged.
 
-  // Fetch recent sessions on mount to compute fatigue
+
+  // Fetch recent sessions on mount to compute fatigue.
+  // Fix: skip refetch if sessions are already loaded this mount (e.g. switching tabs back to Recovery).
+  // This reduces reads significantly for users who tab in and out of Recovery.
   useEffect(() => {
     if (!uid || activeTab !== 'Recovery') return;
+    // Cache: if we already have session data, recompute from cache without a new Firestore read.
+    if (sessions.length > 0) {
+      const bwKg = parseFloat(profile?.weightKg) || 70;
+      const fatigue = calculateMuscleFatigue(sessions, bwKg);
+      setFatigueData(fatigue);
+      return;
+    }
     const fetchRecentSessions = async () => {
       setLoadingFatigue(true);
       try {
@@ -232,7 +270,8 @@ export const MobileProgress = () => {
         }
         
         setSessions(loadedSessions);
-        const fatigue = calculateMuscleFatigue(loadedSessions);
+        const bwKg = parseFloat(profile?.weightKg) || 70;
+        const fatigue = calculateMuscleFatigue(loadedSessions, bwKg);
         setFatigueData(fatigue);
       } catch (err) {
         console.error('[MobileProgress] Error compiling fatigue data:', err);
@@ -243,6 +282,7 @@ export const MobileProgress = () => {
 
     fetchRecentSessions();
   }, [uid, activeTab, refreshTrigger]);
+
 
   const getMuscleColor = (muscleKey) => {
     const fatigue = (viewType === 'individual' ? fatigueData.individual?.[muscleKey] : fatigueData.general?.[muscleKey]) || 0;
@@ -528,15 +568,21 @@ export const MobileProgress = () => {
                   >
                     30D
                   </button>
+
+                  {/* 90D — locked until user has 30+ days of session history for this exercise */}
                   <button
-                    onClick={() => setStrengthRange(90)}
-                    className={`px-2 py-0.5 rounded border ${
-                      strengthRange === 90
+                    onClick={() => can90D && setStrengthRange(90)}
+                    disabled={!can90D}
+                    title={can90D ? '90 day view' : 'Log 30+ days of this exercise to unlock'}
+                    className={`px-2 py-0.5 rounded border transition-opacity ${
+                      !can90D
+                        ? 'border-[var(--border)] text-[var(--text-secondary)] opacity-35 cursor-not-allowed'
+                        : strengthRange === 90
                         ? 'border-[var(--secondary)] text-[var(--secondary)]'
                         : 'border-[var(--border)] bg-[var(--bg-elevated)]'
                     }`}
                   >
-                    90D
+                    90D{!can90D && ' 🔒'}
                   </button>
                 </div>
               </div>

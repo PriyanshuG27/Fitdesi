@@ -48,8 +48,10 @@ export const useXPStore = create((set, get) => ({
   leveledUp:     false,
 
   setXP: (total, streak = 0) => {
-    const derived = deriveLevelFromXP(total);
-    set({ totalXP: total, streak, ...derived });
+    const derived = deriveLevelFromXP(Math.max(0, total ?? 0));
+    // Guard: streak may be undefined/null from old Firestore docs — always coerce to integer
+    const safeStreak = Math.max(0, parseInt(streak, 10) || 0);
+    set({ totalXP: Math.max(0, total ?? 0), streak: safeStreak, ...derived });
   },
 
   awardXP: (amount) => {

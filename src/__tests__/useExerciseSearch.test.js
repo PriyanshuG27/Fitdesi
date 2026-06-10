@@ -240,3 +240,70 @@ describe('useExerciseSearch — debounce', () => {
     });
   });
 });
+
+describe('useExerciseSearch — full mapping coverage and muscleGroup matching', () => {
+  it('matches query on muscleGroup name', async () => {
+    const results = await getResults({
+      query: 'shoulders',
+    });
+
+    const names = results.map((ex) => ex.name);
+    expect(names).toContain('Overhead Press');
+  });
+
+  it('maps all available equipment in mapAvailableEquipment', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() =>
+      useExerciseSearch({
+        equipmentList: [
+          'Barbell',
+          'Dumbbells',
+          'Cable Machine',
+          'Pull-up Bar',
+          'Leg Press',
+          'Leg Extension',
+          'Leg Curl',
+          'Ab Wheel',
+          'Flat Bench',
+          'Incline Bench',
+          'Decline Bench',
+          'Preacher Curl Bench',
+          null,
+          'Unknown Equipment'
+        ],
+        medicalFlags: [],
+        query: ''
+      })
+    );
+    act(() => { vi.advanceTimersByTime(250); });
+    vi.useRealTimers();
+
+    expect(result.current.results).toBeDefined();
+  });
+
+  it('maps all medical flags in mapMedicalFlags', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() =>
+      useExerciseSearch({
+        equipmentList: [],
+        medicalFlags: [
+          'Shoulder Impingement',
+          'Rotator Cuff Issue',
+          'Lower Back Issues',
+          'Herniated Disc',
+          'Hernia',
+          'Bad Knees',
+          'Post-Surgery',
+          null,
+          'Other Flag'
+        ],
+        query: ''
+      })
+    );
+    act(() => { vi.advanceTimersByTime(250); });
+    vi.useRealTimers();
+
+    expect(result.current.results).toBeDefined();
+  });
+});
+

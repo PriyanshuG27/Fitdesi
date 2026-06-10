@@ -75,8 +75,8 @@ export const PWAInstallBanner = () => {
           {/* Left: App Logo & Details */}
           <div className="flex items-center gap-3 min-w-0">
             {/* App Icon */}
-            <div className="w-12 h-12 bg-[var(--primary)] text-black rounded-2xl border-2 border-black flex items-center justify-center font-display font-black text-xl shadow-[2px_2px_0px_rgba(0,0,0,0.2)] shrink-0">
-              FD
+            <div className="w-12 h-12 bg-black rounded-2xl border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_rgba(0,0,0,0.2)] shrink-0 overflow-hidden">
+              <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
             </div>
             
             <div className="flex flex-col min-w-0">
