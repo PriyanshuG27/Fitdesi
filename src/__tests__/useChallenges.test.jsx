@@ -478,6 +478,74 @@ describe('useChallenges Hook', () => {
       expect(challengeUpdate['progress.user-123'].completedSessions).toBe(3);
     });
 
+    it('consumes a challenge skip, completes the challenge, awards XP, and updates local profile', async () => {
+      // Set local profile mock in authStore
+      useAuthStore.setState({
+        user: { uid: 'user-123' },
+        uid: 'user-123',
+        profile: { powerUps: { challengeSkip: 2 } },
+      });
+
+      const mockTx = {
+        get: vi.fn().mockImplementation((ref) => {
+          if (ref._path.includes('users/user-123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({
+                powerUps: { challengeSkip: 2 }
+              })
+            });
+          }
+          if (ref._path.includes('challenges/complete_challenge_123')) {
+            return Promise.resolve({
+              exists: () => true,
+              data: () => ({
+                type: 'comeback',
+                status: 'active',
+                startDate: { toDate: () => new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+                goal: { durationWeeks: 12 },
+                rewardXP: 1000,
+                progress: {
+                  'user-123': { currentWeek: 1, completedSessions: 35, badgeEarned: false }
+                }
+              })
+            });
+          }
+          return Promise.resolve({ exists: () => false });
+        }),
+        update: vi.fn(),
+      };
+
+      mockRunTransaction.mockImplementationOnce(async (db, cb) => {
+        return await cb(mockTx);
+      });
+
+      const { result } = renderHook(() => useChallenges());
+
+      await act(async () => {
+        await result.current.useChallengeSkip('complete_challenge_123');
+      });
+
+      // Verify transaction updates
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.update).toHaveBeenCalledTimes(2);
+
+      // Verify challenge document update (incremented session, badge earned, status completed)
+      const challengeUpdate = mockTx.update.mock.calls[1][1];
+      expect(challengeUpdate['progress.user-123'].completedSessions).toBe(36);
+      expect(challengeUpdate['progress.user-123'].badgeEarned).toBe(true);
+      expect(challengeUpdate.status).toBe('completed');
+
+      // Verify awardXP called
+      expect(mockAwardXP).toHaveBeenCalledWith('user-123', 'challenge_complete', 1000, {
+        challengeId: 'complete_challenge_123',
+      });
+
+      // Verify local profile state updated in useAuthStore
+      const updatedProfile = useAuthStore.getState().profile;
+      expect(updatedProfile.powerUps.challengeSkip).toBe(1);
+    });
+
     it('throws an error and triggers error toast when user has no challenge skips', async () => {
       const mockTx = {
         get: vi.fn().mockImplementation((ref) => {

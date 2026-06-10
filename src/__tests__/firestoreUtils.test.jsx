@@ -10,7 +10,8 @@ import {
   updateUserProfile,
   writeSession,
   updatePR,
-  addXPLog
+  addXPLog,
+  abbreviateExerciseName
 } from '../lib/firestoreUtils';
 
 import { writeBatch } from 'firebase/firestore';
@@ -139,5 +140,26 @@ describe('firestoreUtils — addXPLog()', () => {
     await expect(addXPLog('uid1', 'session_logged', -50)).rejects.toThrow(
       'Validation Error: XP log amount must be a positive integer.'
     );
+  });
+
+  it('successfully logs XP and processes optional metadata', async () => {
+    mockAddDoc.mockResolvedValueOnce({ id: 'log-id-123' });
+
+    await addXPLog('uid1', 'session_logged', 100, { sessionId: 'sess-abc', challengeId: 'chal-xyz' });
+
+    expect(mockAddDoc).toHaveBeenCalledTimes(1);
+    const logData = mockAddDoc.mock.calls[0][1];
+    expect(logData.source).toBe('session_logged');
+    expect(logData.amount).toBe(100);
+    expect(logData.sessionId).toBe('sess-abc');
+    expect(logData.challengeId).toBe('chal-xyz');
+  });
+});
+
+describe('firestoreUtils — abbreviateExerciseName()', () => {
+  it('abbreviates barbell and dumbbell correctly', () => {
+    expect(abbreviateExerciseName('Barbell Bench Press')).toBe('BB Bench Press');
+    expect(abbreviateExerciseName('Dumbbell Curl')).toBe('DB Curl');
+    expect(abbreviateExerciseName(null)).toBe('');
   });
 });

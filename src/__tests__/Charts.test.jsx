@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { StrengthChart } from '../components/shared/StrengthChart';
 import { VolumeChart } from '../components/shared/VolumeChart';
 
-// Mock Recharts ResponsiveContainer to render children cleanly in JSDOM
+// Mock Recharts ResponsiveContainer, Tooltip, and XAxis to render children and formatters cleanly in JSDOM
 vi.mock('recharts', async (importOriginal) => {
   const original = await importOriginal();
   return {
@@ -14,6 +14,37 @@ vi.mock('recharts', async (importOriginal) => {
         {children}
       </div>
     ),
+    Tooltip: (props) => {
+      if (props.content) {
+        const ContentComponent = typeof props.content === 'function' ? props.content : props.content.type;
+        return (
+          <div data-testid="mock-tooltip">
+            {/* Call with active and payload */}
+            {React.createElement(ContentComponent, {
+              active: true,
+              payload: [{ payload: { date: '2026-06-01', maxWeight: 60, maxReps: 8, week: '2026-W22', totalVolume: 12000 } }]
+            })}
+            {/* Call with active false */}
+            {React.createElement(ContentComponent, {
+              active: false,
+              payload: []
+            })}
+          </div>
+        );
+      }
+      return null;
+    },
+    XAxis: (props) => {
+      if (props.tickFormatter) {
+        // Run with valid and invalid values to cover all helper branches
+        props.tickFormatter('2026-06-01');
+        props.tickFormatter('2026-W22');
+        props.tickFormatter('');
+        props.tickFormatter('invalid-date');
+        props.tickFormatter('2026-99-99'); // invalid date parse
+      }
+      return <div data-testid="mock-xaxis" />;
+    }
   };
 });
 

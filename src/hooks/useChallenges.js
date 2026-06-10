@@ -721,6 +721,7 @@ export function useChallenges() {
           subtype,
           name: templateData.name,
           description: templateData.description,
+          templateId: challengeId, // Save the original template ID
           creatorUid: user.uid,
           participants: [user.uid],
           startDate: serverTimestamp(),
@@ -843,8 +844,10 @@ export function useChallenges() {
       }
 
       let challengeType = null;
+      let challengeData = null;
       if (challengeSnap && typeof challengeSnap.exists === 'function' && challengeSnap.exists()) {
-        challengeType = challengeSnap.data()?.type;
+        challengeData = challengeSnap.data();
+        challengeType = challengeData?.type;
       }
 
       // 3. Mark challenge as abandoned — client delete is blocked by security rules,
@@ -856,7 +859,26 @@ export function useChallenges() {
         throw new Error('Failed to update challenge status: ' + (updateErr.message || updateErr));
       }
 
-      // 4. Write cooldown if we resolved a challenge type
+      // 4. Recreate personal template if this challenge came from a template
+      if (challengeData && challengeData.templateId) {
+        const templateId = challengeData.templateId;
+        const personalTemplateRef = doc(db, 'users', user.uid, 'personalTemplates', templateId);
+        try {
+          await setDoc(personalTemplateRef, {
+            type: challengeData.type,
+            subtype: challengeData.subtype || 'campaign',
+            name: challengeData.name,
+            description: challengeData.description,
+            durationDays: challengeData.durationDays || 28,
+            goal: challengeData.goal || null,
+            rewardXP: challengeData.rewardXP || null
+          });
+        } catch (recreateErr) {
+          console.error('[useChallenges] Failed to recreate personal template:', recreateErr);
+        }
+      }
+
+      // 5. Write cooldown if we resolved a challenge type
       if (challengeType) {
         const cooldownTime = Date.now() + 24 * 60 * 60 * 1000;
         const userRef = doc(db, 'users', user.uid);
@@ -872,11 +894,13 @@ export function useChallenges() {
         const userData = userSnap && typeof userSnap.exists === 'function' && userSnap.exists() ? userSnap.data() : {};
         const currentCooldowns = userData.cooldowns || {};
 
+        const cooldownKey = challengeData?.templateId || challengeType;
+
         try {
           await setDoc(userRef, {
             cooldowns: {
               ...currentCooldowns,
-              [challengeType]: cooldownTime,
+              [cooldownKey]: cooldownTime,
             },
           }, { merge: true });
         } catch (e) {
@@ -891,7 +915,7 @@ export function useChallenges() {
             ...currentProfile,
             cooldowns: {
               ...(currentProfile.cooldowns || {}),
-              [challengeType]: cooldownTime,
+              [cooldownKey]: cooldownTime,
             },
           });
         }

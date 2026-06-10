@@ -231,6 +231,10 @@ export const MobileSessionComplete = ({
       await navigator.clipboard.writeText(text);
       addToast('PR Card image downloaded & details copied to clipboard!', 'success');
     } catch (err) {
+      if (err.name === 'AbortError' || err.message?.toLowerCase().includes('cancel') || err.message?.toLowerCase().includes('abort')) {
+        console.log('[MobileSessionComplete] User cancelled share sheet.');
+        return;
+      }
       console.error('[MobileSessionComplete] Sharing failed:', err);
       addToast('Could not generate share image.', 'error');
     } finally {

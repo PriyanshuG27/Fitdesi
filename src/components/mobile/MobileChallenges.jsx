@@ -915,7 +915,7 @@ export const MobileChallenges = () => {
             {availableChallenges.length > 0 ? (
               <div className="flex flex-col gap-4">
                 {availableChallenges.map((challenge) => {
-                  const cooldownUntil = profile?.cooldowns?.[challenge.type];
+                  const cooldownUntil = profile?.cooldowns?.[challenge.id] || profile?.cooldowns?.[challenge.type];
                   const isLocked = cooldownUntil && cooldownUntil > Date.now();
 
                   return (

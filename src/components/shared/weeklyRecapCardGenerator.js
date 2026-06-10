@@ -13,6 +13,70 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// ─── Helper: draw letter spaced text ────────────────────────────────────────
+function drawLetterSpacedText(ctx, text, x, y, spacing) {
+  let currentX = x;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    ctx.fillText(char, currentX, y);
+    currentX += ctx.measureText(char).width + spacing;
+  }
+}
+
+// ─── Helper: draw trophy vector badge ───────────────────────────────────────
+function drawVectorTrophyBadge(ctx, cx, cy, scale = 1.6) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  
+  ctx.strokeStyle = '#B5FF2D';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  // Left handle
+  ctx.beginPath();
+  ctx.moveTo(-16, -12);
+  ctx.bezierCurveTo(-28, -12, -28, -2, -16, -2);
+  ctx.stroke();
+
+  // Right handle
+  ctx.beginPath();
+  ctx.moveTo(16, -12);
+  ctx.bezierCurveTo(28, -12, 28, -2, 16, -2);
+  ctx.stroke();
+  
+  // Cup Bowl
+  ctx.fillStyle = '#111111';
+  ctx.beginPath();
+  ctx.moveTo(-16, -22);
+  ctx.lineTo(16, -22);
+  ctx.lineTo(16, -5);
+  ctx.quadraticCurveTo(16, 12, 0, 12);
+  ctx.quadraticCurveTo(-16, 12, -16, -5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  
+  // Stand/Connector
+  ctx.beginPath();
+  ctx.moveTo(-6, 12);
+  ctx.lineTo(-6, 18);
+  ctx.bezierCurveTo(-6, 22, -16, 22, -16, 26);
+  ctx.moveTo(6, 12);
+  ctx.lineTo(6, 18);
+  ctx.bezierCurveTo(6, 22, 16, 22, 16, 26);
+  ctx.stroke();
+  
+  // Base line
+  ctx.beginPath();
+  ctx.moveTo(-24, 26);
+  ctx.lineTo(24, 26);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 // ─── Stat box renderer ───────────────────────────────────────────────────────
 function drawStatBox(ctx, x, y, w, h, label, value, valueColor) {
   // Box bg
@@ -24,22 +88,22 @@ function drawStatBox(ctx, x, y, w, h, label, value, valueColor) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Value
+  // Value (centered vertically)
   ctx.save();
   ctx.font = '800 52px "Barlow Condensed", sans-serif';
   ctx.fillStyle = valueColor;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, x + w / 2, y + h - 42);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(value, x + w / 2, y + h / 2 - 12);
   ctx.restore();
 
-  // Label
+  // Label (centered vertically)
   ctx.save();
   ctx.font = '500 18px "Outfit", system-ui, sans-serif';
   ctx.fillStyle = '#777777';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(label, x + w / 2, y + h - 18);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + w / 2, y + h / 2 + 32);
   ctx.restore();
 }
 
@@ -145,28 +209,45 @@ export async function generateWeeklyStatsCardImage({
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Trophy icon hint (geometric)
+  // Trophy icon hint (geometric) with vector trophy badge
   ctx.save();
-  ctx.fillStyle = 'rgba(181,255,45,0.05)';
+  ctx.fillStyle = 'rgba(181,255,45,0.03)';
   ctx.beginPath();
-  ctx.arc(W - 150, heroY + heroH / 2, 90, 0, Math.PI * 2);
+  ctx.arc(W - 170, heroY + heroH / 2, 85, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(181,255,45,0.1)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
   ctx.restore();
 
+  // Draw the vector trophy
+  drawVectorTrophyBadge(ctx, W - 170, heroY + heroH / 2, 1.8);
+
+  // Left-aligned Consistency score header
   ctx.save();
-  ctx.font = '900 160px "Barlow Condensed", sans-serif';
-  ctx.fillStyle = '#B5FF2D';
-  ctx.textAlign = 'center';
+  ctx.font = '800 16px "Outfit", system-ui, sans-serif';
+  ctx.fillStyle = '#666666';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(sessionsCount), W / 2, heroY + heroH / 2 - 15);
+  drawLetterSpacedText(ctx, 'TOTAL CONSISTENCY SCORE', 110, heroY + 65, 3);
   ctx.restore();
 
+  // Big workouts count number on left
   ctx.save();
-  ctx.font = '600 22px "Outfit", system-ui, sans-serif';
-  ctx.fillStyle = '#777777';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('WORKOUTS LOGGED THIS WEEK', W / 2, heroY + heroH - 28);
+  ctx.font = '900 130px "Barlow Condensed", sans-serif';
+  ctx.fillStyle = '#B5FF2D';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(sessionsCount), 110, heroY + 145);
+  ctx.restore();
+
+  // Workouts logged label below
+  ctx.save();
+  ctx.font = '700 24px "Outfit", system-ui, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('WORKOUTS LOGGED THIS WEEK', 110, heroY + 205);
   ctx.restore();
 
   // ── 5. 2×2 stats grid ──
@@ -192,15 +273,15 @@ export async function generateWeeklyStatsCardImage({
   ctx.stroke();
 
   ctx.save();
-  ctx.font = '600 18px "Outfit", system-ui, sans-serif';
+  ctx.font = '600 16px "Outfit", system-ui, sans-serif';
   ctx.fillStyle = '#666666';
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('BEST LIFT THIS WEEK', 105, liftY + 38);
+  ctx.textBaseline = 'middle';
+  drawLetterSpacedText(ctx, 'BEST LIFT THIS WEEK', 105, liftY + 42, 2);
   ctx.restore();
 
   ctx.save();
-  ctx.textBaseline = 'alphabetic';
+  ctx.textBaseline = 'middle';
   if (bestLift) {
     // Lift name
     ctx.font = '800 36px "Barlow Condensed", sans-serif';
@@ -208,7 +289,7 @@ export async function generateWeeklyStatsCardImage({
     ctx.textAlign = 'left';
     const liftName = String(bestLift.name || '').toUpperCase();
     // Truncate if too long
-    ctx.fillText(liftName.length > 36 ? liftName.slice(0, 36) + '…' : liftName, 105, liftY + 108);
+    ctx.fillText(liftName.length > 36 ? liftName.slice(0, 36) + '…' : liftName, 105, liftY + 92);
     // Weight
     const weightText = bestLift.weight === 'BW'
       ? `BW × ${bestLift.reps || 0} reps`
@@ -216,12 +297,12 @@ export async function generateWeeklyStatsCardImage({
     ctx.font = '700 36px "Barlow Condensed", sans-serif';
     ctx.fillStyle = '#00D4FF';
     ctx.textAlign = 'right';
-    ctx.fillText(weightText, W - 105, liftY + 108);
+    ctx.fillText(weightText, W - 105, liftY + 92);
   } else {
     ctx.font = '600 28px "Outfit", system-ui, sans-serif';
     ctx.fillStyle = '#444444';
     ctx.textAlign = 'center';
-    ctx.fillText('No lifts recorded this week', W / 2, liftY + 80);
+    ctx.fillText('No lifts recorded this week', W / 2, liftY + 75);
   }
   ctx.restore();
 

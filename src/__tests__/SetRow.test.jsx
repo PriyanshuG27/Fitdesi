@@ -345,4 +345,97 @@ describe('SetRow Component', () => {
     expect(screen.getByTestId('weight-1-0')).toBeInTheDocument();
     expect(screen.getByTestId('reps-1-0')).toBeInTheDocument();
   });
+
+  // ── onDelete callback ─────────────────────────────────────────────────────
+
+  it('renders delete button when onDelete prop is provided and calls onDelete onClick', () => {
+    const onDeleteMock = vi.fn();
+    const props = { ...defaultProps, onDelete: onDeleteMock };
+    render(<SetRow {...props} />);
+
+    const deleteBtn = screen.getByLabelText('Remove set 1');
+    expect(deleteBtn).toBeInTheDocument();
+
+    fireEvent.click(deleteBtn);
+    expect(onDeleteMock).toHaveBeenCalledWith(1, 0);
+  });
+
+  // ── isDurationBased sets ───────────────────────────────────────────────────
+
+  it('handles duration-based exercises correctly', () => {
+    const props = {
+      ...defaultProps,
+      isDurationBased: true,
+      set: { reps: 5, weight: 0, done: false },
+    };
+    render(<SetRow {...props} />);
+
+    // Weight input should NOT be rendered in duration-based mode
+    expect(screen.queryByTestId('weight-1-0')).not.toBeInTheDocument();
+
+    // Reps input should be rendered with 'mins' suffix
+    expect(screen.getByTestId('reps-1-0')).toBeInTheDocument();
+    expect(screen.getByText('mins')).toBeInTheDocument();
+
+    // Done button is active when reps > 0
+    const doneBtn = screen.getByTestId('set-done-1-0');
+    expect(doneBtn).not.toBeDisabled();
+  });
+
+  // ── Clicking done when already done ───────────────────────────────────────
+
+  it('sets editing to false when clicking done button when set is already done', () => {
+    const props = {
+      ...defaultProps,
+      set: { reps: 8, weight: 60, done: true },
+    };
+    render(<SetRow {...props} />);
+
+    const doneBtn = screen.getByTestId('set-done-1-0');
+    fireEvent.click(doneBtn);
+    expect(props.onDone).toHaveBeenCalledWith('test-exercise-123', 0);
+  });
+
+  // ── Focus/Blur and Manual Inputs ──────────────────────────────────────────
+
+  it('triggers focus and blur states for weight and reps inputs', () => {
+    render(<SetRow {...defaultProps} />);
+
+    const weightInput = screen.getByTestId('weight-1-0');
+    const repsInput = screen.getByTestId('reps-1-0');
+
+    // Focus weight
+    fireEvent.focus(weightInput);
+    // Blur weight
+    fireEvent.blur(weightInput);
+
+    // Focus reps
+    fireEvent.focus(repsInput);
+    // Blur reps
+    fireEvent.blur(repsInput);
+  });
+
+  // ── Visibility Change & beforeunload ─────────────────────────────────────
+
+  it('commits uncommitted values on document visibility change or beforeunload', () => {
+    render(<SetRow {...defaultProps} />);
+
+    const weightInput = screen.getByTestId('weight-1-0');
+    const repsInput = screen.getByTestId('reps-1-0');
+
+    // Change input values locally without blurring
+    fireEvent.change(weightInput, { target: { value: '85.5' } });
+    fireEvent.change(repsInput, { target: { value: '15' } });
+
+    // Trigger visibilitychange event
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      writable: true,
+    });
+    fireEvent(document, new Event('visibilitychange'));
+
+    // Check if onUpdate was called to commit the values
+    expect(defaultProps.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'weight', 85.5);
+    expect(defaultProps.onUpdate).toHaveBeenCalledWith('test-exercise-123', 0, 'reps', 15);
+  });
 });

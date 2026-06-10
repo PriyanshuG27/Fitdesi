@@ -1,6 +1,7 @@
 import React from 'react';
 import exerciseBank from '../../data/exercises.json';
 import strengthStandards from '../../data/strength_standards.json';
+import { callZenkaiAPI } from '../../lib/apiClient';
 
 // Helper to determine the primary target muscle for an exercise name
 export const getMuscleGroupForExercise = (exerciseName) => {
@@ -25,10 +26,22 @@ export const fetchStrengthStandards = async (exerciseName, oneRepMax, bodyweight
 
   let multipliers = null;
 
-  // 1. Try instant local lookup from pre-generated JSON database
-  const entry = strengthStandards[exerciseKey];
-  if (entry) {
-    multipliers = entry[genderKey] || entry['male'];
+  // 1. Try calling the backend /api/getPRStats endpoint first
+  try {
+    const res = await callZenkaiAPI('getPRStats', { exerciseName, gender: genderKey });
+    if (res && res.data && res.data.data) {
+      multipliers = res.data.data;
+    }
+  } catch (err) {
+    console.warn('[fetchStrengthStandards] Backend call failed, using local fallback:', err.message);
+  }
+
+  // 2. Try instant local lookup from pre-generated JSON database
+  if (!multipliers) {
+    const entry = strengthStandards[exerciseKey];
+    if (entry) {
+      multipliers = entry[genderKey] || entry['male'];
+    }
   }
 
   // 2. Fall back to rule-based local classifier if exercise is not in the JSON database

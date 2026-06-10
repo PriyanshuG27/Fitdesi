@@ -125,4 +125,74 @@ describe('Weekly Recap System TDD', () => {
       expect(removeSpy).toHaveBeenCalled();
     });
   });
+
+  it('6. handleClose calls markAsSeen and onClose', () => {
+    const markAsSeenMock = vi.fn();
+    const onCloseMock = vi.fn();
+    const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
+    
+    render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="2026-W23" markAsSeen={markAsSeenMock} onClose={onCloseMock} />);
+    
+    // Close button has aria-label "Close"
+    const closeBtn = screen.getByLabelText('Close');
+    fireEvent.click(closeBtn);
+
+    expect(markAsSeenMock).toHaveBeenCalledTimes(1);
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('7. shareRecap handles AbortError/cancel share gracefully', async () => {
+    vi.mocked(generateWeeklyStatsCardImage).mockRejectedValueOnce({ name: 'AbortError', message: 'Share cancelled by user' });
+    
+    const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
+    render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="2026-W23" markAsSeen={vi.fn()} onClose={vi.fn()} />);
+
+    const shareBtn = screen.getByText(/Share Recap/i);
+    fireEvent.click(shareBtn);
+
+    await waitFor(() => {
+      expect(generateWeeklyStatsCardImage).toHaveBeenCalled();
+    });
+    // Should not show error alert on cancellation
+    expect(screen.queryByText(/Could not generate image/i)).not.toBeInTheDocument();
+  });
+
+  it('8. shareRecap handles generic error and displays error message', async () => {
+    vi.useFakeTimers();
+    vi.mocked(generateWeeklyStatsCardImage).mockRejectedValueOnce(new Error('Fatal canvas error'));
+    
+    const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
+    render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="2026-W23" markAsSeen={vi.fn()} onClose={vi.fn()} />);
+
+    const shareBtn = screen.getByText(/Share Recap/i);
+    fireEvent.click(shareBtn);
+
+    // Let microtasks run
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Could not generate image/i)).toBeInTheDocument();
+
+    // Fast-forward 4 seconds
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    // Error message should disappear
+    expect(screen.queryByText(/Could not generate image/i)).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('9. renders fallback when weekId is missing or has incorrect format', () => {
+    const mockRecap = { sessionsCount: 3, totalVolume: 1000, xpEarned: 100, streak: 5, prsBrokenCount: 0, motivationalLine: '' };
+    const { rerender } = render(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId={null} markAsSeen={vi.fn()} onClose={vi.fn()} />);
+    
+    // Split doesn't run, week number becomes empty
+    expect(screen.getByRole('heading', { name: /WEEK/i })).toHaveTextContent('WEEK');
+
+    rerender(<WeeklyRecapScreen isOpen={true} recap={mockRecap} weekId="incorrect_format" markAsSeen={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: /WEEK/i })).toHaveTextContent('WEEK');
+  });
 });

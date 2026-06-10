@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">69.48% </span>
+                <span class="strong">70.06% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>214/308</span>
+                <span class='fraction'>213/304</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">55.94% </span>
+                <span class="strong">54.97% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>127/227</span>
+                <span class='fraction'>127/231</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">72.66% </span>
+                <span class="strong">73.09% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>202/278</span>
+                <span class='fraction'>201/275</span>
             </div>
         
             
@@ -1173,10 +1173,7 @@
 <a name='L1108'></a><a href='#L1108'>1108</a>
 <a name='L1109'></a><a href='#L1109'>1109</a>
 <a name='L1110'></a><a href='#L1110'>1110</a>
-<a name='L1111'></a><a href='#L1111'>1111</a>
-<a name='L1112'></a><a href='#L1112'>1112</a>
-<a name='L1113'></a><a href='#L1113'>1113</a>
-<a name='L1114'></a><a href='#L1114'>1114</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L1111'></a><a href='#L1111'>1111</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1275,6 +1272,7 @@
 <span class="cline-any cline-yes">68x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">68x</span>
 <span class="cline-any cline-yes">21x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -1285,13 +1283,7 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1300,6 +1292,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2387,24 +2381,19 @@ export const MobileLogger = () =&gt; {
   const [pastSessions, setPastSessions] = useState([]);
   const [loadingPastSessions, setLoadingPastSessions] = useState(true);
 &nbsp;
-  // Fetch past session metadata and exercises on mount when session is not active
+  // Fetch past session METADATA only on mount — exercises are lazy-loaded by the calendar
+  // on cell click to avoid 60 serial subcollection reads on every page load.
   useEffect(() =&gt; {
     if (!user || isActive) return;
     const fetchPastSessions = async () =&gt; {
       setLoadingPastSessions(true);
       try {
         const sessionsRef = collection(db, 'users', user.uid, 'sessions');
-        // Retrieve last 60 workouts to populate the calendar
+        // Retrieve last 60 session headers (metadata only — no exercises subcollection)
         const q = query(sessionsRef, orderBy('date', 'desc'), limit(60));
         const snap = await getDocs(q);
-        const temp = [];
-        for (const docSnap of snap.docs) {
+        const temp = snap.docs.<span class="fstat-no" title="function not covered" >map((d</span>ocSnap) =&gt; {
           const sessData = <span class="cstat-no" title="statement not covered" >docSnap.data();</span>
-          
-          // Fetch the exercises subcollection for this session
-          const exSnap = <span class="cstat-no" title="statement not covered" >await getDocs(collection(db, 'users', user.uid, 'sessions', docSnap.id, 'exercises'));</span>
-          const exercises = <span class="cstat-no" title="statement not covered" >exSnap.docs.<span class="fstat-no" title="function not covered" >map(e</span>xDoc =&gt; <span class="cstat-no" title="statement not covered" >exDoc.data())</span>;</span>
-          
           const rawDate = <span class="cstat-no" title="statement not covered" >sessData.date;</span>
           let resolvedDate = <span class="cstat-no" title="statement not covered" >new Date();</span>
 <span class="cstat-no" title="statement not covered" >          if (rawDate) {</span>
@@ -2412,13 +2401,15 @@ export const MobileLogger = () =&gt; {
             else <span class="cstat-no" title="statement not covered" >if (rawDate.seconds) <span class="cstat-no" title="statement not covered" >resolvedDate = new Date(rawDate.seconds * 1000);</span></span>
             else <span class="cstat-no" title="statement not covered" >resolvedDate = new Date(rawDate);</span>
           }
-<span class="cstat-no" title="statement not covered" >          temp.push({</span>
+<span class="cstat-no" title="statement not covered" >          return {</span>
             id: docSnap.id,
             ...sessData,
             date: resolvedDate,
-            exercises,
-          });
-        }
+            // exercises is intentionally omitted here — fetched lazily on calendar tap
+            exercises: sessData.exercises ?? [], // inline exercises if stored (desktop format)
+            source: sessData.source ?? 'mobile',
+          };
+        });
         setPastSessions(temp);
       } catch (err) {
 <span class="cstat-no" title="statement not covered" >        console.error('[MobileLogger] Error fetching past sessions:', err);</span>
@@ -3409,7 +3400,7 @@ export const MobileLogger = () =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-09T20:09:52.316Z
+                at 2026-06-10T19:56:16.393Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

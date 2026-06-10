@@ -64,6 +64,10 @@ export const WeeklyRecapScreen = ({ isOpen, onClose, recap, weekId, markAsSeen }
         URL.revokeObjectURL(url);
       }
     } catch (err) {
+      if (err.name === 'AbortError' || err.message?.toLowerCase().includes('cancel') || err.message?.toLowerCase().includes('abort')) {
+        console.log('[WeeklyRecapScreen] User cancelled share sheet.');
+        return;
+      }
       console.error('Error sharing recap:', err);
       setShareError('Could not generate image. Please try again.');
       setTimeout(() => setShareError(null), 4000);

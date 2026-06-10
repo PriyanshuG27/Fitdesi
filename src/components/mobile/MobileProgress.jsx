@@ -10,7 +10,7 @@ import { db } from '../../lib/firebase';
 import exerciseBank from '../../data/exercises.json';
 import { useUIStore } from '../../stores/useUIStore';
 import { abbreviateExerciseName } from '../../lib/firestoreUtils';
-import { calculateMuscleFatigue } from '../../utils/fatigueCalculator';
+import { calculateMuscleFatigue, getSecondaryMuscles } from '../../utils/fatigueCalculator';
 import { generatePRCardImage, getMuscleGroupForExercise, fetchStrengthStandards } from '../shared/PRShareTemplate';
 import { calculateDetailedMuscleStrength } from '../../utils/strengthCalculator';
 import { MuscleMap, StrengthRadarChart, StrengthTiersLegend, MuscleDetailPanel } from '../shared/MuscleMap';
@@ -184,21 +184,9 @@ export const MobileProgress = () => {
 
         const sessionsExercises = await Promise.all(fetchExercisesPromises);
 
-        const getSecondaryGroups = (exKey) => {
-          const name = (exKey || '').toLowerCase();
-          const groups = [];
-          if (name.includes('bench_press') || name.includes('bench press') || name.includes('chest_press') || name.includes('chest press') || name.includes('pushup') || name.includes('push_up')) {
-            groups.push('arms', 'shoulders');
-          } else if (name.includes('overhead_press') || name.includes('overhead press') || name.includes('shoulder_press') || name.includes('shoulder press') || name.includes('ohp') || name.includes('military')) {
-            groups.push('arms');
-          } else if (name.includes('dip')) {
-            groups.push('chest', 'shoulders');
-          } else if (name.includes('pull_up') || name.includes('pull up') || name.includes('chin_up') || name.includes('chin up') || name.includes('pulldown') || name.includes('row')) {
-            groups.push('arms');
-          } else if (name.includes('deadlift')) {
-            groups.push('back', 'legs');
-          }
-          return groups;
+        const getSecondaryGroups = (exKey, category) => {
+          const secs = getSecondaryMuscles(exKey, category);
+          return [...new Set(secs.map(s => s.category))];
         };
 
         sessionsExercises.forEach((exercises) => {
@@ -216,7 +204,7 @@ export const MobileProgress = () => {
               totalSets += completedSetsCount;
 
               // Secondary muscle groups get 30% sets credit
-              const secondaries = getSecondaryGroups(key || ex.name);
+              const secondaries = getSecondaryGroups(key || ex.name, muscleGroup);
               secondaries.forEach((secGroup) => {
                 distribution[secGroup] = (distribution[secGroup] || 0) + completedSetsCount * 0.3;
                 totalSets += completedSetsCount * 0.3;
@@ -439,6 +427,10 @@ export const MobileProgress = () => {
       await navigator.clipboard.writeText(text);
       addToast('PR Card image downloaded & details copied to clipboard!', 'success');
     } catch (err) {
+      if (err.name === 'AbortError' || err.message?.toLowerCase().includes('cancel') || err.message?.toLowerCase().includes('abort')) {
+        console.log('[MobileProgress] User cancelled share sheet.');
+        return;
+      }
       console.error('[MobileProgress] Sharing failed:', err);
       addToast('Could not generate share image.', 'error');
     } finally {

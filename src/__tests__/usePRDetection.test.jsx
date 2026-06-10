@@ -101,4 +101,48 @@ describe('usePRDetection Hook', () => {
     expect(mockGetDoc).toHaveBeenCalledTimes(1);
     expect(mockSetDoc).not.toHaveBeenCalled();
   });
+
+  it('returns early when uid or exerciseKey is missing', async () => {
+    const { result } = renderHook(() => usePRDetection());
+    
+    const res1 = await result.current.checkForPR('', 'bench_press', 60, 5);
+    expect(res1.isPR).toBe(false);
+    expect(res1.prevPR).toBeNull();
+
+    const res2 = await result.current.checkForPR('user-123', '', 60, 5);
+    expect(res2.isPR).toBe(false);
+    expect(res2.prevPR).toBeNull();
+  });
+
+  it('clears cache when clearPRCache is called', async () => {
+    const { clearPRCache } = await import('../hooks/usePRDetection');
+    
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ weight: 45, reps: 8, exerciseKey: 'bicep_curl_cache' }),
+    });
+
+    const { result } = renderHook(() => usePRDetection());
+    const exerciseKey = 'bicep_curl_cache';
+
+    // First call caches the PR
+    const res1 = await result.current.checkForPR('user-123', exerciseKey, 50, 8);
+    expect(res1.isPR).toBe(true);
+    expect(mockGetDoc).toHaveBeenCalledTimes(1);
+
+    // Call clearPRCache
+    clearPRCache();
+
+    // Reset mock getDoc to track next call
+    mockGetDoc.mockClear();
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ weight: 50, reps: 8, exerciseKey: 'bicep_curl_cache' }),
+    });
+
+    // Second call should NOT hit cache because we cleared it, so it calls getDoc again
+    const res2 = await result.current.checkForPR('user-123', exerciseKey, 50, 8);
+    expect(res2.isPR).toBe(false);
+    expect(mockGetDoc).toHaveBeenCalledTimes(1);
+  });
 });

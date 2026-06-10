@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">96.29% </span>
+                <span class="strong">91.66% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>26/27</span>
+                <span class='fraction'>22/24</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">93.33% </span>
+                <span class="strong">84.21% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>14/15</span>
+                <span class='fraction'>16/19</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">85.71% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>6/7</span>
+                <span class='fraction'>2/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">95.23% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>24/24</span>
+                <span class='fraction'>20/21</span>
             </div>
         
             
@@ -121,9 +121,7 @@
 <a name='L56'></a><a href='#L56'>56</a>
 <a name='L57'></a><a href='#L57'>57</a>
 <a name='L58'></a><a href='#L58'>58</a>
-<a name='L59'></a><a href='#L59'>59</a>
-<a name='L60'></a><a href='#L60'>60</a>
-<a name='L61'></a><a href='#L61'>61</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L59'></a><a href='#L59'>59</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -131,12 +129,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">32x</span>
-<span class="cline-any cline-yes">32x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">5x</span>
@@ -173,21 +178,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { auth } from './firebase';
 &nbsp;
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV 
-  ? 'http://localhost:10000' 
-  : <span class="branch-1 cbranch-no" title="branch not covered" >'https://zenkai-engine.onrender.com')</span>;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (
+  import.meta.env.DEV
+    ? 'http://localhost:10000'
+    : <span class="branch-1 cbranch-no" title="branch not covered" >'' </span>// In production, VITE_API_BASE_URL must be set in environment variables
+);
+&nbsp;
+<span class="missing-if-branch" title="if path not taken" >I</span>if (!API_BASE_URL &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >!import.meta.env.DEV)</span> {
+<span class="cstat-no" title="statement not covered" >  console.error('[apiClient] VITE_API_BASE_URL is not set. API calls will fail.');</span>
+}
 &nbsp;
 /**
  * Dispatches a POST query to the Render compute nodes with dynamic auth token injection.
@@ -198,8 +200,9 @@ export const callZenkaiAPI = async (endpointName, payload = {}, timeoutMs = 3000
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("Operation blocked: Missing authenticated profile context.");
 &nbsp;
-  // Retrieve JWT authorization signature dynamically
-  const idToken = await currentUser.getIdToken(true);
+  // Use cached token (valid 1hr) — only refreshes when actually expired.
+  // Previously used getIdToken(true) which forced a network round-trip on every call (+400ms).
+  const idToken = await currentUser.getIdToken();
 &nbsp;
   const controller = new AbortController();
   const timeoutId = setTimeout(<span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >controller.abort(),</span> timeoutMs);
@@ -233,16 +236,7 @@ export const callZenkaiAPI = async (endpointName, payload = {}, timeoutMs = 3000
   }
 };
 &nbsp;
-/**
- * Quietly pings the health gateway of your Render host on application mount.
- * Triggers instance wake-up phases before the user initiates explicit actions.
- */
-export const executeColdStartPing = () =&gt; {
-  fetch(`${API_BASE_URL}/health`)
-    .then(res =&gt; res.json())
-    .then(() =&gt; console.log("Render node confirmed awake."))
-    .catch(() =&gt; console.warn("Render engine instance cold start wake-up chain initiated."));
-};
+&nbsp;
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -250,7 +244,7 @@ export const executeColdStartPing = () =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-09T20:09:52.316Z
+                at 2026-06-10T19:56:16.393Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

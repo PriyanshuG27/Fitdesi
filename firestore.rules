@@ -19,6 +19,13 @@ service cloud.firestore {
       return isAuth() && request.auth.uid in resource.data.participants;
     }
 
+    // Is the signed-in user an admin?
+    function isAdmin() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+    }
+
     // ── Field-level validation helpers for users/{uid} ────────────────────────
 
     // Whitelist of every field written across all phases.
@@ -307,6 +314,34 @@ service cloud.firestore {
     match /strengthStandards/{document} {
       allow read: if isAuth();
       allow write: if false;
+    }
+
+    // ─── feedback/{feedbackId} ──────────────────────────────────────────────
+    // Allow authenticated users to read and create feedback.
+    // Regular users can only update upvotes/downvotes arrays.
+    // Admins can read, update (any field), and delete.
+    match /feedback/{feedbackId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && 
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'Future Plans' &&
+        request.resource.data.upvotes.size() == 0 &&
+        request.resource.data.downvotes.size() == 0;
+        
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          request.resource.data.title == resource.data.title &&
+          request.resource.data.description == resource.data.description &&
+          request.resource.data.category == resource.data.category &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.userName == resource.data.userName &&
+          request.resource.data.createdAt == resource.data.createdAt
+        )
+      );
+      
+      allow delete: if isAdmin();
     }
 
     // ─── Implicit default deny ────────────────────────────────────────────────
