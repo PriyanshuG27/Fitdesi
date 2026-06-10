@@ -148,10 +148,12 @@ STRICT RULES FOR MODIFICATION:
 4. For any exercise in the Broken Equipment list: Replace it with a free-weight or alternative machine exercise that targets the same muscles and is compatible with the Available Equipment.
 5. Ensure all prescribed exercises comply with the Available Equipment list and Medical Restrictions.
 6. Absolutely do not change any other exercises or focuses. Keep the structure identical.
+7. The "days" array MUST contain exactly 7 day objects (Day 1 to Day 7 in order).
 
 OUTPUT FORMAT:
 Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
-JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
+JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }
+IMPORTANT: You MUST return exactly 7 day objects in the "days" array, one for each day from 1 to 7 in sequential order. Do NOT omit rest days; they must have "focus": "Rest" and "exercises": []`;
     } else {
       prompt = `You are an elite fitness coach generating a highly customized weekly workout plan.
 USER PROFILE: 
@@ -180,11 +182,13 @@ STRICT RULES:
    - Apply a precise 2.5% to 5.0% progressive overload weight increase on top of their recent maximum weight lifted for identical exercises.
    - Round all targetWeight values to the nearest 2.5 kg increment (e.g. 60 kg, 62.5 kg, 65 kg; 0 for bodyweight).
 8. If the user experience level is 'Comeback', ignore progression and dial target weights back to 70-80% of their recent logs to ease them in safely.
+9. The "days" array MUST contain exactly 7 day objects (Day 1 to Day 7 in order). Non-workout/rest days must be explicitly included with "focus": "Rest" and "exercises": [].
 
 ${req.body?.personalRequirements ? `USER'S PERSONAL REQUIREMENTS FOR THIS WEEK:\n"${req.body.personalRequirements}"\nYou MUST incorporate these requirements into the plan.\n` : ''}
 OUTPUT FORMAT:
 Respond ONLY with valid, minified JSON. Absolutely NO markdown, NO text outside the JSON, NO explanation.
-JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }`;
+JSON Schema: { "days": [{ "day": number (1-7), "focus": string (e.g. "Push", "Rest"), "exercises": [{ "name": string, "sets": number, "reps": string (e.g. "8-10"), "targetWeight": number (0 for bodyweight) }] }] }
+IMPORTANT: You MUST return exactly 7 day objects in the "days" array, one for each day from 1 to 7 in sequential order. Do NOT omit rest days; they must have "focus": "Rest" and "exercises": []`;
     }
 
     let rawText = '';

@@ -71,7 +71,7 @@ export function useWeeklyPlan() {
       if (personalRequirements && typeof personalRequirements === 'string' && personalRequirements.trim() !== '') {
         payload.personalRequirements = personalRequirements;
       }
-      const res = await callZenkaiAPI('generatePlan', payload, 70000);
+      const res = await callZenkaiAPI('generatePlan', payload, 150000);
       
       // Upon successful generation, fetch the newly generated plan from Firestore.
       if (res.data?.success) {
