@@ -34,7 +34,7 @@ module.exports = [authGuard, async (req, res) => {
       }
     }
 
-    const visionPrompt = "Analyze this image. Does it depict a gym, workout area, fitness center, or individual exercise equipment like dumbbells, barbells, weights, weight plates, treadmills, or other training gear? Answer with only 'yes' or 'no' in lowercase.";
+    const visionPrompt = "Analyze this image. Does it depict a real-life photograph taken inside an actual gym, workout area, or fitness center? It must show real exercise equipment (like dumbbells, barbells, weight benches, or cardio machines) in a real physical room. CRITICAL: You must answer 'no' if the image is a graphic, logo, clip art, drawing, illustration, or a photograph showing a computer/phone screen displaying gym equipment. Answer with only 'yes' or 'no' in lowercase.";
 
     let verified = false;
     let modelUsed = '';
