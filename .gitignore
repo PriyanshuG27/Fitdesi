@@ -51,3 +51,6 @@ scratch_*.js
 lhreport.html
 *.lighthouse.html
 lighthouse-report.html
+
+# Coverage reports
+coverage/
