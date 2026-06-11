@@ -28,8 +28,8 @@ describe('authStore', () => {
   });
 
   it('sets profile correctly', () => {
-    useAuthStore.getState().setProfile({ name: 'FitDesi Athlete', weightKg: 80 });
-    expect(useAuthStore.getState().profile).toEqual({ name: 'FitDesi Athlete', weightKg: 80 });
+    useAuthStore.getState().setProfile({ name: 'Zenkai Athlete', weightKg: 80 });
+    expect(useAuthStore.getState().profile).toEqual({ name: 'Zenkai Athlete', weightKg: 80 });
   });
 
   it('sets loading state correctly', () => {

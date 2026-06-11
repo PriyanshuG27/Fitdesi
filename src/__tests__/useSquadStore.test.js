@@ -17,7 +17,7 @@ describe('useSquadStore', () => {
   it('sets squad data correctly', () => {
     const mockSquad = {
       id: 'squad-123',
-      squadName: 'Fitdesi Warriors',
+      squadName: 'Zenkai Warriors',
       members: [{ uid: 'u1', displayName: 'Priyanshu', streak: 12, xpThisWeek: 450 }],
       weeklyXPMultiplier: 1.2,
       dailyCheckIns: { u1: true }
@@ -27,7 +27,7 @@ describe('useSquadStore', () => {
 
     const state = useSquadStore.getState();
     expect(state.squadId).toBe('squad-123');
-    expect(state.squadName).toBe('Fitdesi Warriors');
+    expect(state.squadName).toBe('Zenkai Warriors');
     expect(state.members).toEqual(mockSquad.members);
     expect(state.weeklyXPMultiplier).toBe(1.2);
     expect(state.dailyCheckIns).toEqual({ u1: true });

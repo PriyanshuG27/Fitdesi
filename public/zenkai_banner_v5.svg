@@ -209,7 +209,7 @@
 
     <!-- Main Title -->
     <g class="brand-title-group">
-      <text x="0" y="142" class="font-display brand-logo-text" font-weight="900" font-size="78" fill="url(#textGrad)" letter-spacing="2" style="transition: fill 0.3s;">FIT<tspan fill="#F0F0F0">DESI</tspan></text>
+      <text x="0" y="142" class="font-display brand-logo-text" font-weight="900" font-size="78" fill="url(#textGrad)" letter-spacing="2" style="transition: fill 0.3s;">ZEN<tspan fill="#F0F0F0">KAI</tspan></text>
     </g>
     
     <!-- Tagline -->
@@ -250,7 +250,7 @@
     
     <!-- Screen Content (Header) -->
     <g transform="translate(15, 28)">
-      <text x="0" y="15" class="font-display" font-weight="900" font-size="16" fill="#FF5C00" letter-spacing="1">FD <tspan fill="#F0F0F0">ZENKAI</tspan></text>
+      <text x="0" y="15" class="font-display" font-weight="900" font-size="16" fill="#FF5C00" letter-spacing="1">ZK <tspan fill="#F0F0F0">ZENKAI</tspan></text>
       
       <!-- Small Streak Pill -->
       <rect x="142" y="0" width="52" height="20" rx="10" fill="#1A1A1A" stroke="#FF5C00" stroke-width="1" />

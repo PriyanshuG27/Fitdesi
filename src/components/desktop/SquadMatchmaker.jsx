@@ -80,11 +80,11 @@ export const SquadMatchmaker = () => {
         }
         
         if (!code) {
-          // Generate new squad code: FIT- + clean first 4 chars of name + 3 random digits
+          // Generate new squad code: ZK- + clean first 4 chars of name + 3 random digits
           const cleanName = (profile.name || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
           const padName = cleanName.padEnd(4, 'X');
           const randomDigits = Math.floor(100 + Math.random() * 900);
-          code = `FIT-${padName}${randomDigits}`;
+          code = `ZK-${padName}${randomDigits}`;
           await setDoc(userRef, { squadCode: code }, { merge: true });
         }
         

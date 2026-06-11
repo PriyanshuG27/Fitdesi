@@ -274,7 +274,7 @@ describe('useAuth — loginWithGoogle()', () => {
     expect(userDocData.uid).toBe('google-uid-123');
     expect(userDocData.email).toBe('google@zenkai.com');
     expect(userDocData.name).toBe('Goku Son');
-    expect(userDocData.squadCode).toMatch(/^FIT-[A-Z]{4}\d{3}$/);
+    expect(userDocData.squadCode).toMatch(/^ZK-[A-Z]{4}\d{3}$/);
 
     const squadDocData = mockSetDoc.mock.calls[1][1];
     expect(squadDocData.uid).toBe('google-uid-123');
@@ -395,7 +395,7 @@ describe('useAuth — Error mapping and Edge cases', () => {
     expect(userDocCall).toBeDefined();
     expect(userDocCall[1].name).toBe('');
     expect(userDocCall[1].email).toBe('');
-    expect(userDocCall[1].squadCode).toContain('FIT-ZENK');
+    expect(userDocCall[1].squadCode).toContain('ZK-ZENK');
   });
 
   it('signup: does not call deleteUser if Firestore write fails with auth/email-already-in-use', async () => {

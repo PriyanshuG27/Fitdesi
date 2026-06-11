@@ -18,7 +18,7 @@ const auth = admin.auth();
 const db   = admin.firestore();
 
 async function clearAllUsers() {
-  console.log('\n🔥 FitDesi — Clear Test Data\n');
+  console.log('\n🔥 Zenkai — Clear Test Data\n');
 
   // 1. List all Auth users
   const listResult = await auth.listUsers();

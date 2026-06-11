@@ -13,10 +13,10 @@ async function seedSquadCodes() {
 
       if (!code) {
         // Generate code
-        const namePart = (userData.name || 'FitDesi').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+        const namePart = (userData.name || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
         const padName = namePart.padEnd(4, 'X');
         const randomDigits = Math.floor(100 + Math.random() * 900);
-        code = `FIT-${padName}${randomDigits}`;
+        code = `ZK-${padName}${randomDigits}`;
         
         console.log(`Generating code ${code} for ${userData.name} (${userData.email})`);
         

@@ -6,7 +6,7 @@
 
   <!-- 🔥 Animated Typing Headline 🔥 -->
   <a href="https://github.com/PriyanshuG27/Zenkai">
-    <img src="https://readme-typing-svg.herokuapp.com?font=Barlow+Condensed&weight=900&size=65&pause=1000&color=FF5C00&center=true&vCenter=true&width=800&lines=ZENKAI+⚡;TRAIN+SMARTER.+🧠;COME+BACK+STRONGER.+🏋️;POWERED+BY+GEMINI+3+🚀" alt="Typing SVG" />
+    <img src="https://readme-typing-svg.herokuapp.com?font=Barlow+Condensed&weight=900&size=65&pause=1000&color=FF5C00&center=true&vCenter=true&width=800&lines=ZENKAI+⚡;TRAIN+SMARTER.+🧠;COME+BACK+STRONGER.+🏋️;POWERED+BY+GEMINI+AND+GROQ+🚀" alt="Typing SVG" />
   </a>
 
   <!-- Animated Neubrutalism App Mockup Banner -->
@@ -14,8 +14,11 @@
 
   <br /><br />
 
-  <!-- Animated Glowing Gemini Badge -->
-  <img src="public/gemini_badge_v3.svg?v=9" alt="Powered by Gemini 3 Flash" />
+  <!-- Animated Glowing Gemini & Groq Badge -->
+  <div style="display: flex; justify-content: center; align-items: center; gap: 15px;">
+    <img src="public/gemini_badge_v3.svg?v=9" alt="Powered by Gemini 3 Flash" />
+    <img src="https://img.shields.io/badge/Powered_by-Groq_Llama_3-F55036?style=for-the-badge&logoColor=white" alt="Powered by Groq Llama 3" height="28" style="border-radius: 4px;" />
+  </div>
   
   <h3>⚡ Premium Dark Athletic Gym Tracker & Recovery Platform ⚡</h3>
   
@@ -29,6 +32,7 @@
     <img src="https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E" alt="Vite" />
     <img src="https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase" />
     <img src="https://img.shields.io/badge/Gemini_3_Flash-8E75B2?style=for-the-badge&logo=googlebard&logoColor=white" alt="Gemini AI" />
+    <img src="https://img.shields.io/badge/Groq_Llama_3-F55036?style=for-the-badge&logoColor=white" alt="Groq AI" />
     <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
     <img src="https://img.shields.io/badge/Zustand-443E38?style=for-the-badge&logo=react&logoColor=white" alt="Zustand" />
   </p>
@@ -40,8 +44,8 @@
     <tr style="border-bottom: 1px solid #333;">
       <td style="padding: 15px; border-right: 1px solid #333;"><strong>⚡ SYSTEM STATUS</strong></td>
       <td style="padding: 15px; color: #B5FF2D; border-right: 1px solid #333; text-shadow: 0 0 5px #B5FF2D;">🟢 PRODUCTION ACTIVE</td>
-      <td style="padding: 15px; border-right: 1px solid #333;"><strong>🤖 AI ENGINE</strong></td>
-      <td style="padding: 15px; color: #00D4FF; text-shadow: 0 0 5px #00D4FF;">⚡ GEMINI 3 FLASH</td>
+      <td style="padding: 15px; border-right: 1px solid #333;"><strong>🤖 AI ENGINES</strong></td>
+      <td style="padding: 15px; color: #00D4FF; text-shadow: 0 0 5px #00D4FF;">⚡ GEMINI + GROQ</td>
     </tr>
     <tr>
       <td style="padding: 15px; border-right: 1px solid #333;"><strong>💾 DATABASE</strong></td>
@@ -89,11 +93,11 @@ Zenkai uses a custom **Neubrutalism + Dark OLED** style designed to look premium
   <tr>
     <td style="background: #111; padding: 20px; border: 1px solid #FF5C00; border-radius: 12px; width: 50%;">
       <h3 style="margin-top:0; color: #FF5C00;">📱 Dual-Viewport Architecture</h3>
-      <p style="color: #bbb; font-size: 14px;">Mounts entirely different component trees based on screen width. Mobile gets a thumb-reach bottom nav; Desktop gets a dense multi-column Bento grid.</p>
+      <p style="color: #bbb; font-size: 14px;">Mounts entirely different component trees based on screen width. Mobile gets a thumb-reach bottom nav; Desktop gets a dense multi-column command center.</p>
     </td>
     <td style="background: #111; padding: 20px; border: 1px solid #B5FF2D; border-radius: 12px; width: 50%;">
-      <h3 style="margin-top:0; color: #B5FF2D;">🧠 Gemini 3 Flash Auto-Planner</h3>
-      <p style="color: #bbb; font-size: 14px;">A serverless Firebase Cloud Function triggers Gemini 3 to construct a dynamic 6-day routine based on your medical limits and available gym equipment.</p>
+      <h3 style="margin-top:0; color: #B5FF2D;">🧠 Gemini + Groq AI Planner</h3>
+      <p style="color: #bbb; font-size: 14px;">A Node.js Express server triggers Gemini &amp; Groq APIs to construct a dynamic 6-day routine based on your medical limits, goals, and available gym equipment.</p>
     </td>
   </tr>
   <tr>
@@ -106,6 +110,16 @@ Zenkai uses a custom **Neubrutalism + Dark OLED** style designed to look premium
       <p style="color: #bbb; font-size: 14px;">Coming back after a long break? The Phoenix algorithm auto-scales your old weights down to 40% and ramps them up safely over 8 weeks to prevent injury.</p>
     </td>
   </tr>
+  <tr>
+    <td style="background: #111; padding: 20px; border: 1px solid #B5FF2D; border-radius: 12px; width: 50%;">
+      <h3 style="margin-top:0; color: #B5FF2D;">🎨 Aura &amp; Beast Mode Forecaster</h3>
+      <p style="color: #bbb; font-size: 14px;">Tracks daily gym Aura, applying decay for inactivity and bonuses for high intensity (RPE/MMC). Includes a real-time PR breakthrough probability simulator and Radar charts.</p>
+    </td>
+    <td style="background: #111; padding: 20px; border: 1px solid #FF8A00; border-radius: 12px; width: 50%;">
+      <h3 style="margin-top:0; color: #FF8A00;">📰 Sunday AI Magazine &amp; Poster Studio</h3>
+      <p style="color: #bbb; font-size: 14px;">Personalized weekly newspaper summaries featuring verbal cues overlays, paired with a Poster Studio using Konva for dragging achievements and badges into shareable cards.</p>
+    </td>
+  </tr>
 </table>
 
 <br/>
@@ -114,14 +128,15 @@ Zenkai uses a custom **Neubrutalism + Dark OLED** style designed to look premium
 
 ## <img src="https://readme-typing-svg.herokuapp.com?font=Outfit&weight=800&size=28&color=B5FF2D&vCenter=true&width=500&lines=📐+System+Architecture" alt="Architecture" />
 
-This flowchart maps the relationships between the client, state stores, and Firebase services:
+This flowchart maps the relationships between the client, state stores, Express backend server, and third-party APIs:
 
 ```mermaid
 graph TD
     %% Styling
     classDef client fill:#080808,stroke:#00D4FF,stroke-width:2px,color:#FFF;
     classDef firebase fill:#080808,stroke:#FF5C00,stroke-width:2px,color:#FFF;
-    classDef gemini fill:#080808,stroke:#B5FF2D,stroke-width:2px,color:#FFF;
+    classDef backend fill:#080808,stroke:#8E75B2,stroke-width:2px,color:#FFF;
+    classDef ai fill:#080808,stroke:#B5FF2D,stroke-width:2px,color:#FFF;
 
     subgraph "📱 Client (React + Vite)"
         UI[Dual-Viewport App Shell]:::client
@@ -132,18 +147,22 @@ graph TD
     subgraph "☁️ Firebase Backend"
         Auth[Auth Gateway]:::firebase
         DB[(Firestore DB)]:::firebase
-        Func[Cloud Functions V2]:::firebase
+    end
+
+    subgraph "⚙️ Compute Layer"
+        API[Express Backend Server]:::backend
     end
 
     subgraph "🧠 AI Core"
-        AI[Gemini 3 Flash]:::gemini
+        AI[Gemini 3 + Groq]:::ai
     end
 
     Store -->|Syncs Data| DB
-    Store -->|Triggers Gen| Func
-    Func -->|Constructs Prompt| AI
-    AI -->|Returns JSON Plan| Func
-    Func -->|Saves Plan| DB
+    Store -->|Dispatches API Calls| API
+    API -->|Validates Token| Auth
+    API -->|Reads / Writes Data| DB
+    API -->|Constructs Prompt| AI
+    AI -->|Returns JSON Payload| API
 ```
 
 <br/>
@@ -194,30 +213,31 @@ Zenkai/
 │   ├── TRD.md                # Technical Requirements Document
 │   └── UI_UX_BRIEF.md        # CSS color tokens, layouts, & animations brief
 │
-├── functions/                # Firebase Cloud Functions (Backend)
-│   ├── .env.example          # Template for backend Cloud Functions keys
-│   ├── index.js              # Entrypoint for Cloud Functions export
-│   ├── package.json          # Node.js 20 functions dependencies
-│   └── src/
-│       └── generatePlan.js   # Gemini 3 Flash workout prompt generator
+├── backend/                  # Companion Node.js Express server (Backend)
+│   ├── server.js             # Express application entrypoint
+│   ├── package.json          # Backend dependencies (express, firebase-admin, etc.)
+│   ├── lib/                  # Admin helpers, DB connect, and API clients (Gemini/Groq)
+│   ├── routes/               # Modular API endpoint handlers (plans, magazines, challenges)
+│   ├── middleware/           # Express middleware (Auth validation, rate-limiting)
+│   └── data/                 # System catalogs, prompt configurations, & datasets
 │
 └── src/                      # Client Application (Frontend)
-    ├── App.jsx               # Layout toggle entrypoint
-    ├── index.css             # Main stylesheet (Neubrutalism styles + Google Fonts)
-    ├── main.jsx              # App mount point & env validation execution
+    ├── App.jsx               # Layout toggle and code-split suspense routing entrypoint
+    ├── index.css             # Main stylesheet (Neubrutalism design tokens + fonts)
+    ├── main.jsx              # Client mount point and env verification
     │
     ├── assets/               # Image/SVG asset files
     ├── components/           # Dual Viewport UI Components
-    │   ├── desktop/          # Sidebar navigation, Bento dashboard, Dense graphs
-    │   ├── mobile/           # Bottom navigation, fullscreen logger, Swipe panels
-    │   └── shared/           # Protected routing and general layout wrappers
+    │   ├── desktop/          # Command Center: AuraForecaster, SundayMagazine, PosterStudio, etc.
+    │   ├── mobile/           # Gym Companion: MobileLogger, MobileProgress, MobileChallenges, etc.
+    │   └── shared/           # Universal views: MuscleMap, OnboardingPage, NeubrutalistCalendar, etc.
     │
     ├── data/                 # Curated exercise dataset & static mappings
     ├── hooks/                # Layout-agnostic Custom React Hooks
-    │   ├── useAuth.js        # Auth state observer
-    │   ├── useWorkout.js     # Active session, logging actions
-    │   ├── useXPEngine.js    # Level tier and streak calculation
-    │   ├── usePlan.js        # Custom plan generation handler
+    │   ├── useAuth.js        # Auth handler and ZK- / FIT- prefix generation
+    │   ├── useWorkoutLogger.js# Workout debriefing and Titan Boss damage engine
+    │   ├── useWeeklyPlan.js  # Plan generation dispatcher calling Express backend
+    │   ├── useWeeklyRecap.js # Weekly summaries and recap telemetry
     │   └── ...
     │
     ├── lib/                  # Library SDK initializers
@@ -225,9 +245,9 @@ Zenkai/
     │   └── firebaseConfig.js # Firebase config variables
     │
     └── stores/               # Zustand Global State Stores
-        ├── useAuthStore.js
-        ├── usePlanStore.js
-        ├── useWorkoutStore.js
+        ├── authStore.js      # Auth & Profile observer states
+        ├── useWorkoutStore.js# Active session and logging sets buffer
+        ├── usePlanStore.js   # Generated workout schedules and target states
         └── ...
 ```
 </details>
@@ -250,17 +270,16 @@ VITE_FIREBASE_PROJECT_ID=zenkai-app
 VITE_FIREBASE_STORAGE_BUCKET=zenkai-app.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
+VITE_API_BASE_URL=http://localhost:10000
 ```
 
-### Backend Environment Variables (`functions/.env`)
-Create a `.env` file in the `/functions` folder for local emulator testing:
+### Backend Environment Variables (`backend/.env`)
+Create a `.env` file in the `/backend` folder for local development:
 ```bash
+PORT=10000
 GEMINI_API_KEY=your_gemini_api_key
-```
-
-For production, configure the key in the Firebase Cloud Function environment:
-```bash
-firebase functions:config:set gemini.key="YOUR_GEMINI_API_KEY"
+GROQ_API_KEY=your_groq_api_key
+VITE_FIREBASE_PROJECT_ID=zenkai-app
 ```
 </details>
 
@@ -273,7 +292,7 @@ firebase functions:config:set gemini.key="YOUR_GEMINI_API_KEY"
 Follow these steps to run the Zenkai application locally:
 
 ### 1. Installation
-Install the project dependencies for the client and backend functions:
+Install the project dependencies for the client and backend Express server:
 ```bash
 # Clone the repository
 git clone https://github.com/PriyanshuG27/Zenkai.git
@@ -282,8 +301,8 @@ cd Zenkai
 # Install client packages
 npm install
 
-# Install functions packages
-cd functions
+# Install backend packages
+cd backend
 npm install
 cd ..
 ```
@@ -304,12 +323,21 @@ firebase use --add
 firebase emulators:start
 ```
 
-### 3. Run the Frontend Development Server
-In a new terminal window, start the local Vite development server:
+### 3. Run the Compute Services
+In a new terminal window, start the local backend server:
+```bash
+cd backend
+npm start
+```
+
+### 4. Run the Frontend Development Server
+In another terminal window, start the local Vite development server:
 ```bash
 npm run dev
 ```
 Open `http://localhost:5173` to view the app in your browser.
+
+</details>
 
 <br/>
 <img src="public/neon_divider.svg?v=2" width="100%" />
@@ -318,13 +346,20 @@ Open `http://localhost:5173` to view the app in your browser.
 ## <img src="https://readme-typing-svg.herokuapp.com?font=Outfit&weight=800&size=28&color=00D4FF&vCenter=true&width=500&lines=🚀+Deployment" alt="Deployment" />
 
 <details>
-<summary><b>📦 View Deployment Steps (Vercel & Firebase)</b></summary>
+<summary><b>📦 View Deployment Steps (Vercel & Render)</b></summary>
 
-### Deploying the Backend (Firebase Functions & Security Rules)
-```bash
-# Deploy firestore rules, indexes, and cloud functions
-firebase deploy
-```
+### Deploying the Backend (Render)
+1. Connect your repository to Render.com and create a new **Web Service**.
+2. Set the root directory to `backend`.
+3. Set the build command to `npm install` and the start command to `npm start`.
+4. Configure environment variables in the dashboard:
+   - `PORT`: `10000`
+   - `GEMINI_API_KEY`: *(Your Production Gemini Key)*
+   - `GROQ_API_KEY`: *(Your Production Groq Key)*
+   - `VITE_FIREBASE_PROJECT_ID`: `zenkai-prod`
+   - `FIREBASE_PROJECT_ID`: `zenkai-prod`
+   - `FIREBASE_CLIENT_EMAIL`: `prod-service-account-email`
+   - `FIREBASE_PRIVATE_KEY`: `prod-service-account-private-key-string`
 
 ### Deploying the Frontend (Vercel)
 Install Vercel CLI and trigger a production deploy:
@@ -332,7 +367,7 @@ Install Vercel CLI and trigger a production deploy:
 npm install -g vercel
 vercel --prod
 ```
-Ensure you have configured all client environment variables in the Vercel project dashboard under **Settings > Environment Variables**.
+Ensure you have configured all client environment variables in the Vercel project dashboard under **Settings > Environment Variables**, including mapping `VITE_API_BASE_URL` to your Render Web Service URL.
 </details>
 
 <br/>

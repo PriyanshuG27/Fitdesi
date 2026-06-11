@@ -66,7 +66,7 @@ export function useAuth() {
         const cleanName = (firebaseUser.displayName || 'Zenkai').replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
         const padName = cleanName.padEnd(4, 'X');
         const randomDigits = Math.floor(100 + Math.random() * 900);
-        const code = `FIT-${padName}${randomDigits}`;
+        const code = `ZK-${padName}${randomDigits}`;
 
         await setDoc(userRef, {
           uid:              firebaseUser.uid,
@@ -137,7 +137,7 @@ export function useAuth() {
       const cleanName = name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
       const padName = cleanName.padEnd(4, 'X');
       const randomDigits = Math.floor(100 + Math.random() * 900);
-      const code = `FIT-${padName}${randomDigits}`;
+      const code = `ZK-${padName}${randomDigits}`;
 
       // 4. Write initial Firestore profile document
       await setDoc(doc(db, 'users', newUser.uid), {
