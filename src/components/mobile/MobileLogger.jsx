@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Zap, Minus, BatteryLow, Plus, Trash2, Volume2, VolumeX } from 'lucide-react';
@@ -457,15 +457,30 @@ export const MobileLogger = () => {
     toast(`Added ${parsedNLPResult.name}!`, 'info');
   }, [parsedNLPResult, addExercise, toast]);
 
+  // Ref to hold the debounce timer for the NLP parser.
+  // setNlpInput is called instantly so the text field always feels responsive.
+  // parseWorkoutText (which scans ~400 exercises in exercises.json) is
+  // deferred by 150ms — only fires when the user pauses typing.
+  const nlpDebounceRef = useRef(null);
+
   const handleNLPChange = (e) => {
     const val = e.target.value;
+    // Update the visible input instantly — zero lag on the keyboard
     setNlpInput(val);
+
+    // Clear previous debounce timer
+    if (nlpDebounceRef.current) clearTimeout(nlpDebounceRef.current);
+
     if (!val.trim()) {
       setParsedNLPResult(null);
       return;
     }
-    const result = parseWorkoutText(val);
-    setParsedNLPResult(result);
+
+    // Defer the heavy exercise-bank scan until typing pauses
+    nlpDebounceRef.current = setTimeout(() => {
+      const result = parseWorkoutText(val);
+      setParsedNLPResult(result);
+    }, 150);
   };
 
   const handleRepeatWorkout = async (pastSess) => {

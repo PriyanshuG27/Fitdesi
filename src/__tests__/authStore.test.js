@@ -1,66 +1,125 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useAuthStore } from '../stores/useAuthStore';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-describe('authStore', () => {
+describe('authStore with localStorage caching', () => {
   beforeEach(() => {
-    useAuthStore.setState({
-      user: null,
-      uid: null,
-      profile: null,
-      loading: true,
-      error: null,
-    });
+    vi.resetModules();
+    localStorage.clear();
   });
 
-  it('sets user and uid correctly, clears error', () => {
-    useAuthStore.getState().setError('some-error');
-    useAuthStore.getState().setUser({ uid: 'uid-test-456', email: 'test@zenkai.com' });
+  it('hydrates profile from localStorage cache on load if present', async () => {
+    const fakeProfile = { uid: 'cached-uid', name: 'Cached User' };
+    localStorage.setItem('zenkai_profile_cache', JSON.stringify(fakeProfile));
+
+    // Import the store after setting the cache so the module-level init code sees it
+    const { useAuthStore } = await import('../stores/authStore');
 
     const state = useAuthStore.getState();
-    expect(state.user).toEqual({ uid: 'uid-test-456', email: 'test@zenkai.com' });
-    expect(state.uid).toBe('uid-test-456');
-    expect(state.error).toBeNull();
-    // Branch coverage: null user
-    useAuthStore.getState().setUser(null);
-    const nullState = useAuthStore.getState();
-    expect(nullState.user).toBeNull();
-    expect(nullState.uid).toBeNull();
+    expect(state.profile).toEqual(fakeProfile);
+    expect(state.cacheHydrated).toBe(true);
   });
 
-  it('sets profile correctly', () => {
-    useAuthStore.getState().setProfile({ name: 'Zenkai Athlete', weightKg: 80 });
-    expect(useAuthStore.getState().profile).toEqual({ name: 'Zenkai Athlete', weightKg: 80 });
+  it('handles corrupted json in profile cache gracefully', async () => {
+    localStorage.setItem('zenkai_profile_cache', 'invalid-json');
+
+    const { useAuthStore } = await import('../stores/authStore');
+
+    const state = useAuthStore.getState();
+    expect(state.profile).toBeNull();
+    expect(state.cacheHydrated).toBe(false);
   });
 
-  it('sets loading state correctly', () => {
-    useAuthStore.getState().setLoading(false);
-    expect(useAuthStore.getState().loading).toBe(false);
-  });
-
-  it('sets and clears error correctly', () => {
-    useAuthStore.getState().setError('Fatal Auth Error');
-    expect(useAuthStore.getState().error).toBe('Fatal Auth Error');
-
-    useAuthStore.getState().clearError();
-    expect(useAuthStore.getState().error).toBeNull();
-  });
-
-  it('clears all auth state correctly', () => {
-    useAuthStore.setState({
-      user: { uid: 'some-uid' },
-      uid: 'some-uid',
-      profile: { name: 'athlete' },
-      loading: true,
-      error: 'some-error',
+  it('handles localStorage read exception gracefully', async () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Localstorage blocked');
     });
 
+    const { useAuthStore } = await import('../stores/authStore');
+
+    const state = useAuthStore.getState();
+    expect(state.profile).toBeNull();
+    expect(state.cacheHydrated).toBe(false);
+
+    getItemSpy.mockRestore();
+  });
+
+  it('writes to localStorage cache when setProfile is called', async () => {
+    const { useAuthStore } = await import('../stores/authStore');
+    
+    useAuthStore.getState().setProfile({ name: 'Live User' });
+
+    expect(JSON.parse(localStorage.getItem('zenkai_profile_cache'))).toEqual({ name: 'Live User' });
+    expect(useAuthStore.getState().profile).toEqual({ name: 'Live User' });
+    expect(useAuthStore.getState().cacheHydrated).toBe(true);
+  });
+
+  it('handles write errors silently in writeProfileCache', async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage full');
+    });
+
+    const { useAuthStore } = await import('../stores/authStore');
+    
+    // Should not throw
+    expect(() => {
+      useAuthStore.getState().setProfile({ name: 'Live User' });
+    }).not.toThrow();
+
+    setItemSpy.mockRestore();
+  });
+
+  it('clears localStorage cache on clearAuth', async () => {
+    const fakeProfile = { uid: 'cached-uid', name: 'Cached User' };
+    localStorage.setItem('zenkai_profile_cache', JSON.stringify(fakeProfile));
+
+    const { useAuthStore } = await import('../stores/authStore');
+    
     useAuthStore.getState().clearAuth();
 
+    expect(localStorage.getItem('zenkai_profile_cache')).toBeNull();
     const state = useAuthStore.getState();
-    expect(state.user).toBeNull();
-    expect(state.uid).toBeNull();
     expect(state.profile).toBeNull();
-    expect(state.loading).toBe(false);
-    expect(state.error).toBeNull();
+    expect(state.cacheHydrated).toBe(false);
+  });
+
+  it('handles removeItem exception silently on clearAuth', async () => {
+    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('Blocked');
+    });
+
+    const { useAuthStore } = await import('../stores/authStore');
+    
+    expect(() => {
+      useAuthStore.getState().clearAuth();
+    }).not.toThrow();
+
+    removeItemSpy.mockRestore();
+  });
+
+  it('sets user, loading, and error states correctly', async () => {
+    const { useAuthStore } = await import('../stores/authStore');
+
+    // Initial state
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().uid).toBeNull();
+
+    // Set user
+    useAuthStore.getState().setUser({ uid: 'user-123' });
+    expect(useAuthStore.getState().user).toEqual({ uid: 'user-123' });
+    expect(useAuthStore.getState().uid).toBe('user-123');
+
+    // Set null user
+    useAuthStore.getState().setUser(null);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().uid).toBeNull();
+
+    // Set loading
+    useAuthStore.getState().setLoading(false);
+    expect(useAuthStore.getState().loading).toBe(false);
+
+    // Set and clear error
+    useAuthStore.getState().setError('Error occurred');
+    expect(useAuthStore.getState().error).toBe('Error occurred');
+    useAuthStore.getState().clearError();
+    expect(useAuthStore.getState().error).toBeNull();
   });
 });

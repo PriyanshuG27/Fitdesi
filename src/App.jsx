@@ -130,11 +130,13 @@ const DesktopApp = safeLazy(() => import('./components/desktop/DesktopApp'));
 import { GuestRoute }      from './components/shared/GuestRoute';
 import { ProtectedRoute, AuthSpinner }  from './components/shared/ProtectedRoute';
 import { OnboardingGuard } from './components/shared/OnboardingGuard';
+import { writeProfileCache } from './stores/authStore';
 
-// Shared Screens (responsive, not layout-specific)
-import { LandingPage } from './components/shared/LandingPage';
-import { LoginPage }   from './components/shared/LoginPage';
-import { SignupPage }  from './components/shared/SignupPage';
+// Shared Screens — lazy-loaded so they don't inflate the main JS chunk
+// that every logged-in user downloads on every page visit.
+const LandingPage      = safeLazy(() => import('./components/shared/LandingPage').then(m => ({ default: m.LandingPage })));
+const LoginPage        = safeLazy(() => import('./components/shared/LoginPage').then(m => ({ default: m.LoginPage })));
+const SignupPage       = safeLazy(() => import('./components/shared/SignupPage').then(m => ({ default: m.SignupPage })));
 import { PWAInstallModal } from './components/shared/PWAInstallModal';
 import { PWAInstallBanner } from './components/shared/PWAInstallBanner';
 import { ToastStack } from './components/shared/ToastStack';
@@ -150,8 +152,8 @@ const MobilePlan = safeLazy(() => import('./components/mobile/MobilePlan'));
 const MobileChallenges = safeLazy(() => import('./components/mobile/MobileChallenges'));
 const MobileProfile = safeLazy(() => import('./components/mobile/MobileProfile'));
 
-// Desktop Screens
-import { DesktopDashboard }  from './components/desktop/DesktopDashboard';
+// Desktop Screens — lazy-loaded; desktop users hit /home which loads DesktopApp
+const DesktopDashboard = safeLazy(() => import('./components/desktop/DesktopDashboard').then(m => ({ default: m.DesktopDashboard })));
 
 const SquadMatchmaker = safeLazy(() => import('./components/desktop/SquadMatchmaker').then(m => ({ default: m.SquadMatchmaker })));
 const DesktopLogEditor = safeLazy(() => import('./components/desktop/DesktopLogEditor').then(m => ({ default: m.DesktopLogEditor })));
@@ -335,6 +337,8 @@ function App() {
               if (publicData) {
                 const merged = { ...publicData, ...(privateData || {}) };
                 setProfile(merged);
+                // Persist to localStorage so the next page load hydrates instantly (SWR)
+                writeProfileCache(merged);
                 // Sync XP store with real-time profile data on mount & updates
                 useXPStore.getState().setXP(
                   publicData.xp ?? 0,

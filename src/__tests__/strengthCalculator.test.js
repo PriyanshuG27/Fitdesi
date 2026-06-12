@@ -143,7 +143,63 @@ describe('strengthCalculator', () => {
       expect(result.individual.chest).toBeGreaterThan(0);
       expect(result.general.chest).toBeGreaterThan(0);
     });
+
+    it('handles dumbbell and cable exercise doubling', () => {
+      const prs = [
+        {
+          exerciseKey: 'dumbbell_bench_press',
+          weight: 20,
+          reps: 10
+        },
+        {
+          exerciseKey: 'cable_crossover',
+          weight: 15,
+          reps: 10
+        }
+      ];
+      // Bodyweight 80, dumbbell bench press weight of 20 is doubled to 40
+      const result = calculateDetailedMuscleStrength(prs, { weight: 80 });
+      expect(result.general.chest).toBeGreaterThan(28); // higher than baseline
+    });
+
+    it('handles bodyweight (BW) exercises', () => {
+      const prs = [
+        {
+          exerciseKey: 'pull_ups',
+          weight: 'BW',
+          reps: 8
+        }
+      ];
+      const result = calculateDetailedMuscleStrength(prs, { weight: 80 });
+      expect(result.general.back).toBeGreaterThan(32); // higher than baseline
+    });
+
+    it('returns early if est1RM <= 0 and weight is not BW', () => {
+      const prs = [
+        {
+          exerciseKey: 'barbell_bench_press',
+          weight: 0,
+          reps: 0
+        }
+      ];
+      const result = calculateDetailedMuscleStrength(prs, { weight: 80 });
+      expect(result.general.chest).toBe(28); // matches baseline
+    });
+
+    it('handles exercises not in the bank with fallbacks', () => {
+      const prs = [
+        {
+          exerciseKey: 'some_crazy_new_exercise',
+          weight: 100,
+          reps: 5
+        }
+      ];
+      const result = calculateDetailedMuscleStrength(prs, { weight: 80 });
+      // should run and not crash, fallback to generic
+      expect(result).toBeDefined();
+    });
   });
+
 
   describe('getStrengthTier', () => {
     it('returns correct tier levels for all scores', () => {

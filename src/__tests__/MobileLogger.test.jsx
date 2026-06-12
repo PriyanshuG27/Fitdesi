@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { MobileLogger } from '../components/mobile/MobileLogger';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -147,7 +147,7 @@ describe('MobileLogger Component', () => {
     expect(startSessionMock).toHaveBeenCalledWith('locked_in', true);
   });
 
-  it('renders active session correctly', () => {
+  it('renders active session correctly', async () => {
     useWorkoutStore.setState({
       activeSession: { isQuickLog: false, moodTag: 'average' },
       exercises: [],
@@ -163,8 +163,12 @@ describe('MobileLogger Component', () => {
     const input = screen.getByPlaceholderText(/e.g., Bench Press/i);
     expect(input).toBeInTheDocument();
 
-    // Typing in NLP triggers parsing preview
+    // Typing in NLP triggers parsing preview after the 150ms debounce.
+    // Use fake timers + act() so the debounced state update is flushed before asserting.
+    vi.useFakeTimers();
     fireEvent.change(input, { target: { value: 'Bench Press 60kg 3x10' } });
+    await act(async () => { vi.runAllTimers(); });
+    vi.useRealTimers();
     expect(screen.getByText(/Quick Match Detected!/i)).toBeInTheDocument();
     
     const confirmAdd = screen.getByText('Add to Session');

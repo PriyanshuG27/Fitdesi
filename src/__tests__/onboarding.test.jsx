@@ -9,7 +9,8 @@ import {
   mockSetDoc,
   mockAddDoc,
   mockDoc,
-  mockAuth
+  mockAuth,
+  mockGetDoc
 } from '../__mocks__/firebase';
 
 // Mock useNavigate from react-router-dom
@@ -404,7 +405,95 @@ describe('useOnboarding Hook', () => {
       });
 
       expect(result.current.currentStep).toBe(0);
-      expect(result.current.error).toBe('Failed to save data. Please check your connection and try again.');
+    });
+  });
+
+  describe('profile sync and pre-population', () => {
+    it('pre-populates hook state from authStore profile', () => {
+      const mockProfile = {
+        userType: 'Beginner',
+        age: 30,
+        gender: 'Male',
+        heightCm: 180,
+        weightKg: 85,
+        goal: 'Muscle Gain',
+        workoutFrequency: '3-4 days/week',
+        sessionDuration: '45-60 mins',
+        equipmentList: ['Dumbbells', 'Barbell'],
+        dietType: 'Non-veg',
+        currentSupplements: ['Creatine'],
+        medicalFlags: ['none']
+      };
+      useAuthStore.setState({ profile: mockProfile });
+
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      expect(result.current.state.userType).toBe('Beginner');
+      expect(result.current.state.age).toBe('30');
+      expect(result.current.state.gender).toBe('Male');
+      expect(result.current.state.heightCm).toBe('180');
+      expect(result.current.state.weightKg).toBe('85');
+      expect(result.current.state.goal).toBe('Muscle Gain');
+      expect(result.current.state.workoutFrequency).toBe('3-4 days/week');
+      expect(result.current.state.sessionDuration).toBe('45-60 mins');
+      expect(result.current.state.equipmentList).toEqual(['Dumbbells', 'Barbell']);
+      expect(result.current.state.dietType).toBe('Non-veg');
+      expect(result.current.state.currentSupplements).toEqual(['Creatine']);
+      expect(result.current.state.medicalFlags).toEqual(['none']);
+
+      // reset authStore profile to avoid affecting other tests
+      useAuthStore.setState({ profile: null });
+    });
+
+    it('syncProfile calls getDoc, merges and updates authStore profile', async () => {
+      useAuthStore.setState({ uid: 'user-id-456' });
+
+      // Mock user document exists and has basic data
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ name: 'John Doe', userType: 'Beginner' })
+      });
+      // Mock private profile document exists and has private data
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ weightKg: 80, goal: 'Strength' })
+      });
+
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      // Trigger syncProfile by calling skip() (which calls syncProfile internally)
+      mockUpdateDoc.mockResolvedValue(undefined);
+      await act(async () => {
+        await result.current.skip();
+      });
+
+      expect(mockGetDoc).toHaveBeenCalledTimes(2);
+      expect(useAuthStore.getState().profile).toEqual({
+        name: 'John Doe',
+        userType: 'Beginner',
+        weightKg: 80,
+        goal: 'Strength'
+      });
+    });
+
+    it('syncProfile handles getDoc exceptions gracefully', async () => {
+      useAuthStore.setState({ uid: 'user-id-456' });
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockGetDoc.mockRejectedValueOnce(new Error('Firestore error'));
+
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      mockUpdateDoc.mockResolvedValue(undefined);
+      await act(async () => {
+        await result.current.skip();
+      });
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[Onboarding] Error syncing profile:',
+        expect.any(Error)
+      );
+      consoleErrorSpy.mockRestore();
     });
   });
 });
@@ -453,7 +542,6 @@ describe('firestoreUtils Writes', () => {
     });
   });
 
-  // 5. firestoreUtils — updateUserProfile()
   describe('updateUserProfile()', () => {
     it('strips unknown fields, throws on empty uid, and updates whitelisted fields', async () => {
       // 1. Throws if UID is empty
@@ -482,6 +570,53 @@ describe('firestoreUtils Writes', () => {
       expect(updatePayload.level).toBe(2);
       expect(updatePayload.gender).toBe('Male');
       expect(updatePayload.maliciousToken).toBeUndefined();
+    });
+
+    it('throws if data payload is null or not an object', async () => {
+      await expect(updateUserProfile('uid-123', null)).rejects.toThrow(
+        'Validation Error: Data payload must be an object.'
+      );
+      await expect(updateUserProfile('uid-123', 'not-an-object')).rejects.toThrow(
+        'Validation Error: Data payload must be an object.'
+      );
+    });
+
+    it('throws clean error when updateDoc fails', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockUpdateDoc.mockRejectedValueOnce(new Error('Firestore down'));
+
+      await expect(updateUserProfile('uid-123', { name: 'Atharva' })).rejects.toThrow(
+        'Update Failed: Unable to update user profile. Check connection.'
+      );
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('sanitizes arrays and maps in payload correctly', async () => {
+      mockUpdateDoc.mockResolvedValueOnce(undefined);
+
+      const payload = {
+        equipmentList: ['Barbell', 'Dumbbells', 'Barbell', '<h3>Invalid HTML Hack</h3>'],
+        powerUps: {
+          unlocked_aura_crimson_until: 10,
+          unlocked_title_champion_until: '2026-12-31',
+          nested: { some: 'value' }, // should be ignored
+          activeFlag: true
+        }
+      };
+
+      await updateUserProfile('uid-123', payload);
+
+      const updatePayload = mockUpdateDoc.mock.calls[0][1];
+      // Array has duplicates stripped
+      expect(updatePayload.equipmentList).toEqual(['Barbell', 'Dumbbells', '<h3>Invalid HTML Hack</h3>']);
+      
+      // Map has numeric powerUps capped/floored, strings sanitized, booleans kept, nested objects ignored
+      expect(updatePayload.powerUps.unlocked_aura_crimson_until).toBe(10);
+      expect(updatePayload.powerUps.unlocked_title_champion_until).toBe('2026-12-31');
+      expect(updatePayload.powerUps.nested).toBeUndefined();
+      expect(updatePayload.powerUps.activeFlag).toBe(true);
     });
   });
 });

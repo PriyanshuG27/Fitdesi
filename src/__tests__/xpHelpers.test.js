@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { deriveLevelFromXP, evaluateStreak } from '../lib/xpHelpers';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { 
+  deriveLevelFromXP, 
+  evaluateStreak, 
+  isAuraActive, 
+  isTitleActive, 
+  getAvatarStyle 
+} from '../lib/xpHelpers';
 
 describe('xpHelpers — deriveLevelFromXP', () => {
   it('handles Rookie level thresholds correctly', () => {
@@ -62,5 +68,86 @@ describe('xpHelpers — evaluateStreak', () => {
 
     expect(evaluateStreak(yesterday, 6)).toEqual({ newStreak: 7, streakBonuses: ['streak_7'] });
     expect(evaluateStreak(yesterday, 29)).toEqual({ newStreak: 30, streakBonuses: ['streak_30'] });
+  });
+});
+
+describe('xpHelpers — Aura & Title Activity', () => {
+  let mockNow;
+  beforeEach(() => {
+    mockNow = 1000000;
+    vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('isAuraActive returns false if powerUps is falsy or does not contain active aura until time', () => {
+    expect(isAuraActive('crimson', null)).toBe(false);
+    expect(isAuraActive('crimson', {})).toBe(false);
+  });
+
+  it('isAuraActive correctly evaluates Firestore timestamp and Date string/MS until times', () => {
+    const mockToDate = vi.fn().mockReturnValue(new Date(mockNow + 1000));
+    expect(isAuraActive('crimson', { unlocked_aura_crimson_until: { toDate: mockToDate } })).toBe(true);
+    expect(mockToDate).toHaveBeenCalled();
+
+    expect(isAuraActive('crimson', { unlocked_aura_crimson_until: mockNow - 1000 })).toBe(false);
+    expect(isAuraActive('crimson', { unlocked_aura_crimson_until: new Date(mockNow + 5000).toISOString() })).toBe(true);
+  });
+
+  it('isTitleActive returns false if powerUps is falsy or does not contain active title until time', () => {
+    expect(isTitleActive('champion', null)).toBe(false);
+    expect(isTitleActive('champion', {})).toBe(false);
+  });
+
+  it('isTitleActive correctly evaluates Firestore timestamp and Date string/MS until times', () => {
+    const mockToDate = vi.fn().mockReturnValue(new Date(mockNow + 1000));
+    expect(isTitleActive('champion', { unlocked_title_champion_until: { toDate: mockToDate } })).toBe(true);
+    expect(mockToDate).toHaveBeenCalled();
+
+    expect(isTitleActive('champion', { unlocked_title_champion_until: mockNow - 1000 })).toBe(false);
+  });
+});
+
+describe('xpHelpers — getAvatarStyle', () => {
+  let mockNow;
+  beforeEach(() => {
+    mockNow = 1000000;
+    vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns default borders if resolved aura is not active/valid and level is low', () => {
+    const style = getAvatarStyle(null, 1, {});
+    expect(style).toEqual({
+      boxShadow: 'none',
+      borderColor: 'var(--border)',
+      borderWidth: '2px',
+      borderStyle: 'solid'
+    });
+  });
+
+  it('evaluates active custom aura colors', () => {
+    const powerUps = { unlocked_aura_crimson_until: mockNow + 1000 };
+    expect(getAvatarStyle('crimson', 1, powerUps).borderColor).toBe('#ef4444');
+    expect(getAvatarStyle('golden', 1, { unlocked_aura_golden_until: mockNow + 1000 }).borderColor).toBe('#eab308');
+    expect(getAvatarStyle('shadow', 1, { unlocked_aura_shadow_until: mockNow + 1000 }).borderColor).toBe('#a855f7');
+  });
+
+  it('falls back to level-based styles if custom aura is expired or invalid', () => {
+    const expiredPowerUps = { unlocked_aura_crimson_until: mockNow - 1000 };
+    // Crimson expired, fallback to level-based styling
+    // lvl >= 21: golden
+    expect(getAvatarStyle('crimson', 25, expiredPowerUps).borderColor).toBe('#eab308');
+    // lvl >= 11: crimson
+    expect(getAvatarStyle('crimson', 15, expiredPowerUps).borderColor).toBe('#ef4444');
+    // lvl >= 6: cyan
+    expect(getAvatarStyle('crimson', 8, expiredPowerUps).borderColor).toBe('#06b6d4');
+    // lvl < 6: default
+    expect(getAvatarStyle('crimson', 3, expiredPowerUps).borderColor).toBe('var(--border)');
   });
 });

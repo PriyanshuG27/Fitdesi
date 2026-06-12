@@ -46,7 +46,9 @@ export default defineConfig({
     },
   },
   build: {
-    modulePreload: false,
+    // Allow browsers to preload split JS chunks in parallel before they are needed.
+    // This reduces the waterfall effect when navigating between routes.
+    modulePreload: { polyfill: true },
     rollupOptions: {
       output: {
         manualChunks: {
@@ -55,6 +57,8 @@ export default defineConfig({
           'firebase-functions': ['firebase/functions'],
           'framer-motion':      ['framer-motion'],
           'recharts':           ['recharts'],
+          // Isolate Poster Studio's heavy canvas lib from all other routes
+          'konva':              ['konva', 'react-konva'],
         },
       },
     },

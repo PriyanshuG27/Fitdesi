@@ -1,11 +1,48 @@
 import { create } from 'zustand';
 
+// ─── SWR Profile Cache Helpers ────────────────────────────────────────────────
+// Persist the merged public+private profile in localStorage so we can hydrate
+// the store instantly on the next page load — before Firebase Auth resolves.
+// This eliminates the full-screen AuthSpinner for returning users.
+const PROFILE_CACHE_KEY = 'zenkai_profile_cache';
+
+function readProfileCache() {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeProfileCache(profile) {
+  try {
+    if (profile) {
+      localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+    }
+  } catch {
+    // Ignore storage quota errors silently
+  }
+}
+
+function clearProfileCache() {
+  try {
+    localStorage.removeItem(PROFILE_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// ─── Initial state — hydrate from cache immediately ───────────────────────────
+const cachedProfile = readProfileCache();
+
 export const useAuthStore = create((set) => ({
-  user:    null,   // Firebase User object | null
-  uid:     null,   // string | null
-  profile: null,   // Firestore user document | null
-  loading: true,   // true until onAuthStateChanged resolves
-  error:   null,   // human-readable string | null
+  user:           null,           // Firebase User object | null
+  uid:            null,           // string | null
+  profile:        cachedProfile,  // Pre-hydrated from localStorage (SWR) | null
+  loading:        true,           // true until onAuthStateChanged resolves
+  cacheHydrated:  !!cachedProfile,// true when profile was loaded from cache
+  error:          null,           // human-readable string | null
 
   setUser: (user) => set({
     user,
@@ -13,7 +50,11 @@ export const useAuthStore = create((set) => ({
     error: null,
   }),
 
-  setProfile: (profile) => set({ profile }),
+  setProfile: (profile) => {
+    // Persist every live update back to localStorage for the next cold start
+    writeProfileCache(profile);
+    set({ profile, cacheHydrated: true });
+  },
 
   setLoading: (loading) => set({ loading }),
 
@@ -21,6 +62,8 @@ export const useAuthStore = create((set) => ({
 
   clearError: () => set({ error: null }),
 
-  clearAuth: () => set({ user: null, uid: null, profile: null, loading: false, error: null }),
+  clearAuth: () => {
+    clearProfileCache();
+    set({ user: null, uid: null, profile: null, loading: false, cacheHydrated: false, error: null });
+  },
 }));
-
