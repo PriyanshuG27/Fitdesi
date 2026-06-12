@@ -239,12 +239,27 @@ function AppRoutes({ layout }) {
 // ─── App root ─────────────────────────────────────────────────────────────────
 function App() {
   const { setUser, setLoading, setProfile } = useAuthStore();
-  const { setPwaDeferredPrompt, setIsStandalone, setIsIOS } = useUIStore();
+  const { setPwaDeferredPrompt, setIsStandalone, setIsIOS, addToast } = useUIStore();
 
   // layout is detected ONCE at root — 'mobile' | 'desktop'
   // Debounced resize listener inside the hook (100ms) prevents thrash.
   // Both layout trees share the same BrowserRouter context below.
   const layout = useDeviceLayout();
+
+  // Show app version update toast
+  useEffect(() => {
+    const hasSeenUpdate = localStorage.getItem('zenkai_seen_update_v1_1') === 'true';
+    if (!hasSeenUpdate) {
+      const timer = setTimeout(() => {
+        addToast(
+          "⚡ Zenkai v1.1 Update: New profile settings & reminders are live! Check your Profile.",
+          "info"
+        );
+        localStorage.setItem('zenkai_seen_update_v1_1', 'true');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [addToast]);
 
   // Listen for PWA installation events globally
   useEffect(() => {
