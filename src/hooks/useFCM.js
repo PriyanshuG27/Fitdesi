@@ -70,9 +70,8 @@ export async function enablePushNotifications(uid, addToast) {
       return false;
     }
 
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    const swReg = registrations.find(r => r.active || r.installing || r.waiting)
-      || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    // Use the active service worker via .ready — most reliable approach
+    const swReg = await navigator.serviceWorker.ready;
     const messaging = getMessaging(app);
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
     if (!token) return false;
@@ -137,15 +136,11 @@ export function useFCM() {
           return;
         }
 
-        // Use the existing PWA service worker (sw.js) which now includes FCM handling.
-        // This avoids scope conflicts from having two service workers at '/'.
+        // Use navigator.serviceWorker.ready — resolves to the active sw.js registration.
+        // More reliable than getRegistrations() which can return stale entries.
         let swRegistration;
         try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          swRegistration = registrations.find(r => r.active || r.installing || r.waiting);
-          if (!swRegistration) {
-            swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          }
+          swRegistration = await navigator.serviceWorker.ready;
         } catch (swErr) {
           console.warn('[FCM] Could not get service worker registration:', swErr);
           return;
