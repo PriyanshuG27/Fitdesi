@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { X, Zap, Minus, BatteryLow, Plus, Trash2 } from 'lucide-react';
+import { X, Zap, Minus, BatteryLow, Plus, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -74,6 +74,7 @@ export const MobileLogger = () => {
   // Rest Timer state
   const [restTimeRemaining, setRestTimeRemaining] = useState(null);
   const [restTimerEndTimestamp, setRestTimerEndTimestamp] = useState(null);
+  const [isTimerMuted, setIsTimerMuted] = useState(() => localStorage.getItem('zenkai_mute_rest_sound') === 'true');
 
   // Bottom sheet + session-complete state
   const [isEndSheetOpen, setIsEndSheetOpen] = useState(false);
@@ -278,7 +279,9 @@ export const MobileLogger = () => {
       if (remaining <= 0) {
         setRestTimerEndTimestamp(null);
         setRestTimeRemaining(null);
-        playRestTimerBeep();
+        if (localStorage.getItem('zenkai_mute_rest_sound') !== 'true') {
+          playRestTimerBeep();
+        }
 
         // 1. Vibrate device (vibrate, pause, vibrate)
         if (navigator.vibrate) {
@@ -956,13 +959,27 @@ export const MobileLogger = () => {
                   <span className="text-xs uppercase tracking-wider font-body font-extrabold text-black/70">REST TIMER:</span>
                   <span className="text-lg tracking-widest bg-black text-white px-2.5 py-0.5 rounded border-2 border-black shadow-[1px_1px_0px_black] font-mono font-black">{restTimeRemaining}s</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setRestTimerEndTimestamp(null); setRestTimeRemaining(null); }}
-                  className="bg-black text-white hover:bg-neutral-900 border-2 border-black font-body font-extrabold text-xs uppercase px-3 py-1 rounded-lg shadow-[2px_2px_0px_black] transition-transform active:translate-y-0.5"
-                >
-                  Skip
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isTimerMuted;
+                      setIsTimerMuted(next);
+                      localStorage.setItem('zenkai_mute_rest_sound', next ? 'true' : 'false');
+                    }}
+                    className="p-1.5 bg-black text-white hover:bg-neutral-900 border-2 border-black rounded-lg shadow-[1.5px_1.5px_0px_black] transition-transform active:translate-y-0.5 cursor-pointer flex items-center justify-center shrink-0"
+                    title={isTimerMuted ? 'Unmute timer sound' : 'Mute timer sound'}
+                  >
+                    {isTimerMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setRestTimerEndTimestamp(null); setRestTimeRemaining(null); }}
+                    className="bg-black text-white hover:bg-neutral-900 border-2 border-black font-body font-extrabold text-xs uppercase px-3 py-1 rounded-lg shadow-[2px_2px_0px_black] transition-transform active:translate-y-0.5 shrink-0"
+                  >
+                    Skip
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
