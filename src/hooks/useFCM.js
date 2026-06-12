@@ -219,8 +219,8 @@ export function useFCM() {
         unsubscribeForeground = onMessage(messaging, (payload) => {
           console.log('[FCM] Foreground message:', payload);
 
-          const title = payload.notification?.title ?? 'Zenkai';
-          const body = payload.notification?.body ?? '';
+          const title = payload.notification?.title ?? payload.data?.title ?? 'Zenkai';
+          const body = payload.notification?.body ?? payload.data?.body ?? '';
 
           // Show as a toast in the app
           addToast(`🔔 ${title}${body ? `: ${body}` : ''}`, 'info');

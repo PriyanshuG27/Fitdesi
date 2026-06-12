@@ -20,9 +20,12 @@ try {
 
   // Handle background messages (app closed or in a different tab)
   messaging.onBackgroundMessage((payload) => {
-    const { title, body, icon } = payload.notification ?? {};
-    self.registration.showNotification(title ?? 'Zenkai', {
-      body: body ?? 'You have a new notification.',
+    const title = payload.notification?.title ?? payload.data?.title ?? 'Zenkai';
+    const body = payload.notification?.body ?? payload.data?.body ?? 'You have a new notification.';
+    const icon = payload.notification?.icon ?? payload.data?.icon;
+    
+    self.registration.showNotification(title, {
+      body: body,
       icon: icon ?? 'https://zenkaifit.vercel.app/logos/zenkai_official_logo.png',
       badge: 'https://zenkaifit.vercel.app/logos/zenkai_official_logo.png',
       data: payload.data ?? {},

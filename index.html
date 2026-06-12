@@ -20,7 +20,87 @@
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   </head>
   <body class="bg-bg-base text-text-primary">
-    <div id="root"></div>
+    <div id="root">
+      <style>
+        .initial-loader-container {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background-color: #080808;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 20px;
+          z-index: 9999;
+        }
+        .initial-loader-logo {
+          width: 96px;
+          height: 96px;
+          border: 4px solid #000;
+          box-shadow: 4px 4px 0px #000;
+          border-radius: 16px;
+          overflow: hidden;
+          background-color: #080808;
+        }
+        .initial-loader-text {
+          color: #ffffff;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          font-family: 'DM Mono', monospace;
+        }
+        .initial-loader-bar {
+          width: 120px;
+          height: 8px;
+          background-color: #141414;
+          border: 2px solid #000;
+          box-shadow: 2px 2px 0px #000;
+          border-radius: 4px;
+          position: relative;
+          overflow: hidden;
+        }
+        .initial-loader-progress {
+          width: 40%;
+          height: 100%;
+          background-color: #FF5C00;
+          position: absolute;
+          left: 0;
+          top: 0;
+          animation: progress-slide 1.4s infinite ease-in-out;
+        }
+        @keyframes progress-slide {
+          0% { left: -40%; }
+          50% { left: 100%; }
+          100% { left: 100%; }
+        }
+      </style>
+      <div class="initial-loader-container">
+        <div class="initial-loader-logo">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+            <rect width="512" height="512" rx="32" fill="#080808"/>
+            <defs>
+              <pattern id="grid-loader" width="32" height="32" patternUnits="userSpaceOnUse">
+                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#141414" stroke-width="1.5"/>
+              </pattern>
+            </defs>
+            <rect width="512" height="512" fill="url(#grid-loader)" rx="32"/>
+            <g transform="translate(16, -10)">
+              <polygon points="175,85 395,85 245,255 415,255 135,455 215,285 115,285" fill="#00D4FF" stroke="#080808" stroke-width="12" stroke-linejoin="miter"/>
+              <polygon points="160,70 380,70 230,240 400,240 120,440 200,270 100,270" fill="#FF5C00" stroke="#080808" stroke-width="12" stroke-linejoin="miter"/>
+              <polyline points="190,95 345,95 245,210" fill="none" stroke="#FFF" stroke-width="6" stroke-linecap="square" opacity="0.85"/>
+            </g>
+          </svg>
+        </div>
+        <div class="initial-loader-text">Loading Zenkai</div>
+        <div class="initial-loader-bar">
+          <div class="initial-loader-progress"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
     
     <!-- Register PWA Service Worker -->

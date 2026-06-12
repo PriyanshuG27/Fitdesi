@@ -40,12 +40,8 @@ async function sendPushNotification({ recipientUids, title, body, data }) {
 
     console.log(`[fcmSender] Sending push notification to ${tokens.length} tokens for UIDs: ${recipientUids.join(', ')}`);
 
-    // 2. Build the multicast message payload
+    // 2. Build the multicast message payload (data-only to prevent duplicate PWA/Browser notifications)
     const message = {
-      notification: {
-        title,
-        body,
-      },
       data: {
         title: title || '',
         body: body || '',

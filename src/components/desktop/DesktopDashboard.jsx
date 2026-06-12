@@ -16,6 +16,67 @@ import { NeubrutalistCalendar } from '../shared/NeubrutalistCalendar';
 import { PrehabDaemon } from './PrehabDaemon';
 import exerciseData from '../../data/exercises.json';
 
+const SessionCardSkeleton = () => (
+  <div className="border-2 border-black bg-[var(--surface)] p-5 rounded-2xl shadow-[4px_4px_0px_rgba(0,0,0,0.15)] flex flex-col gap-4 text-left animate-pulse select-none">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-[#222] pb-3">
+      <div className="flex flex-col gap-1.5">
+        <div className="w-24 h-3 bg-[var(--bg-elevated)] rounded" />
+        <div className="w-40 h-5 bg-[var(--bg-elevated)] rounded" />
+      </div>
+      <div className="w-24 h-5 bg-[var(--bg-elevated)] rounded border border-[#222]" />
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="border border-[#222] bg-black/40 p-2.5 rounded-xl flex flex-col gap-1.5">
+          <div className="w-16 h-2 bg-[var(--bg-elevated)] rounded" />
+          <div className="w-10 h-4 bg-[var(--bg-elevated)] rounded" />
+        </div>
+      ))}
+    </div>
+    <div className="flex flex-col gap-2">
+      <div className="w-32 h-3 bg-[var(--bg-elevated)] rounded" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {[1, 2].map((i) => (
+          <div key={i} className="border border-[#1a1a1a] bg-black/25 p-3 rounded-xl flex justify-between items-center">
+            <div className="flex flex-col gap-1.5">
+              <div className="w-24 h-3.5 bg-[var(--bg-elevated)] rounded" />
+              <div className="w-16 h-2.5 bg-[var(--bg-elevated)] rounded" />
+            </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="w-12 h-3.5 bg-[var(--bg-elevated)] rounded" />
+              <div className="w-10 h-2.5 bg-[var(--bg-elevated)] rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const MannequinSkeleton = () => (
+  <div className="flex flex-col gap-6 animate-pulse select-none w-full">
+    {/* Toggles Placeholder */}
+    <div className="flex justify-between items-center border-b border-[var(--border)] pb-4">
+      <div className="flex gap-2">
+        <div className="w-20 h-8 bg-[var(--bg-elevated)] rounded-lg border border-[#222]" />
+        <div className="w-24 h-8 bg-[var(--bg-elevated)] rounded-lg border border-[#222]" />
+      </div>
+      <div className="w-24 h-8 bg-[var(--bg-elevated)] rounded-lg border border-[#222]" />
+    </div>
+    {/* Graphic Core Placeholder */}
+    <div className="flex justify-center">
+      <div className="w-full max-w-[280px] h-[380px] bg-[var(--bg-elevated)] border-2 border-black rounded-2xl shadow-[4px_4px_0px_black] flex items-center justify-center">
+        <div className="text-xs font-mono text-[var(--text-secondary)] uppercase">⚙️ Loading Mannequin...</div>
+      </div>
+    </div>
+    {/* Detail Panel Placeholder */}
+    <div className="border border-[#222] bg-black/40 p-4 rounded-xl flex flex-col gap-1.5 min-h-[68px]">
+      <div className="w-24 h-3.5 bg-[var(--bg-elevated)] rounded" />
+      <div className="w-48 h-2.5 bg-[var(--bg-elevated)] rounded mt-1" />
+    </div>
+  </div>
+);
+
 export const DesktopDashboard = () => {
   const { uid, profile } = useAuthStore();
   const { prs } = usePRList(uid);
@@ -316,8 +377,10 @@ export const DesktopDashboard = () => {
             </div>
 
             {loadingSessions ? (
-              <div className="border-2 border-black border-dashed bg-[var(--surface)] py-16 text-center font-mono text-xs text-[var(--text-secondary)] uppercase animate-pulse">
-                ⚙️ Compiling exercise telemetry feeds...
+              <div className="flex flex-col gap-5">
+                <SessionCardSkeleton />
+                <SessionCardSkeleton />
+                <SessionCardSkeleton />
               </div>
             ) : sessions.length === 0 ? (
               <div className="border-2 border-black border-dashed bg-[var(--surface)] py-16 text-center font-mono text-xs text-[var(--text-secondary)] uppercase rounded-xl shadow-[4px_4px_0px_black]">
@@ -444,9 +507,7 @@ export const DesktopDashboard = () => {
             </div>
 
             {loadingSessions ? (
-              <div className="flex items-center justify-center h-[280px] text-xs font-mono text-[var(--text-secondary)] uppercase animate-pulse">
-                ⚙️ Loading Mannequin...
-              </div>
+              <MannequinSkeleton />
             ) : (
               <div className="flex flex-col gap-6">
                 {/* Cleaned-Up Mannequin Workspace */}
