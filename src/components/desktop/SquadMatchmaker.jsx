@@ -119,6 +119,7 @@ export const SquadMatchmaker = () => {
 
   // Notifications
   const [successMsg, setSuccessMsg] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const [customDialog, setCustomDialog] = useState(null); // { type: 'alert' | 'confirm', title: string, message: string, onConfirm?: () => void }
 
@@ -1721,7 +1722,7 @@ export const SquadMatchmaker = () => {
           {joinedSquads.length > 0 && (
             <div className="border-2 border-black rounded-xl p-3 bg-neutral-900/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-[4px_4px_0px_black] text-left pb-3 mb-1">
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase font-bold whitespace-nowrap">Squad:</span>
+                <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase font-bold whitespace-nowrap">Switch Accountability Squad</span>
                 <select
                   value={activeSquadCode || ''}
                   onChange={(e) => {
@@ -1745,7 +1746,7 @@ export const SquadMatchmaker = () => {
                   }}
                   className="bg-[var(--primary)] text-black border-2 border-black font-display font-black text-xs px-4 py-2.5 rounded-xl cursor-pointer uppercase shadow-[3px_3px_0px_black] hover:bg-orange-500 hover:text-white transition-all shrink-0 w-full sm:w-auto text-center"
                 >
-                  Create / Join Squad
+                  Create/Join New
                 </button>
               ) : (
                 <button
@@ -1879,11 +1880,15 @@ export const SquadMatchmaker = () => {
                       onClick={() => {
                         navigator.clipboard.writeText(activeSquad.squadCode);
                         setSuccessMsg('Squad code copied! Share it with friends.');
-                        setTimeout(() => setSuccessMsg(null), 3000);
+                        setCopiedCode(true);
+                        setTimeout(() => {
+                          setSuccessMsg(null);
+                          setCopiedCode(false);
+                        }, 2000);
                       }}
                       className="text-[var(--accent-xp)] hover:underline flex items-center gap-1 font-bold cursor-pointer"
                     >
-                      🔑 Code: {activeSquad.squadCode} (Copy)
+                      🔑 Code: {activeSquad.squadCode} {copiedCode ? '(Copied!)' : '(Copy)'}
                     </button>
                   </div>
                 </div>
@@ -1902,9 +1907,9 @@ export const SquadMatchmaker = () => {
               {/* Neubrutalist Tab Controls */}
               <div className="flex border-4 border-black bg-black p-1 rounded-2xl w-full max-w-2xl overflow-x-auto no-scrollbar shrink-0 select-none shadow-[4px_4px_0px_black] gap-1 mt-1">
                 {[
-                  { id: 'synergy', label: 'Synergy & Scheduler', icon: Calendar },
-                  { id: 'warroom', label: 'Command War Room', icon: Sliders },
-                  { id: 'draft', label: 'Moneyball Draft', icon: TrendingUp }
+                  { id: 'synergy', label: '🗳️ Synergy & Scheduler', icon: Calendar },
+                  { id: 'warroom', label: '🛡️ Command War Room', icon: Sliders },
+                  { id: 'draft', label: '💸 Moneyball Draft', icon: TrendingUp }
                 ].map(t => {
                   const Icon = t.icon;
                   const active = activeTab === t.id;
@@ -2033,7 +2038,7 @@ export const SquadMatchmaker = () => {
                                     </div>
                                     {currentHP <= 0 && (
                                       <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-black text-white uppercase tracking-widest bg-green-950/90 border border-green-500 rounded-lg animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.4)]">
-                                        ⚡ TITAN SLAYED & LOOT UNLOCKED ⚡
+                                        ⚡ TITAN SLAYED ⚡
                                       </span>
                                     )}
                                   </div>

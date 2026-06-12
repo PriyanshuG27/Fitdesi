@@ -928,7 +928,7 @@ describe('SquadMatchmaker Draft & Invite System', () => {
     });
 
     // 2. Copy Squad Code
-    const copyBtn = screen.getByRole('button', { name: /Code: SQ-TEST/i });
+    const copyBtn = screen.getByRole('button', { name: /^Code: SQ-TEST$/i });
     fireEvent.click(copyBtn);
     expect(mockWriteText).toHaveBeenCalledWith('SQ-TEST');
 

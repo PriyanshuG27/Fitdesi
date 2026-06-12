@@ -756,8 +756,8 @@ export const MobileHome = () => {
                     <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
                       <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
                       <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
-                        • Complete a Comeback or Weak Point challenge.<br />
-                        • 50% chance drop upon completing a Boss Fight.
+                        • Purchase in the Arena Store (Armory Shop) using XP.<br />
+                        • Open chests in the Treasure Vault using Boss Keys.
                       </span>
                     </div>
                   </div>
@@ -785,8 +785,8 @@ export const MobileHome = () => {
                     <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
                       <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
                       <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
-                        • Complete a Comeback or Streak challenge.<br />
-                        • 50% chance drop upon completing a Boss Fight.
+                        • Purchase in the Arena Store (Armory Shop) using XP.<br />
+                        • Open chests in the Treasure Vault using Boss Keys.
                       </span>
                     </div>
                   </div>
@@ -806,7 +806,8 @@ export const MobileHome = () => {
                     <div className="mt-1.5 pt-1.5 border-t border-[var(--border)]/30 flex flex-col gap-0.5">
                       <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
                       <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
-                        • Complete a Comeback or Weak Point challenge.
+                        • Purchase in the Arena Store (Armory Shop) using XP.<br />
+                        • Open chests in the Treasure Vault using Boss Keys.
                       </span>
                     </div>
                   </div>
@@ -827,7 +828,8 @@ export const MobileHome = () => {
                       <span className="text-[8px] font-mono uppercase tracking-wider text-[var(--secondary)] font-bold">How to Earn:</span>
                       <span className="text-[8px] font-sans text-[var(--text-muted)] leading-normal">
                         • 5 free regenerations reset daily.<br />
-                        • Complete a Comeback or Streak challenge.
+                        • Buy additional scrolls in the Arena Store using XP.<br />
+                        • Open chests in the Treasure Vault using Boss Keys.
                       </span>
                     </div>
                   </div>
