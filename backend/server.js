@@ -53,6 +53,10 @@ initWeeklyChallengeScheduler();
 const { initReminderScheduler } = require('./lib/reminderScheduler');
 initReminderScheduler();
 
+// Trigger one-time production update broadcast
+const { runProductionBroadcast } = require('./lib/productionBroadcast');
+runProductionBroadcast().catch(err => console.error('[productionBroadcast] Init error:', err));
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Zenkai Engine operational on port ${PORT}`));
 
