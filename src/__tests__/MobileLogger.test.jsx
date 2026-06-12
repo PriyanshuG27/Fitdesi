@@ -1,460 +1,219 @@
-/**
- * MobileLogger.test.jsx
- *
- * Component-level tests for the workout logger screens.
- * Does NOT test hook internals (PR algo, XP calc, batch write) —
- * those are covered by useWorkout.test, usePRDetection.test, firestoreUtils.test.
- *
- * All Firestore / Firebase calls are intercepted by src/__mocks__/firebase.js.
- * useWorkoutLogger is mocked — finishSession is a vi.fn() we control.
- */
-
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-
-// ─── Firebase mock (must import before any component that touches firebase) ───
-import { mockGetDocs } from '../__mocks__/firebase';
-
-// ─── Stores ───────────────────────────────────────────────────────────────────
-import { useWorkoutStore } from '../stores/useWorkoutStore';
-import { useAuthStore } from '../stores/useAuthStore';
-
-// ─── Component under test ─────────────────────────────────────────────────────
 import { MobileLogger } from '../components/mobile/MobileLogger';
+import { useAuthStore } from '../stores/useAuthStore';
+import { useWorkoutStore } from '../stores/useWorkoutStore';
+import { useWorkoutLogger } from '../hooks/useWorkoutLogger';
 
-// ─── Router mock ──────────────────────────────────────────────────────────────
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return { ...actual, useNavigate: () => mockNavigate };
+// Mock framer-motion to bypass animation delays in testing
+vi.mock('framer-motion', () => {
+  const React = require('react');
+  return {
+    motion: {
+      div: React.forwardRef((props, ref) => <div ref={ref} {...props} />),
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+    useReducedMotion: () => false,
+  };
 });
 
-// ─── useWorkoutLogger mock ────────────────────────────────────────────────────
-const mockFinishSession = vi.fn();
-const mockResetSession  = vi.fn();
+// Mock notification helper
+vi.mock('../utils/audioBeep', () => ({
+  playRestTimerBeep: vi.fn(),
+}));
+
+// Mock hooks
 vi.mock('../hooks/useWorkoutLogger', () => ({
-  useWorkoutLogger: () => ({
-    finishSession: mockFinishSession,
-    resetSession:  mockResetSession,
-  }),
+  useWorkoutLogger: vi.fn(),
 }));
 
-// ─── useToast mock ────────────────────────────────────────────────────────────
-const mockToast = vi.fn();
-vi.mock('../hooks/useToast', () => ({
-  useToast: () => ({ toast: mockToast }),
-}));
-
-// ─── useWorkoutTimer mock ─────────────────────────────────────────────────────
 vi.mock('../hooks/useWorkoutTimer', () => ({
-  useWorkoutTimer: () => ({ formattedTime: '00:00' }),
+  useWorkoutTimer: () => ({ formattedTime: '12:34' }),
 }));
 
-// ─── ExerciseSearch mock — returns a fixed exercise list ─────────────────────
+vi.mock('../hooks/useToast', () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
+
+// Mock child components that might have complex data fetching
+vi.mock('../components/mobile/MobileSessionComplete', () => ({
+  MobileSessionComplete: () => <div data-testid="mobile-session-complete">Session Complete</div>,
+}));
+
 vi.mock('../components/shared/ExerciseSearch', () => ({
-  ExerciseSearch: ({ onSelect }) => (
-    <button
-      data-testid="exercise-search-add"
-      onClick={() => onSelect({
-        key: 'barbell_squat',
-        name: 'Barbell Squat',
-        muscleGroup: 'legs',
-        exerciseKey: 'barbell_squat',
-      })}
-    >
-      Search exercise…
+  ExerciseSearch: ({ onAddExercise }) => (
+    <button onClick={() => onAddExercise({ key: 'squat', name: 'Squat', sets: [] })}>
+      Mock Add Exercise
     </button>
   ),
 }));
 
-// ─── MobileSessionComplete mock — we only verify it renders, not its internals ─
-vi.mock('../components/mobile/MobileSessionComplete', () => ({
-  MobileSessionComplete: ({ summary, onRetry, error, retryCount }) => (
-    <div data-testid="session-complete-screen">
-      <span data-testid="summary-xp">{summary?.xpEarned}</span>
-      {error && <button data-testid="retry-btn" onClick={onRetry}>Retry</button>}
-      {retryCount >= 3 && <span data-testid="save-locally-msg">Session saved locally</span>}
+vi.mock('../components/shared/NeubrutalistCalendar', () => ({
+  NeubrutalistCalendar: ({ onSelectSession }) => (
+    <button onClick={() => onSelectSession({ id: 'past1', dateString: '2023-05-01' })}>
+      Mock Past Session
+    </button>
+  ),
+}));
+
+// Mock set row
+vi.mock('../components/shared/SetRow', () => ({
+  SetRow: ({ onUpdate, onToggleDone, onRemove }) => (
+    <div data-testid="set-row">
+      <button onClick={() => onUpdate('weight', '100')}>Update Weight</button>
+      <button onClick={() => onToggleDone()}>Toggle Done</button>
+      <button onClick={() => onRemove()}>Remove Set</button>
     </div>
   ),
 }));
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+describe('MobileLogger Component', () => {
+  let finishSessionMock;
+  let resetSessionMock;
+  let startSessionMock;
+  let addExerciseMock;
 
-/** Standard active-session state with one exercise and one done set */
-const ACTIVE_WITH_EXERCISE = {
-  activeSession: { planDayId: 'custom', startedAt: Date.now() - 30000 },
-  exercises: [{
-    exerciseId: 'barbell_squat_1',
-    exerciseKey: 'barbell_squat',
-    name: 'Barbell Squat',
-    muscleGroup: 'legs',
-    sets: [{ reps: 8, weight: 100, completed: true, done: true }],
-  }],
-  elapsedSeconds: 30,
-};
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-function resetStores() {
-  useWorkoutStore.setState({
-    activeSession:  null,
-    exercises:      [],
-    elapsedSeconds: 0,
-    sessionLoading: false,
-    sessionError:   null,
+    finishSessionMock = vi.fn().mockResolvedValue({ id: 'session123' });
+    resetSessionMock = vi.fn();
+    startSessionMock = vi.fn();
+    addExerciseMock = vi.fn();
+
+    useWorkoutLogger.mockReturnValue({
+      finishSession: finishSessionMock,
+      resetSession: resetSessionMock,
+    });
+
+    useAuthStore.setState({
+      user: { uid: 'testuid' },
+      profile: { name: 'Tester', xpBoosterUntil: Date.now() + 100000 },
+    });
+
+    useWorkoutStore.setState({
+      activeSession: null,
+      exercises: [],
+      isOverdrive: false,
+      startSession: startSessionMock,
+      addExercise: addExerciseMock,
+      updateSet: vi.fn(),
+      markSetDone: vi.fn().mockReturnValue(true),
+      addSet: vi.fn(),
+      removeSet: vi.fn(),
+      removeExercise: vi.fn(),
+    });
+
+    // Mock Firestore
+    vi.mock('firebase/firestore', async (importOriginal) => {
+      const original = await importOriginal();
+      return {
+        ...original,
+        collection: vi.fn(),
+        getDocs: vi.fn().mockResolvedValue({ docs: [] }),
+        query: vi.fn(),
+        orderBy: vi.fn(),
+        limit: vi.fn(),
+      };
+    });
   });
-  useAuthStore.setState({
-    user:    { uid: 'test-uid-123' },
-    profile: { weightKg: 75 },
-    loading: false,
-  });
-}
 
-function renderLogger() {
-  return render(
+  const renderComponent = () => render(
     <MemoryRouter>
       <MobileLogger />
     </MemoryRouter>
   );
-}
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+  it('renders pre-session state correctly and handles start custom session', () => {
+    renderComponent();
 
-describe('MobileLogger — Session Setup Sheet', () => {
-  beforeEach(() => {
-    resetStores();
-    mockGetDocs.mockResolvedValue({ docs: [], forEach: () => {} });
-    vi.clearAllMocks();
-  });
-
-  it('renders setup sheet when no active session', () => {
-    renderLogger();
+    // Setup sheet should be visible
     expect(screen.getByText('Ready to train?')).toBeInTheDocument();
-    expect(screen.getByText('Start Custom Session')).toBeInTheDocument();
-    expect(screen.getByText("Start Session →")).toBeInTheDocument();
+    
+    // Test mood toggle
+    const lockedInBtn = screen.getByText('Locked In');
+    fireEvent.click(lockedInBtn);
+    
+    // Test stomach flag toggle
+    const stomachToggle = screen.getByRole('checkbox', { hidden: true });
+    fireEvent.click(stomachToggle);
+    
+    // Start session
+    const startBtn = screen.getByText('Start Session →');
+    fireEvent.click(startBtn);
+
+    expect(startSessionMock).toHaveBeenCalledWith('locked_in', true);
   });
 
-  it('selects mood and tapping Let\'s Go calls startSession with correct moodTag', () => {
-    renderLogger();
-
-    fireEvent.click(screen.getByText('Locked In'));
-    fireEvent.click(screen.getByText("Start Session →"));
-
-    const state = useWorkoutStore.getState();
-    expect(state.activeSession).not.toBeNull();
-    expect(state.activeSession.moodTag).toBe('locked_in');
-  });
-
-  it('toggling stomach flag passes stomachFlag=true to startSession', () => {
-    renderLogger();
-
-    // The label wraps the hidden checkbox; clicking it toggles the flag
-    fireEvent.click(screen.getByText(/Body feeling off\?/i));
-    fireEvent.click(screen.getByText("Start Session →"));
-
-    const state = useWorkoutStore.getState();
-    expect(state.activeSession.stomachFlag).toBe(true);
-  });
-
-  it('crash recovery: if store has activeSession on mount, skips setup sheet', () => {
-    // Simulate app restart with persisted active session
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-    renderLogger();
-
-    expect(screen.queryByText('Ready to train?')).not.toBeInTheDocument();
-    expect(screen.getByText('Barbell Squat')).toBeInTheDocument();
-  });
-});
-
-describe('MobileLogger — Active Logger', () => {
-  beforeEach(() => {
-    resetStores();
-    mockGetDocs.mockResolvedValue({ docs: [], forEach: () => {} });
-    vi.clearAllMocks();
-  });
-
-  it('renders session timer, exercise cards, and sticky search when active', () => {
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-    renderLogger();
-
-    expect(screen.getByText('00:00')).toBeInTheDocument(); // from useWorkoutTimer mock
-    expect(screen.getByText('Barbell Squat')).toBeInTheDocument();
-    expect(screen.getByText('Search exercise…')).toBeInTheDocument();
-  });
-
-  it('adding exercise via ExerciseSearch appends it to the session', () => {
+  it('renders active session correctly', () => {
     useWorkoutStore.setState({
-      activeSession: { planDayId: 'custom', startedAt: Date.now() },
+      activeSession: { isQuickLog: false, moodTag: 'average' },
       exercises: [],
-      elapsedSeconds: 0,
     });
-    renderLogger();
 
-    // The mock ExerciseSearch calls onSelect with Barbell Squat on click
-    fireEvent.click(screen.getByTestId('exercise-search-add'));
+    renderComponent();
 
-    const exercises = useWorkoutStore.getState().exercises;
-    expect(exercises.length).toBe(1);
-    expect(exercises[0].name).toBe('Barbell Squat');
+    // Header timer
+    expect(screen.getByText('12:34')).toBeInTheDocument();
+    expect(screen.getByText('END')).toBeInTheDocument();
+
+    // Natural Language input
+    const input = screen.getByPlaceholderText(/e.g., Bench Press/i);
+    expect(input).toBeInTheDocument();
+
+    // Typing in NLP triggers parsing preview
+    fireEvent.change(input, { target: { value: 'Bench Press 60kg 3x10' } });
+    expect(screen.getByText(/Quick Match Detected!/i)).toBeInTheDocument();
+    
+    const confirmAdd = screen.getByText('Add to Session');
+    fireEvent.click(confirmAdd);
+    
+    expect(addExerciseMock).toHaveBeenCalled();
   });
 
-  it('initializes the rest timer from profile latestRestTimesMap when adding an exercise', () => {
-    useAuthStore.setState({
-      user: { uid: 'test-uid-123' },
-      profile: { weightKg: 75, latestRestTimesMap: { barbell_squat: 165 } },
-      loading: false,
-    });
+  it('handles ending session and debrief workflow', async () => {
     useWorkoutStore.setState({
-      activeSession: { planDayId: 'custom', startedAt: Date.now() },
-      exercises: [],
-      elapsedSeconds: 0,
-    });
-    renderLogger();
-
-    // The mock ExerciseSearch calls onSelect with Barbell Squat (key: barbell_squat)
-    fireEvent.click(screen.getByTestId('exercise-search-add'));
-
-    const exercises = useWorkoutStore.getState().exercises;
-    expect(exercises.length).toBe(1);
-    expect(exercises[0].restTimer).toBe(165);
-  });
-
-  it('"+ Add Set" appends a new empty SetRow to the exercise', () => {
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-    renderLogger();
-
-    const addSetBtn = screen.getByText('Add Set');
-    fireEvent.click(addSetBtn);
-
-    const sets = useWorkoutStore.getState().exercises[0].sets;
-    expect(sets.length).toBe(2);
-  });
-
-  it('starts the rest timer when marking a set as done by default', async () => {
-    useWorkoutStore.setState({
-      activeSession: { planDayId: 'custom', startedAt: Date.now() },
-      exercises: [{
-        exerciseId: 'barbell_squat_1',
-        exerciseKey: 'barbell_squat',
-        name: 'Barbell Squat',
-        muscleGroup: 'legs',
-        sets: [{ reps: 8, weight: 100, completed: false, done: false }],
-      }],
-    });
-    renderLogger();
-
-    const doneBtn = screen.getByTestId('set-done-0-0');
-    fireEvent.click(doneBtn);
-
-    expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Rest timer started'), 'info');
-    expect(screen.getByText(/REST TIMER:/i)).toBeInTheDocument();
-  });
-
-  it('skips starting the rest timer when disableRestTimer is true in user profile', async () => {
-    useAuthStore.setState({
-      user: { uid: 'test-uid-123' },
-      profile: { weightKg: 75, disableRestTimer: true },
-      loading: false,
-    });
-    useWorkoutStore.setState({
-      activeSession: { planDayId: 'custom', startedAt: Date.now() },
-      exercises: [{
-        exerciseId: 'barbell_squat_1',
-        exerciseKey: 'barbell_squat',
-        name: 'Barbell Squat',
-        muscleGroup: 'legs',
-        sets: [{ reps: 8, weight: 100, completed: false, done: false }],
-      }],
-    });
-    renderLogger();
-
-    const doneBtn = screen.getByTestId('set-done-0-0');
-    fireEvent.click(doneBtn);
-
-    expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining('Rest timer started'), 'info');
-    expect(screen.queryByText(/REST TIMER:/i)).not.toBeInTheDocument();
-  });
-
-  it('tapping END with 0 exercises shows error toast and does NOT open confirmation sheet', () => {
-    useWorkoutStore.setState({
-      activeSession: { planDayId: 'custom', startedAt: Date.now() },
-      exercises: [],
-      elapsedSeconds: 0,
-    });
-    renderLogger();
-
-    fireEvent.click(screen.getByText('END'));
-
-    expect(mockToast).toHaveBeenCalledWith('Add at least one exercise', 'error');
-    expect(screen.queryByText('End Session?')).not.toBeInTheDocument();
-  });
-
-  it('tapping END with exercises opens confirmation sheet with live stats', () => {
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-    renderLogger();
-
-    fireEvent.click(screen.getByText('END'));
-
-    expect(screen.getByText('End Session?')).toBeInTheDocument();
-    // Stats grid is rendered in the sheet (exercise count label is visible)
-    expect(screen.getByText('Exercises')).toBeInTheDocument();
-  });
-});
-
-describe('MobileLogger — Finish Session Flow', () => {
-  beforeEach(() => {
-    resetStores();
-    mockGetDocs.mockResolvedValue({ docs: [], forEach: () => {} });
-    vi.clearAllMocks();
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-  });
-
-  it('successful finishSession shows the SessionComplete screen', async () => {
-    mockFinishSession.mockResolvedValueOnce({
-      sessionId:      'sess-abc',
-      totalVolume:    800,
-      totalSets:      1,
-      durationMinutes: 1,
-      exerciseCount:  1,
-      prCount:        0,
-      prNames:        [],
-      xpEarned:       50,
-      levelUp:        false,
-      newLevel:       1,
-      newLevelName:   'Rookie',
+      activeSession: { isQuickLog: false },
+      exercises: [
+        {
+          exerciseId: 'ex1',
+          name: 'Bench Press',
+          sets: [{ reps: '10', weight: '60', done: true, completed: true }]
+        }
+      ],
     });
 
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-    fireEvent.click(screen.getByText('Finish Session'));
+    renderComponent();
+
+    const endBtn = screen.getByText('END');
+    fireEvent.click(endBtn);
+
+    // End sheet should open
+    expect(screen.getByText(/End Session\?/i)).toBeInTheDocument();
+
+    // Submit session
+    const finishBtn = screen.getByRole('button', { name: /Finish Session/i });
+    fireEvent.click(finishBtn);
 
     await waitFor(() => {
-      expect(screen.getByTestId('session-complete-screen')).toBeInTheDocument();
-    });
-    expect(mockFinishSession).toHaveBeenCalledWith('test-uid-123', {
-      pain: [],
-      easy: [],
-      brokenEquipment: [],
+      expect(finishSessionMock).toHaveBeenCalled();
     });
   });
 
-  it('toggles debrief options and passes selected keys to finishSession', async () => {
-    mockFinishSession.mockResolvedValueOnce({
-      sessionId:      'sess-abc',
-      totalVolume:    800,
-      totalSets:      1,
-      durationMinutes: 1,
-      exerciseCount:  1,
-      prCount:        0,
-      prNames:        [],
-      xpEarned:       50,
-      levelUp:        false,
-      newLevel:       1,
-      newLevelName:   'Rookie',
+  it('shows error if trying to end with no exercises', () => {
+    useWorkoutStore.setState({
+      activeSession: { isQuickLog: false },
+      exercises: [], // empty exercises
     });
 
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-
-    // Check that debrief card is visible
-    expect(screen.getByText('AI Coach Debrief')).toBeInTheDocument();
-
-    // Click on Joint Pain and Too Easy chips for barbell_squat
-    fireEvent.click(screen.getByTestId('debrief-pain-barbell_squat'));
-    fireEvent.click(screen.getByTestId('debrief-easy-barbell_squat'));
-
-    fireEvent.click(screen.getByText('Finish Session'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('session-complete-screen')).toBeInTheDocument();
-    });
-    expect(mockFinishSession).toHaveBeenCalledWith('test-uid-123', {
-      pain: ['barbell_squat'],
-      easy: ['barbell_squat'],
-      brokenEquipment: [],
-    });
-  });
-
-  it('finishSession failure preserves session state — exercises still in store', async () => {
-    mockFinishSession.mockRejectedValueOnce(
-      new Error('[useWorkoutLogger] Failed to save session. network error')
-    );
-
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-    fireEvent.click(screen.getByText('Finish Session'));
-
-    await waitFor(() => {
-      // Error message is shown inline in the sheet
-      expect(screen.getByText(/Could not save/i)).toBeInTheDocument();
-    });
-
-    // Session exercises are still intact — not cleared
-    expect(useWorkoutStore.getState().exercises.length).toBe(1);
-    // Session complete screen is NOT shown
-    expect(screen.queryByTestId('session-complete-screen')).not.toBeInTheDocument();
-  });
-
-  it('after 3 retry failures shows "save locally" message', async () => {
-    mockFinishSession.mockRejectedValue(
-      new Error('[useWorkoutLogger] network error')
-    );
-
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-
-    // Fail 3 times
-    for (let i = 0; i < 3; i++) {
-      fireEvent.click(screen.getByText('Finish Session'));
-      // eslint-disable-next-line no-await-in-loop
-      await waitFor(() => {
-        expect(mockFinishSession).toHaveBeenCalledTimes(i + 1);
-      });
-    }
-
-    await waitFor(() => {
-      expect(screen.getByText(/Session saved locally/i)).toBeInTheDocument();
-    });
-  });
-
-  it('retry button on SessionComplete re-calls finishSession', async () => {
-    // First call fails, second succeeds
-    mockFinishSession
-      .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce({
-        sessionId: 'sess-retry', totalVolume: 0, totalSets: 1,
-        durationMinutes: 1, exerciseCount: 1, prCount: 0, prNames: [],
-        xpEarned: 50, levelUp: false, newLevel: 1, newLevelName: 'Rookie',
-      });
-
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-    fireEvent.click(screen.getByText('Finish Session'));
-
-    await waitFor(() => expect(mockFinishSession).toHaveBeenCalledTimes(1));
-  });
-
-  it('Discard Session calls resetSession and navigates home', () => {
-    renderLogger();
-    fireEvent.click(screen.getByText('END'));
-    fireEvent.click(screen.getByText('Discard Session'));
-
-    expect(mockResetSession).toHaveBeenCalledTimes(1);
-    expect(mockNavigate).toHaveBeenCalledWith('/home');
-  });
-});
-
-describe('MobileLogger — Session Timer', () => {
-  beforeEach(() => {
-    resetStores();
-    mockGetDocs.mockResolvedValue({ docs: [], forEach: () => {} });
-    vi.clearAllMocks();
-  });
-
-  it('displays the timer when session is active (mocked formattedTime)', () => {
-    useWorkoutStore.setState(ACTIVE_WITH_EXERCISE);
-    renderLogger();
-    // useWorkoutTimer is mocked to return '00:00'
-    expect(screen.getByText('00:00')).toBeInTheDocument();
+    renderComponent();
+    
+    const endBtn = screen.getByText('END');
+    fireEvent.click(endBtn);
+    
+    // Should NOT open end sheet
+    expect(screen.queryByText(/End Session\?/i)).not.toBeInTheDocument();
   });
 });

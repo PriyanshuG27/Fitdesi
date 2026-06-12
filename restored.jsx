@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Zap, Plus, Trash2, Search, CheckCircle, ShieldAlert, LogOut, Copy, Award, Key, Calendar, Vote, Bell, BellOff, TrendingUp, AlertTriangle, MessageSquare, Sliders, Flame, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Users, Zap, Plus, Trash2, Search, CheckCircle, ShieldAlert, LogOut, Copy, Award, Key, Calendar, Vote, Bell, BellOff, TrendingUp, AlertTriangle, MessageSquare, Sliders, Flame, ExternalLink } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, limit, onSnapshot, serverTimestamp, orderBy } from 'firebase/firestore';
-import { deriveLevelFromXP, getAvatarStyle, isTitleActive, isAuraActive } from '../../lib/xpHelpers';
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, limit, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSquadStore } from '../../stores/useSquadStore';
 import { callZenkaiAPI } from '../../lib/apiClient';
@@ -29,7 +28,6 @@ export const SquadMatchmaker = () => {
   // Collaboration and Synergy states
   const mountTimeRef = useRef(Date.now());
   const [presenceList, setPresenceList] = useState([]);
-  const [yesterdayWorkoutTime, setYesterdayWorkoutTime] = useState(null); // { hours: number, minutes: number }
   const [pollsList, setPollsList] = useState([]);
   const [notificationsMuted, setNotificationsMuted] = useState(
     localStorage.getItem('zenkai_mute_squad_notifications') === 'true'
@@ -39,13 +37,6 @@ export const SquadMatchmaker = () => {
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptionsInput, setPollOptionsInput] = useState('07:00, 17:30, 19:00');
   const [creatingPoll, setCreatingPoll] = useState(false);
-  const [activityList, setActivityList] = useState([]);
-  const [floatingEmojis, setFloatingEmojis] = useState({}); // { [activityId]: [{ id, emoji, x, y }] }
-
-  const level = useMemo(() => {
-    if (!profile?.xp) return 1;
-    return deriveLevelFromXP(profile.xp).level;
-  }, [profile?.xp]);
 
   // Form inputs
   const [newSquadName, setNewSquadName] = useState('');
@@ -60,26 +51,8 @@ export const SquadMatchmaker = () => {
   const [tradeTargetUid, setTradeTargetUid] = useState('');
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
 
-  // Squad member card states
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [selectedMemberStats, setSelectedMemberStats] = useState(null);
-  const [loadingMemberStats, setLoadingMemberStats] = useState(false);
-
-  // Onboarding setup view toggling state
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
   // Notifications
   const [successMsg, setSuccessMsg] = useState('');
-
-  const [customDialog, setCustomDialog] = useState(null); // { type: 'alert' | 'confirm', title: string, message: string, onConfirm?: () => void }
-
-  const showAppAlert = (message, title = "System Notification") => {
-    setCustomDialog({ type: 'alert', title, message });
-  };
-
-  const showAppConfirm = (message, onConfirm, title = "Action Required") => {
-    setCustomDialog({ type: 'confirm', title, message, onConfirm });
-  };
 
   // Consent-based draft states
   const [realFreeAgents, setRealFreeAgents] = useState([]);
@@ -167,13 +140,7 @@ export const SquadMatchmaker = () => {
           benchPR,
           squatPR,
           consistency,
-          goal: profile.goal || 'Fitness',
-          avatarUrl: profile.avatarUrl || '',
-          aura: profile.aura || '',
-          activeTitle: profile.activeTitle || '',
-          workoutFrequency: profile.workoutFrequency || 'Not set',
-          dietType: profile.dietType || 'Not set',
-          totalSessions: profile.totalSessions || 0
+          goal: profile.goal || 'Fitness'
         }, { merge: true });
         
       } catch (err) {
@@ -182,7 +149,7 @@ export const SquadMatchmaker = () => {
     };
     
     syncMySquadCode();
-  }, [uid, profile?.squadCode, profile?.lookingForSquad, profile?.avatarUrl, profile?.aura, profile?.activeTitle, profile?.xp, profile?.level, profile?.streak]); // Only re-run when these specific fields change
+  }, [uid, profile?.squadCode, profile?.lookingForSquad]); // Only re-run when these specific fields change
 
 
   // 2. Real-time query for joined squads
@@ -210,62 +177,22 @@ export const SquadMatchmaker = () => {
   // 3. Resolve active squad and sync roster stats in real-time
   useEffect(() => {
     if (joinedSquads.length === 0) {
-      if (!showOnboarding) {
-        setActiveSquad(null);
-        setActiveSquadCode(null);
-        setActiveSquadMembers([]);
-      }
+      setActiveSquad(null);
+      setActiveSquadMembers([]);
+      setActiveSquadCode(null);
       return;
     }
 
-
     let targetCode = activeSquadCode;
-    if (!targetCode && !showOnboarding) {
+    if (!targetCode || !joinedSquads.some(s => s.squadCode === targetCode)) {
       targetCode = joinedSquads[0].squadCode;
       setActiveSquadCode(targetCode);
     }
 
-    if (!targetCode) {
-      setActiveSquad(null);
-      setActiveSquadMembers([]);
-      return;
-    }
-
     const active = joinedSquads.find(s => s.squadCode === targetCode);
-    if (active) {
-      setActiveSquad(active);
-    } else {
-      // Check if targetCode exists and we are a member (handles Firestore sync lag)
-      const checkSquadValidity = async () => {
-        try {
-          const docSnap = await getDoc(doc(db, 'shared_squads', targetCode));
-          if (docSnap.exists() && docSnap.data().memberUids?.includes(uid)) {
-            setActiveSquad(docSnap.data());
-          } else {
-            // Either squad doesn't exist, or we were kicked/not a member anymore
-            if (joinedSquads.length > 0) {
-              const fallbackCode = joinedSquads[0].squadCode;
-              setActiveSquadCode(fallbackCode);
-              setActiveSquad(joinedSquads[0]);
-            } else {
-              setActiveSquadCode(null);
-              setActiveSquad(null);
-            }
-          }
-        } catch (err) {
-          console.error('[SquadMatchmaker] Error validating active squad:', err);
-          if (joinedSquads.length > 0) {
-            const fallbackCode = joinedSquads[0].squadCode;
-            setActiveSquadCode(fallbackCode);
-            setActiveSquad(joinedSquads[0]);
-          } else {
-            setActiveSquadCode(null);
-            setActiveSquad(null);
-          }
-        }
-      };
+    setActiveSquad(active);
 
-      checkSquadValidity();
+    if (!active || !active.members) {
       setActiveSquadMembers([]);
       return;
     }
@@ -296,11 +223,18 @@ export const SquadMatchmaker = () => {
             if (idx !== -1) {
               next[idx] = {
                 ...next[idx],
-                ...fresh,
-                uid: next[idx].uid,
                 name: memberName,
+                streak: fresh.streak || 0,
+                volume: fresh.volume || 0,
                 checkIn: (fresh.streak || 0) > 0,
                 updatedAt: fresh.updatedAt ? (fresh.updatedAt.toDate ? fresh.updatedAt.toDate() : new Date(fresh.updatedAt)) : new Date(),
+                totalSessions: fresh.totalSessions || 0,
+                badges: fresh.badges || [],
+                powerUps: fresh.powerUps || {},
+                goal: fresh.goal || 'Fitness',
+                workoutFrequency: fresh.workoutFrequency || 'Not set',
+                dietType: fresh.dietType || 'Not set',
+                gymName: fresh.gymName || 'No gym joined'
               };
             }
             return next;
@@ -332,27 +266,19 @@ export const SquadMatchmaker = () => {
     const presenceRef = collection(db, 'shared_squads', activeSquadCode, 'presence');
     const unsubPresence = onSnapshot(presenceRef, (snap) => {
       const list = [];
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        list.push({ id: docSnap.id, ...data });
+
+        // Fire browser notification if new, not from current user
         const createdTime = data.createdAt?.toDate 
           ? data.createdAt.toDate().getTime() 
           : (data.createdAt || Date.now());
-
-        if (createdTime >= todayStart.getTime()) {
-          list.push({ id: docSnap.id, ...data });
-
-          // Fire browser notification if new, not from current user
-          if (createdTime > mountTimeRef.current && data.uid !== uid) {
-            sendBrowserNotification(
-              `Gym Status Update! 📣`,
-              data.time === 'Not Going'
-                ? `${data.name} is resting / not going to the gym today.`
-                : `${data.name} checked in to hit the gym today at ${data.time}!`
-            );
-          }
+        if (createdTime > mountTimeRef.current && data.uid !== uid) {
+          sendBrowserNotification(
+            `Gym Check-In! 🏋️‍♂️`,
+            `${data.name} checked in to hit the gym today at ${data.time}!`
+          );
         }
       });
       setPresenceList(list);
@@ -363,25 +289,19 @@ export const SquadMatchmaker = () => {
     const pollsRef = collection(db, 'shared_squads', activeSquadCode, 'polls');
     const unsubPolls = onSnapshot(pollsRef, (snap) => {
       const list = [];
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        list.push({ id: docSnap.id, ...data });
+
+        // Fire browser notification if new, not from current user
         const createdTime = data.createdAt?.toDate 
           ? data.createdAt.toDate().getTime() 
           : (data.createdAt || Date.now());
-
-        if (createdTime >= todayStart.getTime()) {
-          list.push({ id: docSnap.id, ...data });
-
-          // Fire browser notification if new, not from current user
-          if (createdTime > mountTimeRef.current && data.creatorUid !== uid) {
-            sendBrowserNotification(
-              `New Gym Poll! 🗳️`,
-              `${data.creatorName} started a new poll: "${data.question}"`
-            );
-          }
+        if (createdTime > mountTimeRef.current && data.creatorUid !== uid) {
+          sendBrowserNotification(
+            `New Gym Poll! 🗳️`,
+            `${data.creatorName} started a new poll: "${data.question}"`
+          );
         }
       });
       setPollsList(list);
@@ -394,165 +314,6 @@ export const SquadMatchmaker = () => {
       unsubPolls();
     };
   }, [activeSquadCode, uid]);
-
-  // Fetch yesterday's workout time on mount / when uid changes
-  useEffect(() => {
-    if (!uid) return;
-
-    const fetchYesterdayWorkout = async () => {
-      try {
-        const today = new Date();
-        const yesterdayStart = new Date(today);
-        yesterdayStart.setDate(today.getDate() - 1);
-        yesterdayStart.setHours(0, 0, 0, 0);
-
-        const yesterdayEnd = new Date(today);
-        yesterdayEnd.setDate(today.getDate() - 1);
-        yesterdayEnd.setHours(23, 59, 59, 999);
-
-        const q = query(
-          collection(db, 'users', uid, 'sessions'),
-          where('date', '>=', yesterdayStart),
-          where('date', '<=', yesterdayEnd)
-        );
-
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          let latestSession = null;
-          let latestTime = 0;
-          snap.forEach(d => {
-            const data = d.data();
-            const ts = data.date ? (data.date.toDate ? data.date.toDate().getTime() : new Date(data.date).getTime()) : 0;
-            if (ts > latestTime) {
-              latestTime = ts;
-              latestSession = data;
-            }
-          });
-
-          if (latestSession) {
-            const sessDate = latestSession.date ? (latestSession.date.toDate ? latestSession.date.toDate() : new Date(latestSession.date)) : null;
-            if (sessDate) {
-              setYesterdayWorkoutTime({
-                hours: sessDate.getHours(),
-                minutes: sessDate.getMinutes()
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[SquadMatchmaker] Error fetching yesterday\'s session:', err);
-      }
-    };
-
-    fetchYesterdayWorkout();
-  }, [uid]);
-
-  // Gym Check-In 1-Hour Reminder notification scheduler
-  useEffect(() => {
-    if (!uid) return;
-
-    const notifiedKeys = new Set();
-
-    const checkReminders = () => {
-      const now = new Date();
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-
-      // 1. Teammate scheduled check-in reminders
-      if (presenceList.length > 0) {
-        presenceList.forEach(presence => {
-          if (!presence.time || presence.time === 'Not Going') return;
-
-          // Parse presence time e.g. "18:00"
-          const [targetH, targetM] = presence.time.split(':').map(Number);
-          
-          // Calculate minutes from midnight
-          const targetTotalMin = targetH * 60 + targetM;
-          const currentTotalMin = currentHours * 60 + currentMinutes;
-
-          // Trigger notification exactly 60 minutes before
-          if (targetTotalMin - currentTotalMin === 60) {
-            const key = `${presence.id}-${presence.time}-${now.toDateString()}`;
-            if (!notifiedKeys.has(key)) {
-              notifiedKeys.add(key);
-
-              if (presence.id === uid) {
-                sendBrowserNotification(
-                  "Gym Time Reminder! 🏋️‍♂️",
-                  `Your gym session starts in 1 hour at ${presence.time}. Gear up!`
-                );
-                showAppAlert(`Your gym session starts in 1 hour at ${presence.time}. Get ready!`, "Gym Time Reminder");
-              } else {
-                sendBrowserNotification(
-                  "Teammate Gym Reminder! 🏋️‍♂️",
-                  `${presence.name} is hitting the gym in 1 hour at ${presence.time}!`
-                );
-                showAppAlert(`${presence.name} is hitting the gym in 1 hour at ${presence.time}!`, "Teammate Gym Reminder");
-              }
-            }
-          }
-        });
-      }
-
-      // 2. Yesterday's workout reminder
-      if (yesterdayWorkoutTime) {
-        const targetTotalMin = yesterdayWorkoutTime.hours * 60 + yesterdayWorkoutTime.minutes;
-        const currentTotalMin = currentHours * 60 + currentMinutes;
-
-        if (targetTotalMin - currentTotalMin === 60) {
-          const key = `yesterday-reminder-${now.toDateString()}`;
-          if (!notifiedKeys.has(key)) {
-            notifiedKeys.add(key);
-
-            const formatTime = (h, m) => {
-              const ampm = h >= 12 ? 'PM' : 'AM';
-              const displayH = h % 12 || 12;
-              const displayM = String(m).padStart(2, '0');
-              return `${displayH}:${displayM} ${ampm}`;
-            };
-
-            const timeStr = formatTime(yesterdayWorkoutTime.hours, yesterdayWorkoutTime.minutes);
-
-            sendBrowserNotification(
-              "Yesterday's Gym Time Reminder! ⚡",
-              `You logged a workout yesterday at ${timeStr}. Time to hit it again in 1 hour!`
-            );
-            showAppAlert(
-              `You logged a workout yesterday at ${timeStr}. Keep the momentum going and get ready to hit the gym in 1 hour!`,
-              "Yesterday's Gym Time Reminder"
-            );
-          }
-        }
-      }
-    };
-
-    checkReminders();
-    const timer = setInterval(checkReminders, 30000); // Check every 30s
-    return () => clearInterval(timer);
-  }, [presenceList, uid, yesterdayWorkoutTime]);
-
-  // Live Activity Feed subscription
-  useEffect(() => {
-    if (!activeSquadCode) {
-      setActivityList([]);
-      return;
-    }
-    
-    const activityRef = collection(db, 'shared_squads', activeSquadCode, 'activity_feed');
-    const q = query(activityRef, orderBy('createdAt', 'desc'), limit(20));
-    
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const list = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      setActivityList(list);
-    }, (err) => {
-      console.error('[SquadMatchmaker] Error syncing activity feed:', err);
-    });
-    
-    return () => unsubscribe();
-  }, [activeSquadCode]);
 
   // 3c. Query real free agents at the same gym
   useEffect(() => {
@@ -707,10 +468,9 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 3000);
       
       setActiveSquadCode(squadCode);
-      setShowOnboarding(false);
     } catch (err) {
       console.error('[SquadMatchmaker] Error creating squad:', err);
-      showAppAlert('Failed to create squad.', 'Error');
+      alert('Failed to create squad.');
     } finally {
       setLoading(false);
     }
@@ -731,7 +491,7 @@ export const SquadMatchmaker = () => {
         const logsSnap = await getDocs(q);
         
         if (!logsSnap.empty) {
-          showAppAlert('🎟️ You have already redeemed this secret classified promo code!', 'Redemption Error');
+          alert('🎟️ You have already redeemed this secret classified promo code!');
           setJoinCodeInput('');
           setLoading(false);
           return;
@@ -752,7 +512,7 @@ export const SquadMatchmaker = () => {
           timestamp: new Date()
         });
 
-        showAppAlert('🎉 Easter Egg Activated! You found the Sunday Classifieds Secret code. +25 XP awarded for scouting the newspaper!', 'Secret Redeemed! 🎉');
+        alert('🎉 Easter Egg Activated! You found the Sunday Classifieds Secret code. +25 XP awarded for scouting the newspaper!');
         setJoinCodeInput('');
         setLoading(false);
         return;
@@ -762,14 +522,14 @@ export const SquadMatchmaker = () => {
       const snap = await getDoc(docRef);
 
       if (!snap.exists()) {
-        showAppAlert('Squad Code not found!', 'Error');
+        alert('Squad Code not found!');
         return;
       }
 
       const squadData = snap.data();
 
       if (squadData.memberUids.includes(uid)) {
-        showAppAlert('You are already a member!', 'Info');
+        alert('You are already a member!');
         setActiveSquad(squadData);
         setJoinCodeInput('');
         return;
@@ -777,7 +537,7 @@ export const SquadMatchmaker = () => {
 
       const activeMembersCount = squadData.members.length;
       if (activeMembersCount >= squadData.memberLimit) {
-        showAppAlert(`Squad is full! (Limit: ${squadData.memberLimit} members)`, 'Squad Full');
+        alert(`Squad is full! (Limit: ${squadData.memberLimit} members)`);
         return;
       }
 
@@ -800,10 +560,9 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 3000);
       
       setActiveSquadCode(codeStr);
-      setShowOnboarding(false);
     } catch (err) {
       console.error('[SquadMatchmaker] Error joining squad:', err);
-      showAppAlert('Failed to join squad.', 'Error');
+      alert('Failed to join squad.');
     } finally {
       setLoading(false);
     }
@@ -812,68 +571,69 @@ export const SquadMatchmaker = () => {
   // Leave Squad Action
   const handleLeaveSquad = async () => {
     if (!activeSquad || !uid) return;
-    const isCreator = activeSquad.creatorUid === uid;
-    const msg = isCreator
-      ? 'You are the creator. If you leave, another member will become creator (or squad will be deleted if you are the only member). Proceed?'
-      : `Leave squad "${activeSquad.squadName}"?`;
+    if (activeSquad.creatorUid === uid) {
+      const confirmLeave = window.confirm(
+        'You are the creator. If you leave, another member will become creator (or squad will be deleted if you are the only member). Proceed?'
+      );
+      if (!confirmLeave) return;
+    } else {
+      const confirmLeave = window.confirm(`Leave squad "${activeSquad.squadName}"?`);
+      if (!confirmLeave) return;
+    }
 
-    showAppConfirm(msg, async () => {
-      setLoading(true);
-      try {
-        const { doc, deleteDoc, setDoc } = await import('firebase/firestore');
-        const docRef = doc(db, 'shared_squads', activeSquad.squadCode);
-        const remainingUids = activeSquad.memberUids.filter(id => id !== uid);
-        const remainingMembers = activeSquad.members.filter(m => m.uid !== uid);
+    setLoading(true);
+    try {
+      const docRef = doc(db, 'shared_squads', activeSquad.squadCode);
+      const remainingUids = activeSquad.memberUids.filter(id => id !== uid);
+      const remainingMembers = activeSquad.members.filter(m => m.uid !== uid);
 
-        if (remainingMembers.length === 0) {
-          await deleteDoc(docRef);
-        } else {
-          let newCreator = activeSquad.creatorUid;
-          if (activeSquad.creatorUid === uid) {
-            newCreator = remainingMembers[0].uid;
-          }
-
-          await setDoc(docRef, {
-            creatorUid: newCreator,
-            memberUids: remainingUids,
-            members: remainingMembers
-          }, { merge: true });
+      if (remainingMembers.length === 0) {
+        await deleteDoc(docRef);
+      } else {
+        let newCreator = activeSquad.creatorUid;
+        if (activeSquad.creatorUid === uid) {
+          newCreator = remainingMembers[0].uid;
         }
 
-        setSuccessMsg(`Left squad "${activeSquad.squadName}"`);
-        setTimeout(() => setSuccessMsg(''), 3000);
-        setActiveSquadCode(null);
-        setActiveSquad(null);
-      } catch (err) {
-        console.error('[SquadMatchmaker] Error leaving squad:', err);
-        showAppAlert('Failed to leave squad.', "Error");
-      } finally {
-        setLoading(false);
+        await setDoc(docRef, {
+          creatorUid: newCreator,
+          memberUids: remainingUids,
+          members: remainingMembers
+        }, { merge: true });
       }
-    }, "Confirm Leaving Squad");
+
+      setSuccessMsg(`Left squad "${activeSquad.squadName}"`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+      setActiveSquadCode(null);
+      setActiveSquad(null);
+    } catch (err) {
+      console.error('[SquadMatchmaker] Error leaving squad:', err);
+      alert('Failed to leave squad.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Kick Member Action
   const handleKickMember = async (targetUid) => {
     if (!activeSquad) return;
-    showAppConfirm('Remove this member?', async () => {
-      try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const docRef = doc(db, 'shared_squads', activeSquad.squadCode);
-        const updatedMembers = activeSquad.members.filter(m => m.uid !== targetUid);
-        const updatedUids = activeSquad.memberUids.filter(id => id !== targetUid);
+    const confirmKick = window.confirm('Remove this member?');
+    if (!confirmKick) return;
 
-        const payload = {
-          members: updatedMembers,
-          memberUids: updatedUids
-        };
+    try {
+      const docRef = doc(db, 'shared_squads', activeSquad.squadCode);
+      const updatedMembers = activeSquad.members.filter(m => m.uid !== targetUid);
+      const updatedUids = activeSquad.memberUids.filter(id => id !== targetUid);
 
-        await setDoc(docRef, payload, { merge: true });
-      } catch (err) {
-        console.error('[SquadMatchmaker] Failed to kick member:', err);
-        showAppAlert('Failed to kick member.', "Error");
-      }
-    }, "Remove Member");
+      const payload = {
+        members: updatedMembers,
+        memberUids: updatedUids
+      };
+
+      await setDoc(docRef, payload, { merge: true });
+    } catch (err) {
+      console.error('[SquadMatchmaker] Failed to kick member:', err);
+    }
   };
 
 
@@ -891,171 +651,12 @@ export const SquadMatchmaker = () => {
         time: checkInTime,
         createdAt: serverTimestamp()
       });
-      setSuccessMsg(
-        checkInTime === 'Not Going'
-          ? 'Recorded your rest day status ❌'
-          : `Checked in for gym today at ${checkInTime}! 🏋️‍♂️`
-      );
+      setSuccessMsg(`Checked in for gym today at ${checkInTime}!`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       console.error('[SquadMatchmaker] Check-In failed:', err);
-      showAppAlert('Failed to check in.', "Error");
+      alert('Failed to check in.');
     }
-  };
-
-  const handleSocialAction = async (activityId, actionType) => {
-    if (!activeSquadCode || !uid) return;
-    try {
-      const { updateDoc, arrayUnion, arrayRemove } = await import('firebase/firestore');
-      const docRef = doc(db, 'shared_squads', activeSquadCode, 'activity_feed', activityId);
-      
-      const activityDoc = activityList.find(a => a.id === activityId);
-      const arrayField = actionType === 'highFive' ? 'highFives' : 'kudos';
-      const alreadyReacted = activityDoc?.[arrayField]?.includes(uid);
-      
-      await updateDoc(docRef, {
-        [arrayField]: alreadyReacted ? arrayRemove(uid) : arrayUnion(uid)
-      });
-      
-      triggerFloatingEmoji(activityId, actionType === 'highFive' ? '👏' : '🔥');
-    } catch (err) {
-      console.error('[SquadMatchmaker] Social action failed:', err);
-    }
-  };
-
-  const triggerFloatingEmoji = (activityId, emoji) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    const newEmoji = {
-      id,
-      emoji,
-      x: Math.random() * 60 - 30,
-      y: -20 - Math.random() * 30
-    };
-    
-    setFloatingEmojis(prev => ({
-      ...prev,
-      [activityId]: [...(prev[activityId] || []), newEmoji]
-    }));
-    
-    setTimeout(() => {
-      setFloatingEmojis(prev => ({
-        ...prev,
-        [activityId]: (prev[activityId] || []).filter(e => e.id !== id)
-      }));
-    }, 1200);
-  };
-
-  const handleMemberClick = async (member) => {
-    setSelectedMember(member);
-    setLoadingMemberStats(true);
-    try {
-      const { db } = await import('../../lib/firebase');
-      const { doc, getDoc } = await import('firebase/firestore');
-      const userSnap = await getDoc(doc(db, 'users', member.uid));
-      
-      let profileData = {};
-      if (userSnap.exists()) {
-        profileData = userSnap.data();
-      }
-      
-      const merged = {
-        ...member,
-        ...profileData
-      };
-
-      // Calculate Radar Chart attributes on the fly for the selected member/agent
-      const bench = parseFloat(merged.benchPR) || 0;
-      const squat = parseFloat(merged.squatPR) || 0;
-      const volume = parseFloat(merged.volume) || 0;
-      const consistency = parseFloat(merged.consistency) || 0;
-      const level = parseInt(merged.level, 10) || 1;
-      const streak = parseInt(merged.streak, 10) || 0;
-      
-      merged.attributes = [
-        { subject: 'Strength', A: Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
-        { subject: 'Volume', A: Math.min(100, Math.round(volume / 100)), B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: consistency, B: 100, fullMark: 100 },
-        { subject: 'Level', A: Math.min(100, level * 5), B: 100, fullMark: 100 },
-        { subject: 'Streak', A: Math.min(100, streak * 5), B: 100, fullMark: 100 }
-      ];
-
-      setSelectedMemberStats(merged);
-    } catch (err) {
-      console.error('[SquadMatchmaker] Failed to fetch member stats:', err);
-      // Fallback
-      const bench = parseFloat(member.benchPR) || 0;
-      const squat = parseFloat(member.squatPR) || 0;
-      const volume = parseFloat(member.volume) || 0;
-      const consistency = parseFloat(member.consistency) || 0;
-      const level = parseInt(member.level, 10) || 1;
-      const streak = parseInt(member.streak, 10) || 0;
-      
-      member.attributes = [
-        { subject: 'Strength', A: Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
-        { subject: 'Volume', A: Math.min(100, Math.round(volume / 100)), B: 100, fullMark: 100 },
-        { subject: 'Consistency', A: consistency, B: 100, fullMark: 100 },
-        { subject: 'Level', A: Math.min(100, level * 5), B: 100, fullMark: 100 },
-        { subject: 'Streak', A: Math.min(100, streak * 5), B: 100, fullMark: 100 }
-      ];
-      setSelectedMemberStats(member);
-    } finally {
-      setLoadingMemberStats(false);
-    }
-  };
-
-  const handleRescueStreak = async (targetMember) => {
-    if (!uid || !profile) return;
-    if (profile.xp < 50) {
-      showAppAlert("You need at least 50 XP to rescue a teammate's streak!", "Insufficient XP");
-      return;
-    }
-    
-    showAppConfirm(
-      `Spend 50 XP to gift a Streak Shield to ${targetMember.name.replace(' (You)', '')}?`,
-      async () => {
-        try {
-          const { runTransaction, doc, collection } = await import('firebase/firestore');
-          
-          await runTransaction(db, async (transaction) => {
-            const myUserRef = doc(db, 'users', uid);
-            const myUserSnap = await transaction.get(myUserRef);
-            if (!myUserSnap.exists()) throw new Error("User document does not exist");
-            
-            const myData = myUserSnap.data();
-            const myXP = myData.xp || 0;
-            if (myXP < 50) {
-              throw new Error("Insufficient XP to purchase Streak Shield");
-            }
-
-            const targetUserRef = doc(db, 'users', targetMember.uid);
-            const targetUserSnap = await transaction.get(targetUserRef);
-            if (!targetUserSnap.exists()) throw new Error("Teammate document does not exist");
-            
-            const targetData = targetUserSnap.data();
-            const targetPowerUps = targetData.powerUps || {};
-            const currentShields = targetPowerUps.streakShield || 0;
-
-            transaction.update(myUserRef, { xp: myXP - 50 });
-            transaction.update(targetUserRef, { 
-              'powerUps.streakShield': currentShields + 1 
-            });
-            
-            const xpLogRef = doc(collection(db, 'users', uid, 'xpLog'));
-            transaction.set(xpLogRef, {
-              amount: -50,
-              reason: `Gifted Streak Shield to ${targetMember.name.replace(' (You)', '')}`,
-              timestamp: new Date()
-            });
-          });
-
-          showAppAlert(`Streak rescue successful! Gifted a Streak Shield to ${targetMember.name.replace(' (You)', '')}.`, "Rescue Successful");
-        } catch (err) {
-          console.error('[SquadMatchmaker] Streak Rescue failed:', err);
-          showAppAlert(err.message || 'Failed to gift Streak Shield.', "Rescue Failed");
-        }
-      },
-      "Confirm Spending"
-    );
   };
 
   // Poll Creation Handler
@@ -1065,19 +666,16 @@ export const SquadMatchmaker = () => {
 
     setCreatingPoll(true);
     try {
-      const baseOptions = pollOptionsInput
+      const options = pollOptionsInput
         .split(',')
         .map(o => o.trim())
         .filter(o => o.length > 0);
 
-      if (baseOptions.length < 2) {
-        showAppAlert('Please provide at least 2 comma-separated options.', "Invalid Options");
+      if (options.length < 2) {
+        alert('Please provide at least 2 comma-separated options.');
         setCreatingPoll(false);
         return;
       }
-
-      // Automatically append 'Not Going' to options
-      const options = [...baseOptions, 'Not Going'];
 
       const pollId = crypto.randomUUID();
       const pollRef = doc(db, 'shared_squads', activeSquad.squadCode, 'polls', pollId);
@@ -1098,7 +696,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       console.error('[SquadMatchmaker] Poll creation failed:', err);
-      showAppAlert('Failed to create poll.', 'Error');
+      alert('Failed to create poll.');
     } finally {
       setCreatingPoll(false);
     }
@@ -1134,7 +732,7 @@ export const SquadMatchmaker = () => {
       }
     } catch (err) {
       console.error('[SquadMatchmaker] Failed to generate challenge:', err);
-      showAppAlert(err.message || 'Failed to generate squad challenge.', 'Challenge Error');
+      alert(err.message || 'Failed to generate squad challenge.');
     } finally {
       setGeneratingChallenge(false);
     }
@@ -1144,7 +742,7 @@ export const SquadMatchmaker = () => {
   const handleVoteRegenerate = async () => {
     if (!activeSquad || !uid || !activeSquad.activeChallenge) return;
     if (activeSquad.hasRegeneratedThisWeek) {
-      showAppAlert('The weekly challenge has already been regenerated once.', 'Regeneration Limit');
+      alert('The weekly challenge has already been regenerated once.');
       return;
     }
 
@@ -1176,7 +774,7 @@ export const SquadMatchmaker = () => {
       }
     } catch (err) {
       console.error('[SquadMatchmaker] Failed to vote/regenerate:', err);
-      showAppAlert(err.message || 'Failed to update regeneration vote.', 'Vote Error');
+      alert(err.message || 'Failed to update regeneration vote.');
     } finally {
       setGeneratingChallenge(false);
     }
@@ -1188,7 +786,7 @@ export const SquadMatchmaker = () => {
     const challenge = activeSquad.activeChallenge;
     if (challenge.status !== 'completed') return;
     if (challenge.claimedBy?.[uid]) {
-      showAppAlert('You have already claimed your reward for this challenge!', 'Already Claimed');
+      alert('You have already claimed your reward for this challenge!');
       return;
     }
 
@@ -1246,7 +844,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Claim reward failed:', err);
-      showAppAlert('Failed to claim reward.', 'Error');
+      alert('Failed to claim reward.');
     }
   };
 
@@ -1317,7 +915,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Draft failed:', err);
-      showAppAlert('Draft invite failed.', 'Error');
+      alert('Draft invite failed.');
     }
   };
 
@@ -1357,7 +955,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Trade failed:', err);
-      showAppAlert('Trade execution failed.', 'Error');
+      alert('Trade execution failed.');
     }
   };
 
@@ -1366,12 +964,12 @@ export const SquadMatchmaker = () => {
       const squadRef = doc(db, 'shared_squads', invite.squadCode);
       const squadSnap = await getDoc(squadRef);
       if (!squadSnap.exists()) {
-        showAppAlert('Squad no longer exists.', 'Error');
+        alert('Squad no longer exists.');
         return;
       }
       const squadData = squadSnap.data();
       if (squadData.members.length >= squadData.memberLimit) {
-        showAppAlert('Squad is full!', 'Error');
+        alert('Squad is full!');
         return;
       }
 
@@ -1398,7 +996,7 @@ export const SquadMatchmaker = () => {
       setActiveSquadCode(invite.squadCode);
     } catch (err) {
       console.error('[SquadMatchmaker] Accept invite failed:', err);
-      showAppAlert('Failed to accept invite.', 'Error');
+      alert('Failed to accept invite.');
     }
   };
 
@@ -1437,7 +1035,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('[SquadMatchmaker] Decline and mute failed:', err);
-      showAppAlert('Failed to decline invite.', 'Error');
+      alert('Failed to decline invite.');
     }
   };
 
@@ -1466,7 +1064,7 @@ export const SquadMatchmaker = () => {
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       console.error('[SquadMatchmaker] Failed to toggle lookingForSquad:', err);
-      showAppAlert('Failed to update status.', 'Error');
+      alert('Failed to update status.');
     }
   };
 
@@ -1479,20 +1077,14 @@ export const SquadMatchmaker = () => {
   };
 
   return (
-    <div className="border border-neutral-800 bg-[var(--surface)] p-6 rounded-2xl shadow-xl flex flex-col gap-6 text-left backdrop-blur-md">
+    <div className="border-2 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[5px_5px_0px_rgba(0,0,0,1)] flex flex-col gap-6 text-left">
       
       {/* Header */}
       <div className="border-b border-[var(--border)] pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-3">
-          {/* Small Zenkai Logo on Mobile */}
-          <div className="w-7 h-7 rounded bg-black border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 select-none block lg:hidden">
-            <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
-          </div>
-          <h3 className="font-display font-black text-xl text-white uppercase tracking-tight flex items-center gap-2">
-            <Users className="text-[var(--primary)]" size={22} />
-            <span>Fantasy League Matchmaker</span>
-          </h3>
-        </div>
+        <h3 className="font-display font-black text-xl text-white uppercase tracking-tight flex items-center gap-2">
+          <Users className="text-[var(--primary)]" size={22} />
+          <span>Fantasy League Matchmaker</span>
+        </h3>
         
         <div className="flex items-center gap-3">
           {/* Mute Toggle */}
@@ -1524,21 +1116,6 @@ export const SquadMatchmaker = () => {
               <span>{multiplier.toFixed(2)}x Team Multiplier</span>
             </div>
           )}
-
-          {/* Clickable Profile Avatar */}
-          <div 
-            onClick={() => navigate('/profile')}
-            className="w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 border-2 border-black shadow-[2px_2px_0px_black] hover:scale-105 shrink-0"
-            style={getAvatarStyle(profile?.aura, level, profile?.powerUps)}
-          >
-            {profile?.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-            ) : (
-              <span className="font-display font-extrabold text-[10px] text-white">
-                {profile?.name?.slice(0, 2).toUpperCase() || 'ZK'}
-              </span>
-            )}
-          </div>
         </div>
       </div>
 
@@ -1607,7 +1184,8 @@ export const SquadMatchmaker = () => {
               </div>
             </div>
           )}
-           {/* Roster Switcher Dropdown */}
+          
+          {/* Roster Switcher Dropdown */}
           {joinedSquads.length > 0 && (
             <div className="flex flex-col gap-1.5 border-b border-[#111] pb-4">
               <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase font-bold">Switch Accountability Squad</label>
@@ -1616,7 +1194,6 @@ export const SquadMatchmaker = () => {
                   value={activeSquadCode || ''}
                   onChange={(e) => {
                     setActiveSquadCode(e.target.value);
-                    setShowOnboarding(false);
                   }}
                   className="bg-black border border-[#222] px-3.5 py-1.5 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full cursor-pointer"
                 >
@@ -1627,137 +1204,104 @@ export const SquadMatchmaker = () => {
                   ))}
                 </select>
 
-                {!showOnboarding ? (
+                {activeSquad && (
                   <button
                     onClick={() => {
-                      setShowOnboarding(true);
+                      setActiveSquadCode(null);
+                      setActiveSquad(null);
                     }}
                     className="bg-neutral-900 border border-[#222] hover:border-[var(--primary)] text-white font-mono text-[10px] font-bold px-3 py-1.5 rounded-lg cursor-pointer uppercase shrink-0 transition-all"
                   >
                     Create/Join New
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setShowOnboarding(false);
-                      if (!activeSquadCode && joinedSquads.length > 0) {
-                        setActiveSquadCode(joinedSquads[0].squadCode);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 bg-neutral-900 border border-[#222] hover:border-[var(--primary)] text-white font-mono text-[10px] font-bold px-3 py-1.5 rounded-lg cursor-pointer uppercase shrink-0 transition-all"
-                  >
-                    <ArrowLeft size={10} />
-                    <span>Back to Squad</span>
                   </button>
                 )}
               </div>
             </div>
           )}
 
-          {(activeSquad === null || showOnboarding) ? (
+          {activeSquad === null ? (
             /* ONBOARDING STATE: CREATE OR JOIN A SQUAD */
-            <div className="flex flex-col gap-6 animate-fadeIn">
-              {joinedSquads.length > 0 && (
-                <div className="flex items-center justify-start">
-                  <button
-                    onClick={() => {
-                      setShowOnboarding(false);
-                      if (!activeSquadCode && joinedSquads.length > 0) {
-                        setActiveSquadCode(joinedSquads[0].squadCode);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 bg-neutral-900 border border-[#222] hover:border-[var(--primary)] text-neutral-400 hover:text-white font-mono text-[10px] font-bold px-4 py-2 rounded-lg cursor-pointer uppercase transition-all shadow-md"
-                  >
-                    <ArrowLeft size={10} className="text-[var(--primary)]" />
-                    <span>Back to Squad Dashboard</span>
-                  </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Create Squad Panel */}
+              <form onSubmit={handleCreateSquad} className="border border-[#222] bg-black/40 p-5 rounded-xl flex flex-col gap-4">
+                <span className="text-xs font-mono text-white uppercase font-extrabold tracking-wider flex items-center gap-1.5">
+                  <Plus size={14} className="text-[var(--primary)]" />
+                  <span>Create a New Squad</span>
+                </span>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Squad Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Iron Temple Bros"
+                    value={newSquadName}
+                    onChange={(e) => setNewSquadName(e.target.value)}
+                    className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full"
+                  />
                 </div>
-              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Join Squad Panel */}
-                <form onSubmit={handleJoinSquad} className="border border-[#222] bg-black/40 p-5 rounded-xl flex flex-col justify-between gap-4">
-                  <div className="flex flex-col gap-4">
-                    <span className="text-xs font-mono text-white uppercase font-extrabold tracking-wider flex items-center gap-1.5">
-                      <Search size={14} className="text-[var(--secondary)]" />
-                      <span>Join an Existing Squad</span>
-                    </span>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Squad Code</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. SQ-ABC123"
-                        value={joinCodeInput}
-                        onChange={(e) => setJoinCodeInput(e.target.value)}
-                        className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white placeholder-neutral-700 focus:outline-none focus:border-[var(--primary)] w-full uppercase"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="bg-[var(--secondary)] text-black font-mono text-xs font-black py-2 border border-black rounded-lg shadow-[2px_2px_0px_black] uppercase cursor-pointer active:scale-95 transition-all w-full"
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Member Limit</label>
+                  <select
+                    value={memberLimit}
+                    onChange={(e) => setMemberLimit(parseInt(e.target.value, 10))}
+                    className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full cursor-pointer"
                   >
-                    Join Squad
-                  </button>
-                </form>
+                    {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                      <option key={n} value={n}>{n} Members Max</option>
+                    ))}
+                  </select>
+                </div>
 
-                {/* Create Squad Panel */}
-                <form onSubmit={handleCreateSquad} className="border border-[#222] bg-black/40 p-5 rounded-xl flex flex-col gap-4 justify-between">
-                  <div className="flex flex-col gap-4">
-                    <span className="text-xs font-mono text-white uppercase font-extrabold tracking-wider flex items-center gap-1.5">
-                      <Plus size={14} className="text-[var(--primary)]" />
-                      <span>Create a New Squad</span>
-                    </span>
+                <button
+                  type="submit"
+                  className="bg-[var(--primary)] text-white font-mono text-xs font-bold py-2 border border-black rounded-lg shadow-[2px_2px_0px_black] uppercase cursor-pointer active:scale-95 transition-all mt-2"
+                >
+                  Create Squad
+                </button>
+              </form>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Squad Name</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Iron Temple Bros"
-                        value={newSquadName}
-                        onChange={(e) => setNewSquadName(e.target.value)}
-                        className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full"
-                      />
-                    </div>
+              {/* Join Squad Panel */}
+              <form onSubmit={handleJoinSquad} className="border border-[#222] bg-black/40 p-5 rounded-xl flex flex-col justify-between gap-4">
+                <div className="flex flex-col gap-4">
+                  <span className="text-xs font-mono text-white uppercase font-extrabold tracking-wider flex items-center gap-1.5">
+                    <Search size={14} className="text-[var(--secondary)]" />
+                    <span>Join an Existing Squad</span>
+                  </span>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Member Limit</label>
-                      <select
-                        value={memberLimit}
-                        onChange={(e) => setMemberLimit(parseInt(e.target.value, 10))}
-                        className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full cursor-pointer"
-                      >
-                        {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                          <option key={n} value={n}>{n} Members Max</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase">Squad Code</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. SQ-ABC123"
+                      value={joinCodeInput}
+                      onChange={(e) => setJoinCodeInput(e.target.value)}
+                      className="bg-black border border-[#222] px-3 py-1.5 rounded-lg text-xs font-mono text-white placeholder-neutral-700 focus:outline-none focus:border-[var(--primary)] w-full uppercase"
+                    />
                   </div>
+                </div>
 
-                  <button
-                    type="submit"
-                    className="bg-[var(--primary)] text-white font-mono text-xs font-bold py-2 border border-black rounded-lg shadow-[2px_2px_0px_black] uppercase cursor-pointer active:scale-95 transition-all mt-2 w-full"
-                  >
-                    Create Squad
-                  </button>
-                </form>
+                <button
+                  type="submit"
+                  className="bg-[var(--secondary)] text-black font-mono text-xs font-black py-2 border border-black rounded-lg shadow-[2px_2px_0px_black] uppercase cursor-pointer active:scale-95 transition-all"
+                >
+                  Join Squad
+                </button>
+              </form>
 
-              </div>
             </div>
           ) : (
             /* ACTIVE SQUAD VIEW */
             <div className="flex flex-col gap-6">
               
               {/* Active Squad Header */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-neutral-950 to-neutral-900 border border-neutral-805 p-5 rounded-2xl shadow-inner">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-black/30 border border-[#222] p-4 rounded-xl">
                 <div>
-                  <span className="text-[9px] font-mono text-[var(--text-secondary)] uppercase font-bold tracking-wider">Active Squad</span>
-                  <h4 className="font-display font-black text-xl text-white uppercase tracking-wide mt-0.5">
+                  <span className="text-[9px] font-mono text-[var(--text-secondary)] uppercase font-bold">Active Squad</span>
+                  <h4 className="font-display font-black text-xl text-white uppercase tracking-wide">
                     {activeSquad.squadName}
                   </h4>
                   <span className="text-[10px] font-mono text-neutral-500">
@@ -1768,7 +1312,7 @@ export const SquadMatchmaker = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={handleLeaveSquad}
-                    className="flex items-center gap-1.5 bg-red-950/10 border border-red-500/20 hover:border-red-500 hover:bg-red-500/10 text-red-500 font-mono text-[10px] font-bold px-3.5 py-2 rounded-xl cursor-pointer uppercase transition-all"
+                    className="flex items-center gap-1 bg-red-950/20 border border-red-500/30 hover:border-red-500 text-red-500 font-mono text-[9px] font-bold px-3 py-1.5 rounded-lg cursor-pointer uppercase transition-all"
                   >
                     <LogOut size={12} />
                     <span>Leave Squad</span>
@@ -1777,7 +1321,7 @@ export const SquadMatchmaker = () => {
               </div>
 
               {/* Neubrutalist Tab Controls */}
-              <div className="flex flex-wrap border-b border-neutral-850 gap-2 mt-1 pb-3">
+              <div className="flex border-b-2 border-black gap-2 mt-1">
                 {[
                   { id: 'synergy', label: '🗳️ Synergy & Scheduler' },
                   { id: 'warroom', label: '🛡️ Command War Room' },
@@ -1786,10 +1330,10 @@ export const SquadMatchmaker = () => {
                   <button
                     key={t.id}
                     onClick={() => setActiveTab(t.id)}
-                    className={`px-4 py-2.5 font-display font-bold text-xs uppercase border border-neutral-800 rounded-xl transition-all duration-300 cursor-pointer ${
+                    className={`px-4 py-2 font-display font-black text-xs uppercase border-t-2 border-x-2 border-black rounded-t-xl transition-all cursor-pointer ${
                       activeTab === t.id
-                        ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-[0_0_12px_rgba(255,92,0,0.15)] font-bold'
-                        : 'bg-neutral-900/20 text-[var(--text-secondary)] hover:bg-neutral-800/40 hover:text-white'
+                        ? 'bg-black text-[var(--primary)] font-bold border-b-2 border-black pb-[10px] translate-y-[2px]'
+                        : 'bg-neutral-900/40 text-[var(--text-secondary)] border-b-2 border-black pb-2 hover:bg-neutral-950 hover:text-white'
                     }`}
                   >
                     {t.label}
@@ -1801,7 +1345,7 @@ export const SquadMatchmaker = () => {
               {activeTab === 'synergy' && (
                 <div className="flex flex-col gap-6 animate-fadeIn">
                   {/* 1. SYNERGY CHALLENGE PANEL */}
-                  <div className="border border-neutral-800 bg-neutral-900/30 p-5 rounded-xl flex flex-col gap-4 shadow-xl">
+                  <div className="border-2 border-black bg-black/50 p-5 rounded-xl flex flex-col gap-4 shadow-[4px_4px_0px_black]">
                     <div className="flex justify-between items-center border-b border-[#222] pb-2">
                       <span className="text-xs font-mono text-white uppercase font-extrabold tracking-wider flex items-center gap-1.5">
                         <Award size={16} className="text-[var(--accent-xp)]" />
@@ -1861,7 +1405,7 @@ export const SquadMatchmaker = () => {
                                     <span className="text-red-500 font-bold uppercase tracking-wider">Titan Armor integrity</span>
                                     <span>{currentHP.toLocaleString()} / {totalHP.toLocaleString()} HP ({hpPercentage.toFixed(1)}%)</span>
                                   </div>
-                                  <div className="h-6 w-full bg-neutral-950 border border-neutral-800 rounded-xl overflow-hidden relative p-[3px]">
+                                  <div className="h-6 w-full bg-neutral-900 border-2 border-black rounded-lg overflow-hidden relative p-[2px]">
                                     <div 
                                       className="h-full bg-red-600 rounded transition-all duration-1000 ease-out"
                                       style={{ width: `${hpPercentage}%` }}
@@ -2022,8 +1566,8 @@ export const SquadMatchmaker = () => {
                   {/* Grid Layout for details */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     
-                    {/* LEFT COLUMN: ROSTER, CHECK-INS & INVITES (5/12 cols) */}
-                    <div className="lg:col-span-5 flex flex-col gap-6">
+                    {/* LEFT SIDE: ROSTER & POLLS (7/12 cols) */}
+                    <div className="lg:col-span-7 flex flex-col gap-6">
                       
                       {/* Roster Display */}
                       <div className="flex flex-col gap-2.5">
@@ -2033,373 +1577,49 @@ export const SquadMatchmaker = () => {
                         </div>
                         
                         <div className="flex flex-col gap-2.5">
-                          {activeSquadMembers.map((mbr, idx) => {
-                            const isLifting = presenceList.some(p => p.id === mbr.uid && p.time !== 'Not Going');
-                            const avatarStyle = getAvatarStyle(mbr.aura, mbr.level, mbr.powerUps);
-                            const hoursSinceLastWorkout = mbr.updatedAt 
-                              ? (Date.now() - new Date(mbr.updatedAt).getTime()) / (1000 * 60 * 60)
-                              : 999;
-                            const isStreakExpiring = hoursSinceLastWorkout > 24 && (mbr.streak || 0) > 0;
-
-                            return (
-                              <div key={idx} className="border border-neutral-800/85 bg-neutral-900/15 p-3.5 rounded-xl flex items-center justify-between hover:border-neutral-700/60 hover:bg-neutral-900/30 transition-all duration-300 shadow-md text-xs font-mono">
-                                <div 
-                                  className="flex items-center gap-3 cursor-pointer hover:bg-neutral-850 p-1.5 rounded-xl transition-all"
-                                  onClick={() => handleMemberClick(mbr)}
-                                  title="Click to view profile & stats"
-                                >
-                                  {/* Avatar with Aura & Border */}
-                                  <div className="relative shrink-0">
-                                    <div 
-                                      className={`w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden transition-all duration-300 ${
-                                        isLifting ? 'ring-2 ring-green-500 ring-offset-1 ring-offset-black animate-pulse' : ''
-                                      }`}
-                                      style={avatarStyle}
-                                    >
-                                      {mbr.avatarUrl ? (
-                                        <img src={mbr.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                                      ) : (
-                                        <span className="font-display font-extrabold text-[10px] text-white">
-                                          {mbr.name?.slice(0, 2).toUpperCase() || 'ZK'}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {/* Small presence green dot */}
-                                    {isLifting && (
-                                      <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-black animate-ping" />
+                          {activeSquadMembers.map((mbr, idx) => (
+                            <div key={idx} className="border border-[var(--border)] bg-[var(--bg-elevated)] p-3 rounded-xl flex items-center justify-between shadow-[2px_2px_0px_black] text-xs font-mono">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2.5 h-2.5 rounded-full ${mbr.checkIn ? 'bg-[#33FF66]' : 'bg-[#FF3366]'}`} />
+                                <div className="flex flex-col text-left">
+                                  <span className="text-white font-bold">{mbr.name}</span>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {mbr.badges && mbr.badges.length > 0 && (
+                                      <span className="text-[7px] text-[var(--accent-xp)] border border-[var(--accent-xp)]/20 px-1 rounded uppercase font-bold flex items-center gap-0.5">
+                                        <Award size={8} />
+                                        <span>{mbr.badges.length} Trophies</span>
+                                      </span>
+                                    )}
+                                    {mbr.powerUps?.bossFightKey > 0 && (
+                                      <span className="text-[7px] text-[var(--primary)] border border-[var(--primary)]/20 px-1 rounded uppercase font-bold flex items-center gap-0.5">
+                                        <Key size={8} />
+                                        <span>{mbr.powerUps.bossFightKey} Keys</span>
+                                      </span>
                                     )}
                                   </div>
-
-                                  <div className="flex flex-col text-left">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-white font-bold">{mbr.name}</span>
-                                      {isLifting && (
-                                        <span className="text-[7px] bg-green-500/20 text-green-400 border border-green-500/30 px-1 rounded uppercase font-bold animate-pulse">
-                                          🟢 Active Lifter
-                                        </span>
-                                      )}
-                                    </div>
-                                    {mbr.activeTitle && (() => {
-                                      const isDemo = mbr.activeTitle === 'PR Demon' && isTitleActive('pr_demon', mbr.powerUps);
-                                      const isTitan = mbr.activeTitle === 'Titan Hunter' && isTitleActive('titan_hunter', mbr.powerUps);
-                                      if (!isDemo && !isTitan) return null;
-                                      return (
-                                        <span className="text-[8px] text-[var(--accent-xp)] font-bold uppercase tracking-wider mt-0.5">
-                                          {mbr.activeTitle}
-                                        </span>
-                                      );
-                                    })()}
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      {mbr.badges && mbr.badges.length > 0 && (
-                                        <span className="text-[7px] text-[var(--accent-xp)] border border-[var(--accent-xp)]/20 px-1 rounded uppercase font-bold flex items-center gap-0.5">
-                                          <Award size={8} />
-                                          <span>{mbr.badges.length} Trophies</span>
-                                        </span>
-                                      )}
-                                      {mbr.powerUps?.bossFightKey > 0 && (
-                                        <span className="text-[7px] text-[var(--primary)] border border-[var(--primary)]/20 px-1 rounded uppercase font-bold flex items-center gap-0.5">
-                                          <Key size={8} />
-                                          <span>{mbr.powerUps.bossFightKey} Keys</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 text-[10px] text-[var(--text-secondary)]">
-                                  <span>Streak: <strong className="text-white">{mbr.streak || 0}d</strong></span>
-                                  <span>Volume: <strong className="text-white">{Math.round(mbr.volume || 0)}kg</strong></span>
-                                  {isStreakExpiring && mbr.uid !== uid && (
-                                    <button
-                                      onClick={() => handleRescueStreak(mbr)}
-                                      className="bg-orange-500 hover:bg-orange-600 text-black font-display font-black text-[8px] px-2 py-0.5 border border-black rounded shadow-[1px_1px_0px_black] uppercase cursor-pointer flex items-center gap-0.5 active:translate-x-[0.5px] active:translate-y-[0.5px] active:shadow-none transition-all"
-                                      title="Gift teammate a Streak Shield to protect their streak (costs 50 XP)!"
-                                    >
-                                      <Flame size={8} className="text-black" />
-                                      <span>Rescue (50 XP)</span>
-                                    </button>
-                                  )}
-                                  {isCreator && mbr.uid !== uid && (
-                                    <button
-                                      onClick={() => handleKickMember(mbr.uid)}
-                                      className="text-red-500 hover:text-red-400 cursor-pointer p-1"
-                                      title="Kick member"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  )}
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Presence Check-In Panel */}
-                      <div className="border border-neutral-800 bg-neutral-900/10 p-6 rounded-2xl flex flex-col gap-4 text-left shadow-xl">
-                        <div className="flex justify-between items-center border-b border-neutral-800/60 pb-3">
-                          <span className="font-display font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
-                            <Calendar size={18} className="text-[var(--accent-xp)]" />
-                            <span>Today's Gym Check-Ins</span>
-                          </span>
-                        </div>
-
-                        {presenceList.length > 0 ? (
-                          <div className="flex flex-col gap-2">
-                            {presenceList.map((presence) => {
-                              const mInfo = activeSquadMembers.find(m => m.uid === presence.id);
-                              return (
-                                <div 
-                                  key={presence.id} 
-                                  className="border border-neutral-800/80 bg-neutral-950/40 p-3.5 rounded-xl flex items-center gap-2.5 font-mono text-xs text-left shadow-md cursor-pointer hover:border-neutral-700/60 hover:bg-neutral-900/20 transition-all"
-                                  onClick={() => mInfo && handleMemberClick(mInfo)}
-                                  title="Click to view profile & stats"
-                                >
-                                  <span className="text-sm">{presence.time === 'Not Going' ? '😴' : '🏋️‍♂️'}</span>
-                                  <div className="flex flex-col">
-                                    <span className="text-white font-bold">{presence.name}</span>
-                                    <span className="text-[9px] text-[var(--accent-xp)] uppercase font-bold">
-                                      {presence.time === 'Not Going' ? 'Not hitting the gym today ❌' : `Going to Gym today at ${presence.time}`}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="py-8 px-4 border border-dashed border-neutral-850 rounded-xl text-center flex flex-col items-center justify-center gap-3 bg-neutral-950/20">
-                            <Calendar className="text-neutral-600 animate-pulse" size={32} />
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs font-mono text-white font-bold uppercase">No Check-Ins</span>
-                              <span className="text-[10px] text-neutral-500 max-w-xs font-sans">
-                                Let your squad know when you're hitting the gym today by checking in below.
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        <form onSubmit={handleCheckIn} className="border-t border-neutral-800/60 pt-4 flex flex-col gap-3">
-                          <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase font-bold tracking-wider">Check In Gym Time Today</span>
-                          <div className="flex gap-2">
-                            <select
-                              value={checkInTime}
-                              onChange={(e) => setCheckInTime(e.target.value)}
-                              className="bg-black border border-neutral-800 focus:border-[var(--accent-xp)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent-xp)] w-full cursor-pointer transition-all"
-                            >
-                              {['05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', 'Not Going'].map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                            </select>
-                            <button
-                              type="submit"
-                              className="bg-[var(--accent-xp)] text-black font-display font-black text-xs px-5 py-2.5 rounded-xl uppercase cursor-pointer shrink-0 hover:brightness-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(181,255,45,0.15)]"
-                            >
-                              {checkInTime === 'Not Going' ? 'Confirm' : "I'm Going"}
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-
-                      {/* Share Code Widget */}
-                      <div className="flex items-center justify-between border border-neutral-800 bg-neutral-900/10 p-4 rounded-xl shadow-md">
-                        <div className="flex flex-col gap-0.5 text-left">
-                          <span className="text-[10px] font-mono text-white uppercase font-bold">Invite Gym Bros</span>
-                          <span className="text-[9px] text-neutral-500">Share this code to let friends join:</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(activeSquad.squadCode);
-                            showAppAlert('Squad Code copied to clipboard!', 'Success');
-                          }}
-                          className="bg-[var(--primary)] text-black font-display font-black text-[10px] px-3.5 py-2.5 rounded-xl uppercase cursor-pointer flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(255,92,0,0.15)]"
-                        >
-                          <Copy size={12} />
-                          <span>Code: {activeSquad.squadCode}</span>
-                        </button>
-                      </div>
-
-                    </div>
-
-                    {/* RIGHT COLUMN: ACTIVITY FEED & POLLS (7/12 cols) */}
-                    <div className="lg:col-span-7 flex flex-col gap-6">
-                      
-                      {/* Live Squad Activity Feed */}
-                      <div className="border border-neutral-800 bg-neutral-900/10 p-6 rounded-2xl flex flex-col gap-4 text-left shadow-xl">
-                        <div className="flex justify-between items-center border-b border-neutral-800/60 pb-3">
-                          <span className="font-display font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
-                            <TrendingUp size={18} className="text-[var(--primary)]" />
-                            <span>Squad Activity Feed</span>
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-4 max-h-[500px] overflow-y-auto pr-1">
-                          {activityList.length > 0 ? (
-                            activityList.map((activity) => {
-                              const memberInfo = activeSquadMembers.find(m => m.uid === activity.uid);
-                              const avatarUrl = memberInfo?.avatarUrl;
-                              const aura = memberInfo?.aura;
-                              const levelVal = memberInfo?.level;
-                              const avatarStyle = getAvatarStyle(aura, levelVal, memberInfo?.powerUps);
-
-                              const hasHighFived = activity.highFives?.includes(uid);
-                              const hasKudosed = activity.kudos?.includes(uid);
-
-                              let cardClass = "border border-neutral-800/80 bg-neutral-900/20 p-4 rounded-xl flex flex-col gap-3 relative overflow-hidden shadow-sm";
-                              let themeTitleColor = "text-white";
-                              let themeBadge = null;
-
-                              if (activity.cardTheme === 'pr_smash') {
-                                cardClass = "border-2 border-slate-300 bg-gradient-to-b from-[#1b1f24] to-[#0f1115] p-4 rounded-xl flex flex-col gap-3 relative overflow-hidden shadow-[0_0_12px_rgba(203,213,225,0.18)]";
-                                themeTitleColor = "text-slate-200";
-                                themeBadge = (
-                                  <span className="text-[8px] bg-slate-200/20 text-slate-200 border border-slate-200/30 px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5 shadow-[0_0_8px_rgba(203,213,225,0.4)]">
-                                    🏆 PR SMASH
-                                  </span>
-                                );
-                              } else if (activity.cardTheme === 'titan_slayer') {
-                                cardClass = "border-2 border-red-600 bg-gradient-to-b from-[#1a0b0b] to-[#080202] p-4 rounded-xl flex flex-col gap-3 relative overflow-hidden shadow-[0_0_12px_rgba(239,68,68,0.2)]";
-                                themeTitleColor = "text-red-400";
-                                themeBadge = (
-                                  <span className="text-[8px] bg-red-600/20 text-red-400 border border-red-600/30 px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse">
-                                    👹 TITAN SLAYER
-                                  </span>
-                                );
-                              }
-
-                              return (
-                                <div key={activity.id} className={cardClass}>
-                                  {/* Top Row: User Avatar & Name */}
-                                  <div className="flex items-center justify-between">
-                                    <div 
-                                      className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-all"
-                                      onClick={() => memberInfo && handleMemberClick(memberInfo)}
-                                      title="Click to view profile & stats"
-                                    >
-                                      <div 
-                                        className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden shrink-0 transition-all duration-300"
-                                        style={avatarStyle}
-                                      >
-                                        {avatarUrl ? (
-                                          <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                                        ) : (
-                                          <span className="font-display font-extrabold text-[9px] text-white">
-                                            {activity.name?.slice(0, 2).toUpperCase() || 'ZK'}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-col text-left">
-                                        <span className="text-white font-bold text-xs">{activity.name}</span>
-                                        <span className="text-[8px] text-neutral-500 font-mono">
-                                          {activity.createdAt ? new Date(activity.createdAt.toDate ? activity.createdAt.toDate() : activity.createdAt).toLocaleDateString() : 'Just now'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    {themeBadge}
-                                  </div>
-
-                                  {/* Middle Row: Workout Details */}
-                                  <div className="flex flex-col gap-1.5 text-left border-t border-b border-[#222]/40 py-2.5 my-0.5">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-white font-black text-xs uppercase tracking-wide">
-                                        {activity.workoutName}
-                                      </span>
-                                      {activity.isQuickLog && (
-                                        <span className="text-[7px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1 py-0.5 rounded uppercase font-bold">
-                                          ⚡ Retroactive Log
-                                        </span>
-                                      )}
-                                    </div>
-                                    
-                                    <div className="flex flex-wrap gap-2 text-[10px] text-neutral-400 font-mono mt-1">
-                                      <span className="bg-black/45 px-2 py-0.5 rounded border border-[#222]/40">
-                                        Sets: <strong className="text-white">{activity.totalSets}</strong>
-                                      </span>
-                                      <span className="bg-black/45 px-2 py-0.5 rounded border border-[#222]/40">
-                                        Exercises: <strong className="text-white">{activity.exercisesCount}</strong>
-                                      </span>
-                                      <span className="bg-black/45 px-2 py-0.5 rounded border border-[#222]/40">
-                                        Volume: <strong className="text-white">{Math.round(activity.totalVolume).toLocaleString()}kg</strong>
-                                      </span>
-                                    </div>
-
-                                    {activity.prNames && activity.prNames.length > 0 && (
-                                      <div className="mt-1 flex flex-col gap-1 text-[9px] font-mono">
-                                        <span className="text-amber-500 font-bold uppercase tracking-wider flex items-center gap-0.5">
-                                          🔥 PRs Broken:
-                                        </span>
-                                        <div className="flex flex-wrap gap-1 mt-0.5">
-                                          {activity.prNames.map((pr, prIdx) => (
-                                            <span key={prIdx} className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded uppercase font-extrabold text-[8px]">
-                                              {pr}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Bottom Row: Kudos & High Five Reactions */}
-                                  <div className="flex gap-2 relative mt-1">
-                                    <button
-                                      onClick={() => handleSocialAction(activity.id, 'highFive')}
-                                      className={`flex items-center gap-1.5 font-display font-black text-[9px] px-3 py-1.5 border border-neutral-800 rounded-lg uppercase cursor-pointer transition-all ${
-                                        hasHighFived 
-                                          ? 'bg-yellow-500 text-black' 
-                                          : 'bg-neutral-950 text-white hover:bg-neutral-900'
-                                      }`}
-                                    >
-                                      <span>👏</span>
-                                      <span>{activity.highFives?.length || 0} High-Fives</span>
-                                    </button>
-
-                                    <button
-                                      onClick={() => handleSocialAction(activity.id, 'kudos')}
-                                      className={`flex items-center gap-1.5 font-display font-black text-[9px] px-3 py-1.5 border border-neutral-800 rounded-lg uppercase cursor-pointer transition-all ${
-                                        hasKudosed 
-                                          ? 'bg-red-600 text-white' 
-                                          : 'bg-neutral-950 text-white hover:bg-neutral-900'
-                                      }`}
-                                    >
-                                      <span>🔥</span>
-                                      <span>{activity.kudos?.length || 0} Kudos</span>
-                                    </button>
-
-                                    {/* Floating Emojis Animation container */}
-                                    <AnimatePresence>
-                                      {(floatingEmojis[activity.id] || []).map((e) => (
-                                        <motion.span
-                                          key={e.id}
-                                          initial={{ opacity: 1, scale: 0.5, y: 0, x: 0 }}
-                                          animate={{ opacity: 0, scale: 1.5, y: -70, x: e.x }}
-                                          exit={{ opacity: 0 }}
-                                          transition={{ duration: 1, ease: 'easeOut' }}
-                                          className="absolute text-base pointer-events-none"
-                                          style={{ left: '50%', transform: 'translateX(-50%)', bottom: '24px', zIndex: 50 }}
-                                        >
-                                          {e.emoji}
-                                        </motion.span>
-                                      ))}
-                                    </AnimatePresence>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="py-8 px-4 border border-dashed border-neutral-850 rounded-xl text-center flex flex-col items-center justify-center gap-3 bg-neutral-950/20">
-                              <MessageSquare className="text-neutral-600 animate-pulse" size={32} />
-                              <div className="flex flex-col gap-0.5">
-                                <span className="text-xs font-mono text-white font-bold uppercase">No Activity</span>
-                                <span className="text-[10px] text-neutral-500 max-w-xs font-sans">
-                                  No workouts logged by your squad members yet. Push harder and log your sets!
-                                </span>
+                              <div className="flex items-center gap-4 text-[10px] text-[var(--text-secondary)]">
+                                <span>Streak: <strong className="text-white">{mbr.streak || 0}d</strong></span>
+                                <span>Volume: <strong className="text-white">{Math.round(mbr.volume || 0)}kg</strong></span>
+                                {isCreator && mbr.uid !== uid && (
+                                  <button
+                                    onClick={() => handleKickMember(mbr.uid)}
+                                    className="text-red-500 hover:text-red-400 cursor-pointer p-1"
+                                    title="Kick member"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
                               </div>
                             </div>
-                          )}
+                          ))}
                         </div>
                       </div>
 
                       {/* Scheduler Polls Panel */}
-                      <div className="border border-neutral-800 bg-neutral-900/10 p-6 rounded-2xl flex flex-col gap-4 text-left shadow-xl">
-                        <div className="flex justify-between items-center border-b border-neutral-800/60 pb-3">
+                      <div className="border-2 border-black bg-black/45 p-6 rounded-2xl shadow-[4px_4px_0px_black] flex flex-col gap-4 text-left">
+                        <div className="flex justify-between items-center border-b border-[#222] pb-3">
                           <span className="font-display font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
                             <Vote size={18} className="text-[var(--primary)]" />
                             <span>Squad Scheduler Polls</span>
@@ -2411,8 +1631,8 @@ export const SquadMatchmaker = () => {
                             {pollsList.map((poll) => {
                               const totalVotes = Object.keys(poll.votes || {}).length;
                               return (
-                                <div key={poll.id} className="border border-neutral-800 bg-neutral-950/40 p-4 rounded-xl shadow-md flex flex-col gap-3 font-mono text-xs text-left">
-                                  <div className="flex justify-between items-start gap-2 border-b border-neutral-800/40 pb-2">
+                                <div key={poll.id} className="border-2 border-black bg-black/60 p-4 rounded-xl shadow-[3px_3px_0px_black] flex flex-col gap-3 font-mono text-xs text-left">
+                                  <div className="flex justify-between items-start gap-2 border-b border-[#222]/40 pb-2">
                                     <div className="flex flex-col">
                                       <span className="text-xs text-[var(--primary)] font-bold">{poll.question}</span>
                                       <span className="text-[8px] text-neutral-500 uppercase mt-0.5 font-bold">Started by {poll.creatorName} • {totalVotes} votes</span>
@@ -2429,8 +1649,8 @@ export const SquadMatchmaker = () => {
                                         <button
                                           key={optIdx}
                                           onClick={() => handleVote(poll.id, optIdx)}
-                                          className={`relative w-full border border-neutral-800 hover:border-[var(--primary)] text-left px-4 py-3 rounded-xl font-mono text-xs text-white uppercase cursor-pointer transition-all overflow-hidden flex justify-between items-center ${
-                                            hasVoted ? 'bg-black border-[var(--primary)] shadow-[0_0_10px_rgba(255,92,0,0.1)]' : 'bg-neutral-950/40 hover:bg-neutral-900/30'
+                                          className={`relative w-full border-2 border-black hover:border-[var(--primary)] text-left px-3 py-2.5 rounded-lg font-mono text-xs text-white uppercase cursor-pointer transition-all overflow-hidden flex justify-between items-center ${
+                                            hasVoted ? 'bg-black border-[var(--primary)]' : 'bg-black/50'
                                           }`}
                                         >
                                           <div 
@@ -2451,7 +1671,7 @@ export const SquadMatchmaker = () => {
                             })}
                           </div>
                         ) : (
-                          <div className="py-8 px-4 border border-dashed border-neutral-850 rounded-xl text-center flex flex-col items-center justify-center gap-3 bg-neutral-950/20">
+                          <div className="py-8 px-4 border-2 border-dashed border-[#222] rounded-xl text-center flex flex-col items-center justify-center gap-3 bg-black/20">
                             <Vote className="text-neutral-600 animate-pulse" size={32} />
                             <div className="flex flex-col gap-0.5">
                               <span className="text-xs font-mono text-white font-bold uppercase">No Polls Active</span>
@@ -2462,7 +1682,7 @@ export const SquadMatchmaker = () => {
                           </div>
                         )}
 
-                        <form onSubmit={handleCreatePoll} className="border-t border-neutral-800/60 pt-4 flex flex-col gap-3">
+                        <form onSubmit={handleCreatePoll} className="border-t border-[#222] pt-4 flex flex-col gap-3">
                           <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase font-bold tracking-wider">Start Gym Schedule Poll</span>
                           
                           <div className="flex flex-col gap-1.5">
@@ -2473,7 +1693,7 @@ export const SquadMatchmaker = () => {
                               placeholder="e.g. When are we hitting chest tomorrow?"
                               value={pollQuestion}
                               onChange={(e) => setPollQuestion(e.target.value)}
-                              className="bg-black border border-neutral-800 focus:border-[var(--primary)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--primary)] w-full transition-all"
+                              className="bg-black border-2 border-black focus:border-[var(--primary)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--primary)] w-full transition-all"
                             />
                           </div>
 
@@ -2485,14 +1705,14 @@ export const SquadMatchmaker = () => {
                               placeholder="e.g. 06:00, 16:30, 18:00"
                               value={pollOptionsInput}
                               onChange={(e) => setPollOptionsInput(e.target.value)}
-                              className="bg-black border border-neutral-800 focus:border-[var(--primary)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--primary)] w-full transition-all"
+                              className="bg-black border-2 border-black focus:border-[var(--primary)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--primary)] w-full transition-all"
                             />
                           </div>
 
                           <button
                             type="submit"
                             disabled={creatingPoll}
-                            className="bg-[var(--primary)] hover:brightness-110 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-black font-display font-black text-xs uppercase px-5 py-2.5 rounded-xl shadow-[0_0_12px_rgba(255,92,0,0.15)] active:scale-95 transition-all cursor-pointer self-end mt-2 flex items-center gap-1.5"
+                            className="bg-[var(--primary)] hover:brightness-110 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-black font-display font-black text-xs uppercase px-5 py-2.5 rounded-lg border-2 border-black shadow-[3px_3px_0px_black] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_black] transition-all cursor-pointer self-end mt-2 flex items-center gap-1.5"
                           >
                             <Plus size={14} />
                             <span>Launch Poll</span>
@@ -2501,8 +1721,86 @@ export const SquadMatchmaker = () => {
                       </div>
 
                     </div>
-                  </div>
 
+                    {/* RIGHT SIDE: CHECK-INS & UTILS (5/12 cols) */}
+                    <div className="lg:col-span-5 flex flex-col gap-6">
+                      
+                      {/* Presence Check-In Panel */}
+                      <div className="border-2 border-black bg-black/45 p-6 rounded-2xl shadow-[4px_4px_0px_black] flex flex-col gap-4 text-left">
+                        <div className="flex justify-between items-center border-b border-[#222] pb-3">
+                          <span className="font-display font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                            <Calendar size={18} className="text-[var(--accent-xp)]" />
+                            <span>Today's Gym Check-Ins</span>
+                          </span>
+                        </div>
+
+                        {presenceList.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {presenceList.map((presence) => (
+                              <div key={presence.id} className="border-2 border-black bg-black/50 p-3 rounded-xl flex items-center gap-2.5 font-mono text-xs text-left shadow-[2px_2px_0px_black]">
+                                <span className="text-sm">🏋️‍♂️</span>
+                                <div className="flex flex-col">
+                                  <span className="text-white font-bold">{presence.name}</span>
+                                  <span className="text-[9px] text-[var(--accent-xp)] uppercase font-bold">Going to Gym today at {presence.time}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="py-8 px-4 border-2 border-dashed border-[#222] rounded-xl text-center flex flex-col items-center justify-center gap-3 bg-black/20">
+                            <Calendar className="text-neutral-600 animate-pulse" size={32} />
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs font-mono text-white font-bold uppercase">No Check-Ins</span>
+                              <span className="text-[10px] text-neutral-500 max-w-xs font-sans">
+                                Let your squad know when you're hitting the gym today by checking in below.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <form onSubmit={handleCheckIn} className="border-t border-[#222] pt-4 flex flex-col gap-3">
+                          <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase font-bold tracking-wider">Check In Gym Time Today</span>
+                          <div className="flex gap-2">
+                            <select
+                              value={checkInTime}
+                              onChange={(e) => setCheckInTime(e.target.value)}
+                              className="bg-black border-2 border-black focus:border-[var(--accent-xp)] px-4 py-2.5 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent-xp)] w-full cursor-pointer transition-all"
+                            >
+                              {['05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="submit"
+                              className="bg-[var(--accent-xp)] text-black font-display font-black text-xs px-5 py-2.5 border-2 border-black rounded-lg shadow-[3px_3px_0px_black] uppercase cursor-pointer shrink-0 hover:brightness-110 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_black] transition-all"
+                            >
+                              I'm Going
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      {/* Share Code Widget */}
+                      <div className="flex items-center justify-between border-2 border-black bg-black/45 p-4 rounded-xl shadow-[3px_3px_0px_black]">
+                        <div className="flex flex-col gap-0.5 text-left">
+                          <span className="text-[10px] font-mono text-white uppercase font-bold">Invite Gym Bros</span>
+                          <span className="text-[9px] text-neutral-500">Share this code to let friends join:</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(activeSquad.squadCode);
+                            alert('Squad Code copied to clipboard!');
+                          }}
+                          className="bg-[var(--primary)] text-black font-display font-black text-[10px] px-3.5 py-2 border-2 border-black rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer flex items-center gap-1.5 hover:brightness-110 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_black] transition-all"
+                        >
+                          <Copy size={12} />
+                          <span>Code: {activeSquad.squadCode}</span>
+                        </button>
+                      </div>
+
+                    </div>
+
+                  </div>
                 </div>
               )}
 
@@ -2711,7 +2009,7 @@ export const SquadMatchmaker = () => {
                           ) : (
                             sortedFreeAgents.map((agent) => (
                               <tr key={agent.uid} className="border-b border-[#222] hover:bg-black/30 transition-all">
-                                <td className="py-3.5 px-3 text-white font-bold cursor-pointer hover:underline" onClick={() => handleMemberClick(agent)}>{agent.name}</td>
+                                <td className="py-3.5 px-3 text-white font-bold">{agent.name}</td>
                                 <td className="py-3.5 px-3 text-[var(--accent-xp)] font-bold">{agent.consistency}%</td>
                                 <td className="py-3.5 px-3">{agent.squatPR} kg</td>
                                 <td className="py-3.5 px-3">{agent.benchPR} kg</td>
@@ -2719,7 +2017,7 @@ export const SquadMatchmaker = () => {
                                 <td className="py-3.5 px-3 font-bold">{agent.streak} Days</td>
                                 <td className="py-3.5 px-3 text-right flex justify-end gap-2.5">
                                   <button
-                                    onClick={() => handleMemberClick(agent)}
+                                    onClick={() => setSelectedAgent(agent)}
                                     className="px-3 py-1 bg-black hover:bg-neutral-900 border-2 border-black text-[10px] text-white font-bold uppercase rounded shadow-[1.5px_1.5px_0px_black] transition-all cursor-pointer"
                                   >
                                     Scout
@@ -2754,325 +2052,144 @@ export const SquadMatchmaker = () => {
                       </table>
                     </div>
                   </div>
+
+                  {/* Scouting Radar Modal overlay */}
+                  <AnimatePresence>
+                    {selectedAgent && !tradeModalOpen && (
+                      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                        <motion.div
+                          initial={{ scale: 0.95, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.95, opacity: 0 }}
+                          className="border-4 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[5px_5px_0px_black] w-full max-w-md text-left flex flex-col gap-4 relative"
+                        >
+                          <div className="border-b-2 border-black pb-3">
+                            <span className="text-[10px] font-mono text-neutral-500 uppercase block">Athlete Scouting Card</span>
+                            <h4 className="font-display font-black text-2xl text-[var(--primary)] uppercase mt-0.5">
+                              {selectedAgent.name}
+                            </h4>
+                          </div>
+
+                          {/* Radar chart container */}
+                          <div className="h-[220px] w-full font-mono text-[9px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={selectedAgent.attributes}>
+                                <PolarGrid stroke="#333" />
+                                <PolarAngleAxis dataKey="subject" stroke="#888" />
+                                <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#444" tick={false} />
+                                <Radar name={selectedAgent.name} dataKey="A" stroke="var(--secondary)" fill="var(--secondary)" fillOpacity={0.2} />
+                              </RadarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-xs font-mono bg-black/40 p-3 rounded-lg border border-neutral-900 mt-2">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-neutral-500 uppercase">Bench / Squat PR</span>
+                              <span className="text-white font-bold">{selectedAgent.benchPR} / {selectedAgent.squatPR} kg</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-neutral-500 uppercase">Workout Consistency</span>
+                              <span className="text-[var(--accent-xp)] font-bold">{selectedAgent.consistency}%</span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-3 border-t border-[#181818] pt-4 mt-2">
+                            <button
+                              onClick={() => setSelectedAgent(null)}
+                              className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-white bg-black hover:bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
+                            >
+                              Close
+                            </button>
+                            {isAgentInSquad(selectedAgent.uid) ? (
+                              <button
+                                disabled
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-neutral-500 bg-neutral-800 rounded shadow-[2px_2px_0px_black] uppercase cursor-not-allowed"
+                              >
+                                Member
+                              </button>
+                            ) : isAgentInvitePending(selectedAgent.uid) ? (
+                              <button
+                                disabled
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-neutral-500 bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-not-allowed"
+                              >
+                                Pending Invite
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleDraftAgent(selectedAgent)}
+                                className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-[var(--primary)] hover:brightness-110 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
+                              >
+                                Draft Agent
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Trade Modal Overlay */}
+                  <AnimatePresence>
+                    {tradeModalOpen && selectedAgent && (
+                      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                        <motion.div
+                          initial={{ scale: 0.95, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.95, opacity: 0 }}
+                          className="border-4 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[5px_5px_0px_black] w-full max-w-md text-left flex flex-col gap-4"
+                        >
+                          <div className="border-b-2 border-black pb-3">
+                            <span className="text-[10px] font-mono text-red-500 uppercase font-black block">🚨 Squad Capacity Reached</span>
+                            <h4 className="font-display font-black text-xl text-white uppercase mt-0.5">
+                              Draft Trade Protocol
+                            </h4>
+                            <p className="text-[11px] text-neutral-400 font-sans leading-relaxed mt-2.5">
+                              Your squad is at capacity ({activeSquad.memberLimit}/{activeSquad.memberLimit} members). To draft <strong>{selectedAgent.name}</strong>, select a teammate to trade/release.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 mt-2">
+                            <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase font-bold">Select Teammate to Release</label>
+                            <select
+                              value={tradeTargetUid}
+                              onChange={(e) => setTradeTargetUid(e.target.value)}
+                              className="bg-black border border-[#222] px-3.5 py-2 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full cursor-pointer"
+                            >
+                              {activeSquadMembers.filter(m => m.uid !== uid).map(m => (
+                                <option key={m.uid} value={m.uid}>
+                                  {m.name.replace(' (You)', '')} (Streak: {m.streak}d, Vol: {Math.round(m.volume || 0)}kg)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex justify-end gap-3 border-t border-[#181818] pt-4 mt-2">
+                            <button
+                              onClick={() => {
+                                setTradeModalOpen(false);
+                                setSelectedAgent(null);
+                              }}
+                              className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-white bg-black hover:bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleExecuteTrade}
+                              className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-red-500 hover:bg-red-600 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
+                            >
+                              Confirm Trade
+                            </button>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
+
                 </div>
               )}
 
             </div>
           )}
-
-          {/* Squad Member & Free Agent Unified Stats Card Modal Overlay */}
-          <AnimatePresence>
-            {selectedMember && (
-              <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.95, opacity: 0 }}
-                  className="border-4 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[6px_6px_0px_black] w-full max-w-md text-left flex flex-col gap-4 relative font-mono text-xs"
-                >
-                  <button
-                    onClick={() => setSelectedMember(null)}
-                    className="absolute top-4 right-4 text-neutral-400 hover:text-white font-bold text-lg cursor-pointer"
-                  >
-                    ✕
-                  </button>
-
-                  <div className="border-b-2 border-black pb-3">
-                    <span className="text-[10px] text-[var(--accent-xp)] uppercase font-bold tracking-wider block">
-                      {isAgentInSquad(selectedMember.uid) ? "Squad Mate Profile Card" : "Athlete Scouting Card"}
-                    </span>
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <div 
-                        className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden border-2 border-[var(--border)]"
-                        style={getAvatarStyle(selectedMember.aura, selectedMember.level, selectedMember.powerUps)}
-                      >
-                        {selectedMember.avatarUrl ? (
-                          <img src={selectedMember.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="font-display font-extrabold text-sm text-white">
-                            {selectedMember.name?.slice(0, 2).toUpperCase() || 'ZK'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-col text-left">
-                        <h4 className="font-display font-black text-xl text-white uppercase leading-tight">
-                          {selectedMember.name?.replace(' (You)', '')}
-                        </h4>
-                        {selectedMember.activeTitle && (() => {
-                          const isDemo = selectedMember.activeTitle === 'PR Demon' && isTitleActive('pr_demon', selectedMember.powerUps);
-                          const isTitan = selectedMember.activeTitle === 'Titan Hunter' && isTitleActive('titan_hunter', selectedMember.powerUps);
-                          if (!isDemo && !isTitan) return null;
-                          return (
-                            <span className="text-[9px] text-[var(--accent-xp)] font-bold uppercase tracking-widest mt-0.5">
-                              {selectedMember.activeTitle}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {loadingMemberStats ? (
-                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-neutral-400">
-                      <div className="w-6 h-6 border-2 border-neutral-600 border-t-white rounded-full animate-spin" />
-                      <span className="text-[10px] uppercase font-bold">Scanning database...</span>
-                    </div>
-                  ) : selectedMemberStats ? (
-                    <div className="flex flex-col gap-3.5">
-                      {/* Core Stats Grid */}
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-black/30 p-2 rounded-lg border border-neutral-900 flex flex-col">
-                          <span className="text-[8px] text-neutral-500 uppercase">Level</span>
-                          <span className="text-white font-bold text-sm mt-0.5">
-                            {selectedMemberStats.level || 1}
-                          </span>
-                        </div>
-                        <div className="bg-black/30 p-2 rounded-lg border border-neutral-900 flex flex-col">
-                          <span className="text-[8px] text-neutral-500 uppercase">Streak</span>
-                          <span className="text-[var(--primary)] font-bold text-sm mt-0.5">
-                            🔥 {selectedMemberStats.streak || 0}d
-                          </span>
-                        </div>
-                        <div className="bg-black/30 p-2 rounded-lg border border-neutral-900 flex flex-col">
-                          <span className="text-[8px] text-neutral-500 uppercase">Aura Power</span>
-                          <span className="text-purple-400 font-bold text-sm mt-0.5">
-                            ✨ {selectedMemberStats.aura && isAuraActive(selectedMemberStats.aura, selectedMemberStats.powerUps) ? selectedMemberStats.aura.replace('aura_', '').toUpperCase() : 'NONE'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Scouting Radar Chart */}
-                      {selectedMemberStats.attributes && (
-                        <div className="h-[160px] w-full font-mono text-[9px] my-1 bg-black/10 rounded-lg p-2 border border-neutral-900/50">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={selectedMemberStats.attributes}>
-                              <PolarGrid stroke="#222" />
-                              <PolarAngleAxis dataKey="subject" stroke="#666" />
-                              <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#333" tick={false} />
-                              <Radar name={selectedMemberStats.name} dataKey="A" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.15} />
-                            </RadarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-
-                      {/* Onboarding & Goals Section */}
-                      <div className="bg-black/25 p-3 rounded-lg border border-neutral-900 flex flex-col gap-2 text-xs">
-                        <div className="flex justify-between border-b border-neutral-900/60 pb-1.5">
-                          <span className="text-neutral-500">Fitness Goal:</span>
-                          <span className="text-white font-bold">{selectedMemberStats.goal || 'Not set'}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-neutral-900/60 pb-1.5">
-                          <span className="text-neutral-500">Frequency:</span>
-                          <span className="text-white font-bold">{selectedMemberStats.workoutFrequency || 'Not set'}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-neutral-900/60 pb-1.5">
-                          <span className="text-neutral-500">Diet Type:</span>
-                          <span className="text-white font-bold">{selectedMemberStats.dietType || 'Not set'}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-neutral-900/60 pb-1.5">
-                          <span className="text-neutral-500">Active Gym:</span>
-                          <span className="text-white font-bold">{selectedMemberStats.gymName || 'No gym joined'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-neutral-500">Total Workouts:</span>
-                          <span className="text-white font-bold">{selectedMemberStats.totalSessions || 0} logged</span>
-                        </div>
-                      </div>
-
-                      {/* Trophies & Inventory */}
-                      <div className="bg-black/25 p-3 rounded-lg border border-neutral-900 flex flex-col gap-2 text-xs">
-                        <div className="text-[9px] text-neutral-500 uppercase font-bold tracking-wider">
-                          Trophy & Inventory Status
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          <div className="bg-neutral-900/80 px-2 py-1 rounded border border-neutral-800 flex items-center gap-1">
-                            <Award size={10} className="text-[var(--accent-xp)]" />
-                            <span className="text-[10px] text-white">
-                              {(selectedMemberStats.badges || []).length} Trophies
-                            </span>
-                          </div>
-                          <div className="bg-neutral-900/80 px-2 py-1 rounded border border-neutral-800 flex items-center gap-1">
-                            <Flame size={10} className="text-orange-500" />
-                            <span className="text-[10px] text-white">
-                              {selectedMemberStats.powerUps?.streakShield || 0} Shields
-                            </span>
-                          </div>
-                          <div className="bg-neutral-900/80 px-2 py-1 rounded border border-neutral-800 flex items-center gap-1">
-                            <Key size={10} className="text-[var(--primary)]" />
-                            <span className="text-[10px] text-white">
-                              {selectedMemberStats.powerUps?.bossFightKey || 0} Boss Keys
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-6 text-center text-neutral-500 text-xs">
-                      Failed to load player stats.
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-3 border-t border-[#181818] pt-4 mt-2">
-                    {isAgentInSquad(selectedMember.uid) ? (
-                      selectedMember.uid !== uid && (
-                        <button
-                          onClick={() => {
-                            const hoursSinceLastWorkout = selectedMember.updatedAt 
-                              ? (Date.now() - new Date(selectedMember.updatedAt).getTime()) / (1000 * 60 * 60)
-                              : 999;
-                            const isStreakExpiring = hoursSinceLastWorkout > 24 && (selectedMember.streak || 0) > 0;
-
-                            if (isStreakExpiring) {
-                              handleRescueStreak(selectedMember);
-                            } else {
-                              showAppAlert("This teammate's streak is active and does not require rescue!", "Streak Active");
-                            }
-                          }}
-                          className={`px-4 py-2 border-2 border-black text-xs font-bold rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer ${
-                            selectedMember.streak > 0 
-                              ? "bg-orange-500 text-black hover:bg-orange-600" 
-                              : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
-                          }`}
-                        >
-                          Rescue Streak
-                        </button>
-                      )
-                    ) : (
-                      isAgentInvitePending(selectedMember.uid) ? (
-                        <button
-                          disabled
-                          className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-neutral-500 bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-not-allowed"
-                        >
-                          Pending Invite
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            handleDraftAgent(selectedMember);
-                            setSelectedMember(null);
-                          }}
-                          className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-[var(--primary)] hover:brightness-110 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                        >
-                          Draft Agent
-                        </button>
-                      )
-                    )}
-                    <button
-                      onClick={() => setSelectedMember(null)}
-                      className="px-4 py-2 border-2 border-black text-xs font-bold text-white bg-black hover:bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Trade Modal Overlay */}
-          <AnimatePresence>
-            {tradeModalOpen && selectedAgent && (
-              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.95, opacity: 0 }}
-                  className="border-4 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[5px_5px_0px_black] w-full max-w-md text-left flex flex-col gap-4"
-                >
-                  <div className="border-b-2 border-black pb-3">
-                    <span className="text-[10px] font-mono text-red-500 uppercase font-black block">🚨 Squad Capacity Reached</span>
-                    <h4 className="font-display font-black text-xl text-white uppercase mt-0.5">
-                      Draft Trade Protocol
-                    </h4>
-                    <p className="text-[11px] text-neutral-400 font-sans leading-relaxed mt-2.5">
-                      Your squad is at capacity ({activeSquad.memberLimit}/{activeSquad.memberLimit} members). To draft <strong>{selectedAgent.name}</strong>, select a teammate to trade/release.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 mt-2">
-                    <label className="text-[9px] font-mono text-[var(--text-secondary)] uppercase font-bold">Select Teammate to Release</label>
-                    <select
-                      value={tradeTargetUid}
-                      onChange={(e) => setTradeTargetUid(e.target.value)}
-                      className="bg-black border border-[#222] px-3.5 py-2 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-[var(--primary)] w-full cursor-pointer"
-                    >
-                      {activeSquadMembers.filter(m => m.uid !== uid).map(m => (
-                        <option key={m.uid} value={m.uid}>
-                          {m.name.replace(' (You)', '')} (Streak: {m.streak}d, Vol: {Math.round(m.volume || 0)}kg)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex justify-end gap-3 border-t border-[#181818] pt-4 mt-2">
-                    <button
-                      onClick={() => {
-                        setTradeModalOpen(false);
-                        setSelectedAgent(null);
-                      }}
-                      className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-white bg-black hover:bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleExecuteTrade}
-                      className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-red-500 hover:bg-red-600 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                    >
-                      Confirm Trade
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Custom Dialog Modal Overlay */}
-          <AnimatePresence>
-            {customDialog && (
-              <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.95, opacity: 0 }}
-                  className="border-4 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[6px_6px_0px_black] w-full max-w-sm text-left flex flex-col gap-4 font-mono text-xs border-orange-500"
-                >
-                  <div className="border-b-2 border-black pb-2">
-                    <span className="text-[10px] text-orange-500 uppercase font-black tracking-wider block">
-                      {customDialog.title}
-                    </span>
-                  </div>
-
-                  <p className="text-white text-xs leading-relaxed font-sans">
-                    {customDialog.message}
-                  </p>
-
-                  <div className="flex justify-end gap-3 border-t border-[#181818] pt-4 mt-2">
-                    {customDialog.type === 'confirm' && (
-                      <button
-                        onClick={() => {
-                          setCustomDialog(null);
-                        }}
-                        className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-white bg-black hover:bg-neutral-900 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (customDialog.onConfirm) {
-                          customDialog.onConfirm();
-                        }
-                        setCustomDialog(null);
-                      }}
-                      className="px-4 py-2 border-2 border-black text-xs font-mono font-bold text-black bg-[var(--primary)] hover:brightness-110 rounded shadow-[2px_2px_0px_black] uppercase cursor-pointer"
-                    >
-                      {customDialog.type === 'confirm' ? 'Confirm' : 'OK'}
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
 
           {/* Feedback messages */}
           {successMsg && (

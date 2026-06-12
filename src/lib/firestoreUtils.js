@@ -31,7 +31,8 @@ const PROFILE_WHITELIST = [
   'userType', 'equipmentList', 'medicalFlags', 'name', 'onboardingComplete',
   'streak', 'streakLastDate', 'xp', 'level', 'levelName', 'badges', 'powerUps',
   'age', 'gender', 'heightCm', 'weightKg', 'workoutFrequency', 'sessionDuration',
-  'dietType', 'currentSupplements', 'lastPrehabDate'
+  'dietType', 'currentSupplements', 'lastPrehabDate',
+  'totalSessions', 'aura', 'activeTitle'
 ];
 
 // Mapped XP sources from backend schema

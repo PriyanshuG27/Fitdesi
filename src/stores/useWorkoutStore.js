@@ -64,7 +64,7 @@ export const useWorkoutStore = create(
 
       setOverdrive: (val) => set({ isOverdrive: val }),
 
-      startSession: (planDayOrMood, stomachFlag = false) => {
+      startSession: (planDayOrMood, stomachFlag = false, isQuickLog = false) => {
         const profile = useAuthStore.getState().profile;
         const restTimes = profile?.latestRestTimesMap || {};
 
@@ -78,6 +78,7 @@ export const useWorkoutStore = create(
               moodTag: 'average',
               stomachFlag: false,
               isOverdrive: state.isOverdrive,
+              isQuickLog: !!(planDayOrMood.isQuickLog || isQuickLog),
             },
             exercises: planDayOrMood.exercises.map((ex) => {
               const exId = ex.id ?? ex.exerciseKey ?? ex.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -120,6 +121,7 @@ export const useWorkoutStore = create(
               moodTag: mood,
               stomachFlag: Boolean(stomachFlag),
               isOverdrive: state.isOverdrive,
+              isQuickLog: !!isQuickLog,
             },
             exercises: [],
             elapsedSeconds: 0,

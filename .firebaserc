@@ -1,6 +1,7 @@
 {
   "projects": {
-    "production": "zenkai-prod"
+    "production": "zenkai-prod",
+    "local": "fitdesi-74283"
   },
   "targets": {},
   "etags": {}

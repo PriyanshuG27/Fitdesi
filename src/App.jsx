@@ -177,6 +177,7 @@ function AppRoutes({ layout }) {
   const ProgressScreen    = MobileProgress;
   const PlanScreen        = isMobile ? MobilePlan        : () => <Navigate to="/home" replace />;
   const ChallengesScreen  = isMobile ? MobileChallenges  : SquadMatchmaker;
+  const SquadsScreen      = SquadMatchmaker;
   const ProfileScreen     = isMobile ? MobileProfile     : DesktopProfile;
 
   return (
@@ -216,6 +217,7 @@ function AppRoutes({ layout }) {
           <Route path="/progress"         element={<ProgressScreen />} />
           <Route path="/plan"             element={<PlanScreen />} />
           <Route path="/challenges"       element={<ChallengesScreen />} />
+          <Route path="/squads"           element={<SquadsScreen />} />
           <Route path="/profile"          element={<ProfileScreen />} />
           {!isMobile && (
             <>
@@ -270,13 +272,16 @@ function App() {
     window.addEventListener('beforeinstallprompt', handleInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Clear any stale chunk-reload flag now that the app booted successfully.
-    // This ensures the reload safety net works again for the next new deploy.
-    sessionStorage.removeItem('chunk_reload_attempted');
+    // Clear any stale chunk-reload flag after a 5-second delay once the app boots successfully.
+    // This prevents immediate consecutive reloads (infinite reload loops) if a chunk fails to load.
+    const timer = setTimeout(() => {
+      sessionStorage.removeItem('chunk_reload_attempted');
+    }, 5000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      clearTimeout(timer);
     };
   }, [setPwaDeferredPrompt, setIsStandalone, setIsIOS]);
 
@@ -309,7 +314,7 @@ function App() {
                   const data = snap.data();
                   setProfile(data);
                   // Sync XP store with real-time profile data on mount & updates
-                  useXPStore.getState().setXP(data.xp ?? 0, data.streak ?? 0);
+                  useXPStore.getState().setXP(data.xp ?? 0, data.cumulativeXP ?? data.xp ?? 0, data.streak ?? 0);
                 } else {
                   setProfile(null);
                 }

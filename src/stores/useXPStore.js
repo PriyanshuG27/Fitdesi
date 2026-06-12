@@ -39,7 +39,8 @@ import { create } from 'zustand';
 import { deriveLevelFromXP } from '../lib/xpHelpers';
 
 export const useXPStore = create((set, get) => ({
-  totalXP:       0,
+  xp:            0, // Current spendable XP currency
+  totalXP:       0, // Cumulative lifetime XP used for levels
   level:         1,
   levelName:     'Rookie',
   xpToNextLevel: 200,
@@ -47,19 +48,49 @@ export const useXPStore = create((set, get) => ({
   pendingXP:     0,
   leveledUp:     false,
 
-  setXP: (total, streak = 0) => {
-    const derived = deriveLevelFromXP(Math.max(0, total ?? 0));
-    // Guard: streak may be undefined/null from old Firestore docs — always coerce to integer
-    const safeStreak = Math.max(0, parseInt(streak, 10) || 0);
-    set({ totalXP: Math.max(0, total ?? 0), streak: safeStreak, ...derived });
+  setXP: (...args) => {
+    const spendableXP = args[0] ?? 0;
+    const cumulativeXP = args[1] ?? null;
+    const streak = args[2] ?? 0;
+
+    let actualSpendable;
+    let actualCumulative;
+    let actualStreak;
+
+    if (args.length === 2) {
+      // Legacy: setXP(total, streak)
+      actualSpendable = spendableXP;
+      actualCumulative = spendableXP;
+      actualStreak = cumulativeXP; // second argument is streak
+    } else if (args.length === 1) {
+      actualSpendable = spendableXP;
+      actualCumulative = spendableXP;
+      actualStreak = 0;
+    } else {
+      // New: setXP(spendableXP, cumulativeXP, streak)
+      actualSpendable = spendableXP;
+      actualCumulative = cumulativeXP !== null ? cumulativeXP : spendableXP;
+      actualStreak = streak;
+    }
+
+    const derived = deriveLevelFromXP(Math.max(0, actualCumulative ?? 0));
+    const safeStreak = Math.max(0, parseInt(actualStreak, 10) || 0);
+    set({
+      xp: Math.max(0, actualSpendable ?? 0),
+      totalXP: Math.max(0, actualCumulative ?? 0),
+      streak: safeStreak,
+      ...derived
+    });
   },
 
   awardXP: (amount) => {
     const prevLevel = get().level;
-    const newTotal  = get().totalXP + amount;
-    const derived   = deriveLevelFromXP(newTotal);
+    const newSpendable = get().xp + amount;
+    const newCumulative = get().totalXP + amount;
+    const derived   = deriveLevelFromXP(newCumulative);
     set({
-      totalXP:   newTotal,
+      xp:        newSpendable,
+      totalXP:   newCumulative,
       pendingXP: get().pendingXP + amount,
       leveledUp: derived.level > prevLevel,
       ...derived,
@@ -71,13 +102,15 @@ export const useXPStore = create((set, get) => ({
   /**
    * rollbackXP(amount)
    * Reverses a speculative awardXP call when the Firestore batch fails.
-   * Subtracts amount from totalXP and re-derives the level.
+   * Subtracts amount from both xp and totalXP and re-derives the level.
    */
   rollbackXP: (amount) => {
-    const newTotal  = Math.max(0, get().totalXP - amount);
-    const derived   = deriveLevelFromXP(newTotal);
+    const newSpendable = Math.max(0, get().xp - amount);
+    const newCumulative  = Math.max(0, get().totalXP - amount);
+    const derived   = deriveLevelFromXP(newCumulative);
     set({
-      totalXP:   newTotal,
+      xp:        newSpendable,
+      totalXP:   newCumulative,
       pendingXP: Math.max(0, get().pendingXP - amount),
       leveledUp: false,
       ...derived,

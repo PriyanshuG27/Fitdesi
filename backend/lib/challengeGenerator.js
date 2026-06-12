@@ -11,7 +11,7 @@ const { SQUAD_CHALLENGE } = require('./models');
  * @param {string} squadCode 
  * @returns {Promise<object>} The generated challenge
  */
-async function generateChallengeForSquad(squadCode) {
+async function generateChallengeForSquad(squadCode, isRegen = false) {
   const squadRef = adminDb.doc(`shared_squads/${squadCode}`);
   const squadSnap = await squadRef.get();
   if (!squadSnap.exists) {
@@ -63,9 +63,9 @@ async function generateChallengeForSquad(squadCode) {
       // Average weekly volume (past 21 days = 3 weeks)
       let avgWeeklyVolume = memberTotalVolume / 3;
 
-      // Clinical minimum baseline per user of 5,000kg to safeguard against inactivity
-      if (avgWeeklyVolume < 5000) {
-        avgWeeklyVolume = 5000;
+      // Clinical minimum baseline per user of 12,000kg to safeguard against inactivity and ensure a tough challenge
+      if (avgWeeklyVolume < 12000) {
+        avgWeeklyVolume = 12000;
       }
 
       sumOfAvgWeeklyVolumes += avgWeeklyVolume;
@@ -208,13 +208,19 @@ async function generateChallengeForSquad(squadCode) {
     claimedBy: {}
   };
 
-  // Save challenge and update win streak states on the squad document
-  await squadRef.set({
+  const updatePayload = {
     activeChallenge,
     winStreak,
-    hasRegeneratedThisWeek: false,
-    regenerationVotes: []
-  }, { merge: true });
+    regenerationVotes: [],
+    hasRegeneratedThisWeek: isRegen
+  };
+
+  if (isRegen) {
+    updatePayload.lastRegenTimestamp = Date.now();
+  }
+
+  // Save challenge and update win streak states on the squad document
+  await squadRef.set(updatePayload, { merge: true });
 
   return activeChallenge;
 }

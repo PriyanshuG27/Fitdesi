@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { getAvatarStyle } from '../../lib/xpHelpers';
 import { useXPStore } from '../../stores/useXPStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import { doc, updateDoc, collection, addDoc, query, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { Smartphone, LogOut, Info, User, Flame, Trophy, Award, Check, X, MessageSquare, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Trash2, Plus, ArrowLeft, Camera } from 'lucide-react';
+import { Smartphone, LogOut, Info, Sparkles, User, Flame, Trophy, Award, Check, X, MessageSquare, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Trash2, Plus, ArrowLeft, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
 import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
@@ -61,6 +63,7 @@ const MEDICAL_CATEGORIES = [
 ];
 
 export const MobileProfile = () => {
+  const navigate = useNavigate();
   const { profile } = useAuthStore();
   const uid = auth.currentUser?.uid;
   const { totalXP, level, levelName, streak } = useXPStore();
@@ -278,25 +281,46 @@ export const MobileProfile = () => {
   return (
     <div className="flex flex-col gap-6 p-4 min-h-[100dvh] bg-[var(--bg-base)] text-[var(--text-primary)] pb-28">
       {/* ─── TITLE HEADER ────────────────────────────────────────────────── */}
-      <div className="border-b-2 border-[var(--border)] pb-4 mt-2">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight uppercase leading-none text-white">
-          Trainer Profile
-        </h1>
-        <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-1">
-          Your Strength Telemetry
-        </p>
+      <div className="border-b-2 border-[var(--border)] pb-4 mt-2 flex items-center gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="w-10 h-10 border-2 border-black bg-[var(--surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] flex items-center justify-center rounded shadow-[2px_2px_0px_black] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer shrink-0"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight uppercase leading-none text-white font-barlow">
+            Trainer Profile
+          </h1>
+          <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-1">
+            Your Strength Telemetry
+          </p>
+        </div>
       </div>
 
       {/* ─── USER CARD ───────────────────────────────────────────────────── */}
       <div className="border-2 border-black bg-[var(--surface)] p-5 rounded-lg shadow-[5px_5px_0px_rgba(0,0,0,1)] flex items-center gap-4">
-        {/* Neubrutalist Avatar */}
-        <div className="w-16 h-16 bg-[var(--primary)] text-black border-2 border-black rounded shadow-[3px_3px_0px_rgba(0,0,0,1)] flex items-center justify-center font-display font-black text-3xl shrink-0">
-          {nameInitial}
+        {/* Neubrutalist Avatar with Glowing Aura and Level Border */}
+        <div 
+          className="w-16 h-16 bg-[var(--primary)] text-black rounded flex items-center justify-center font-display font-black text-3xl shrink-0 overflow-hidden"
+          style={getAvatarStyle(profile?.aura, level, profile?.powerUps)}
+        >
+          {profile?.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+          ) : (
+            <span>{nameInitial}</span>
+          )}
         </div>
         
-        <div className="flex flex-col min-w-0">
-          <h2 className="font-display text-xl font-bold uppercase tracking-wide truncate text-[var(--text-primary)]">
-            {profile?.name || 'ZENKAI TRAINER'}
+        <div className="flex flex-col min-w-0 flex-1">
+          <h2 className="font-display text-xl font-bold uppercase tracking-wide truncate text-[var(--text-primary)] flex items-center gap-1.5 flex-wrap font-barlow">
+            <span>{profile?.name || 'ZENKAI TRAINER'}</span>
+            {profile?.activeTitle && (
+              <span className="text-[9px] font-mono text-amber-400 border border-amber-500/30 bg-amber-950/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                [{profile.activeTitle}]
+              </span>
+            )}
+            {profile?.streak >= 7 && <span title="7+ Day Streak" className="text-sm">🔥</span>}
           </h2>
           <span className="text-xs text-[var(--text-secondary)] font-mono truncate">
             {email}
@@ -1241,16 +1265,36 @@ export const MobileProfile = () => {
         )}
       </AnimatePresence>
 
-      {/* ─── SYSTEM INFO ─────────────────────────────────────────────────── */}
-      <div className="border-2 border-[var(--border)] bg-[var(--bg-elevated)] p-4 rounded-lg flex items-start gap-3 mt-auto">
-        <Info size={18} className="text-[var(--text-secondary)] shrink-0 mt-0.5" />
-        <div className="flex flex-col">
-          <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">
-            Zenkai Mobile v1.0.0
-          </span>
-          <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-relaxed mt-0.5">
-            Designed for Indian athletes. Standard Neubrutalist Telemetry Shell. Offline synchronization enabled via local caching.
-          </p>
+      {/* ─── SYSTEM INFO & WHAT'S NEW ───────────────────────────────────── */}
+      <div className="flex flex-col gap-4 mt-auto">
+        <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-xl shadow-[4px_4px_0px_rgba(0,0,0,1)] text-left">
+          <div className="flex items-center gap-2 border-b border-[#222] pb-2 mb-3">
+            <Sparkles size={16} className="text-[var(--primary)]" />
+            <span className="font-display text-sm font-black uppercase tracking-wide text-white">
+              What's New in v1.1
+            </span>
+          </div>
+          <ul className="text-[10px] text-neutral-300 font-sans list-disc pl-4 space-y-1.5 leading-relaxed">
+            <li><strong className="text-white">Custom In-App Dialogs:</strong> Native browser popups have been fully replaced with custom-animated neubrutalist modals.</li>
+            <li><strong className="text-white">Smart Workout Reminders:</strong> Sends in-app and browser notifications 1 hour prior to your teammate's scheduled workouts.</li>
+            <li><strong className="text-white">Rest Days / Not Going:</strong> Added a "Not Going" (Rest Day 😴) option to Gym check-ins and scheduling polls.</li>
+            <li><strong className="text-white">Midnight Clearing:</strong> Polls and check-ins now clear automatically at midnight local time to keep the board fresh.</li>
+            <li><strong className="text-white">Weekly Challenge Regeneration Cooldown:</strong> Enforced a strict 48-hour rate-limit on weekly challenge rerolls.</li>
+            <li><strong className="text-white">Tougher Boss HP:</strong> Boss raids now scale dynamically with a 12,000kg baseline per member to keep the battles competitive.</li>
+            <li><strong className="text-white">Currency Separation:</strong> Spendable XP (Aura shop) is now separated from your Lifetime XP so buying cosmetics never decreases your level.</li>
+          </ul>
+        </div>
+
+        <div className="border-2 border-[var(--border)] bg-[var(--bg-elevated)] p-4 rounded-lg flex items-start gap-3">
+          <Info size={18} className="text-[var(--text-secondary)] shrink-0 mt-0.5" />
+          <div className="flex flex-col text-left">
+            <span className="font-display text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">
+              Zenkai Mobile v1.1.0
+            </span>
+            <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-relaxed mt-0.5">
+              Designed for Indian athletes. Standard Neubrutalist Telemetry Shell. Offline synchronization enabled via local caching.
+            </p>
+          </div>
         </div>
       </div>
     </div>

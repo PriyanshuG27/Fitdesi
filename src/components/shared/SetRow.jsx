@@ -30,6 +30,7 @@ const SetRowComponent = ({
   onDelete = null,
   previousSet = null,
   targetSet = null,
+  previousPRWeight = 0,
 }) => {
   const shouldReduceMotion = useReducedMotion();
 
@@ -327,62 +328,69 @@ const SetRowComponent = ({
         <>
           {/* Column 2: Weight Control Capsule (hidden for duration-based) */}
           {!isDurationBased && (
-            <div
-              className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 w-[96px] shrink-0 transition-all duration-200 ${
-                isWeightFocused
-                  ? 'border-[var(--primary)] shadow-[0_0_8px_var(--primary-glow)] bg-black/30'
-                  : 'border-[var(--border)] hover:border-[var(--border-bright)]'
-              }`}
-            >
-              <motion.button
-                type="button"
-                onClick={handleWeightDecrement}
-                onFocus={() => setIsWeightFocused(true)}
-                onBlur={() => setIsWeightFocused(false)}
-                aria-label="Decrease weight by 2.5 kilograms"
-                className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
-                {...buttonTapProps}
+            <div className="flex flex-col items-center gap-0.5">
+              <div
+                className={`flex items-center justify-between bg-[var(--bg-input)] border rounded-lg px-1 py-0.5 w-[96px] shrink-0 transition-all duration-200 ${
+                  isWeightFocused
+                    ? 'border-[var(--primary)] shadow-[0_0_8px_var(--primary-glow)] bg-black/30'
+                    : 'border-[var(--border)] hover:border-[var(--border-bright)]'
+                }`}
               >
-                <Minus size={11} strokeWidth={2.5} />
-              </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={handleWeightDecrement}
+                  onFocus={() => setIsWeightFocused(true)}
+                  onBlur={() => setIsWeightFocused(false)}
+                  aria-label="Decrease weight by 2.5 kilograms"
+                  className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
+                  {...buttonTapProps}
+                >
+                  <Minus size={11} strokeWidth={2.5} />
+                </motion.button>
 
-              <input
-                type="text"
-                inputMode="decimal"
-                value={localWeight}
-                onChange={handleWeightChange}
-                onFocus={() => setIsWeightFocused(true)}
-                onBlur={() => {
-                  handleWeightBlur();
-                  setIsWeightFocused(false);
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="0"
-                aria-label={`Weight for set ${setIndex + 1}`}
-                data-testid={`weight-${exerciseIndex}-${setIndex}`}
-                className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
-                style={{
-                  minWidth: '36px',
-                  width: '36px',
-                  border: 'none',
-                  background: 'transparent',
-                  outline: 'none',
-                  boxShadow: 'none',
-                  padding: 0,
-                }}
-              />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={localWeight}
+                  onChange={handleWeightChange}
+                  onFocus={() => setIsWeightFocused(true)}
+                  onBlur={() => {
+                    handleWeightBlur();
+                    setIsWeightFocused(false);
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="0"
+                  aria-label={`Weight for set ${setIndex + 1}`}
+                  data-testid={`weight-${exerciseIndex}-${setIndex}`}
+                  className="font-mono text-sm text-[var(--text-primary)] text-center select-all placeholder:text-[var(--text-muted)] focus:outline-none shrink-0"
+                  style={{
+                    minWidth: '36px',
+                    width: '36px',
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    padding: 0,
+                  }}
+                />
 
-              <motion.button
-                type="button"
-                onClick={handleWeightIncrement}
-                onFocus={() => setIsWeightFocused(true)}
-                onBlur={() => setIsWeightFocused(false)}
-                aria-label="Increase weight by 2.5 kilograms"
-                className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
-                {...buttonTapProps}
-              >
-                <Plus size={11} strokeWidth={2.5} />
-              </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={handleWeightIncrement}
+                  onFocus={() => setIsWeightFocused(true)}
+                  onBlur={() => setIsWeightFocused(false)}
+                  aria-label="Increase weight by 2.5 kilograms"
+                  className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-white hover:bg-white/5 focus:outline-none transition-colors shrink-0"
+                  {...buttonTapProps}
+                >
+                  <Plus size={11} strokeWidth={2.5} />
+                </motion.button>
+              </div>
+              {!isBodyweight && previousPRWeight > 0 && parseFloat(localWeight) > previousPRWeight * 1.4 && (
+                <span className="text-[9px] font-mono text-amber-500 font-bold tracking-tight select-none">
+                  ⚠️ Typo?
+                </span>
+              )}
             </div>
           )}
 

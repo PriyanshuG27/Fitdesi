@@ -3,6 +3,18 @@ import { collection, query, where, orderBy, getDocs, limit } from 'firebase/fire
 import { db } from '../../lib/firebase';
 import { Trophy, Dumbbell, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { getAvatarStyle, isTitleActive } from '../../lib/xpHelpers';
+
+const RENTED_TITLES = {
+  'PR Demon': 'pr_demon',
+  'Titan Hunter': 'titan_hunter'
+};
+
+const isTitleExpired = (titleName, powerUps) => {
+  const key = RENTED_TITLES[titleName];
+  if (!key) return false;
+  return !isTitleActive(key, powerUps);
+};
 
 export const GymLeaderboard = ({ gymId = '', gymName = '' }) => {
   const { user } = useAuthStore();
@@ -112,15 +124,37 @@ export const GymLeaderboard = ({ gymId = '', gymName = '' }) => {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {/* Rank */}
-                  <span className="font-mono text-sm font-bold text-[var(--text-secondary)] w-6 text-center">
+                  <span className="font-mono text-sm font-bold text-[var(--text-secondary)] w-5 text-center shrink-0">
                     {rankBadge}
                   </span>
                   
+                  {/* Avatar */}
+                  <div 
+                    className="w-7 h-7 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden shrink-0 border"
+                    style={getAvatarStyle(trainer.aura, trainer.level || 1, trainer.powerUps)}
+                  >
+                    {trainer.avatarUrl ? (
+                      <img src={trainer.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="font-display font-extrabold text-[9px] text-white">
+                        {trainer.name?.slice(0, 2).toUpperCase() || 'ZK'}
+                      </span>
+                    )}
+                  </div>
+                  
                   {/* Info */}
                   <div className="flex flex-col min-w-0">
-                    <span className={`text-xs font-bold truncate ${isCurrentUser ? 'text-[var(--accent-xp)]' : 'text-white'}`}>
-                      {trainer.name || 'Anonymous Lifter'}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                      <span className={`text-xs font-bold truncate ${isCurrentUser ? 'text-[var(--accent-xp)]' : 'text-white'}`}>
+                        {trainer.name || 'Anonymous Lifter'}
+                      </span>
+                      {trainer.activeTitle && !isTitleExpired(trainer.activeTitle, trainer.powerUps) && (
+                        <span className="text-[8px] font-mono text-amber-400 border border-amber-500/30 bg-amber-950/20 px-1 py-0.2 rounded uppercase tracking-wider shrink-0 leading-none">
+                          {trainer.activeTitle}
+                        </span>
+                      )}
+                      {trainer.streak >= 7 && <span title="7+ Day Streak" className="text-[10px] shrink-0">🔥</span>}
+                    </div>
                     <span className="text-[9px] font-mono text-[var(--text-secondary)] uppercase mt-0.5">
                       Lvl {trainer.level || 1} • {trainer.levelName || 'Rookie'}
                     </span>

@@ -24,7 +24,7 @@ import { useChallenges } from '../../hooks/useChallenges';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { useWorkoutStore } from '../../stores/useWorkoutStore';
-import { deriveLevelFromXP } from '../../lib/xpHelpers';
+import { deriveLevelFromXP, getAvatarStyle, isAuraActive, isTitleActive } from '../../lib/xpHelpers';
 import { compressGymImage } from '../../utils/imageCompressor';
 
 const getRemainingCooldownText = (until) => {
@@ -55,18 +55,195 @@ const getRemainingTimeText = (challenge) => {
   return `${challenge.weeksRemaining || 0} wks left`;
 };
 
+const shopItems = [
+  { key: 'streakShield', name: 'Streak Shield', cost: 150, description: 'Protects streak from breaking.', type: 'consumable', icon: Shield },
+  { key: 'xpBooster', name: '2x XP Booster', cost: 300, description: 'Doubles all XP earned for 24h.', type: 'consumable', icon: Zap },
+  { key: 'challengeSkip', name: 'Quest Skip', cost: 100, description: 'Skip a single check-in mission.', type: 'consumable', icon: FastForward },
+  { key: 'pr_demon', name: 'PR Demon', cost: 200, description: 'The ultimate flex for heavy lifters. Show off your status next to your username.', type: 'title', icon: Trophy },
+  { key: 'titan_hunter', name: 'Titan Hunter', cost: 200, description: 'Show off your consistency. Let everyone know you hunt down gym giants.', type: 'title', icon: Award },
+  { key: 'crimson', name: 'Crimson Aura', cost: 400, description: 'Flex the prestigious red glow early. Show off your status regardless of your level.', type: 'aura', color: '#ef4444' },
+  { key: 'golden', name: 'Golden Aura', cost: 600, description: 'The ultimate wealth flex. Skip the Level 21 grind and shine in pure gold.', type: 'aura', color: '#eab308' },
+  { key: 'shadow', name: 'Shadow Aura', cost: 800, description: 'Completely exclusive purple glow. The ultimate show-off; cannot be unlocked by leveling.', type: 'aura', color: '#a855f7' }
+];
+
+const durationOptions = {
+  pr_demon: { 10: 100, 15: 150, 30: 250 },
+  titan_hunter: { 10: 100, 15: 150, 30: 250 },
+  crimson: { 10: 150, 15: 220, 30: 400 },
+  golden: { 10: 250, 15: 350, 30: 600 },
+  shadow: { 10: 350, 15: 500, 30: 800 }
+};
+
+const getDaysLeft = (until) => {
+  if (!until) return '';
+  const untilMs = typeof until.toDate === 'function' ? until.toDate().getTime() : new Date(until).getTime();
+  const diffMs = untilMs - Date.now();
+  if (diffMs <= 0) return '';
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return `${days}d left`;
+};
+
+const getUpgradeDiscount = (itemKey, durationDays, powerUps) => {
+  if (itemKey === 'golden') {
+    if (isAuraActive('crimson', powerUps)) {
+      return durationOptions['crimson'][durationDays] || 0;
+    }
+  } else if (itemKey === 'shadow') {
+    if (isAuraActive('golden', powerUps)) {
+      return durationOptions['golden'][durationDays] || 0;
+    } else if (isAuraActive('crimson', powerUps)) {
+      return durationOptions['crimson'][durationDays] || 0;
+    }
+  }
+  return 0;
+};
+
 export const MobileChallenges = () => {
   const navigate = useNavigate();
   const { challenges, loading, error, joinChallenge, createWager, avgWorkoutHour, leaveChallenge, useChallengeSkip } = useChallenges();
   const [joiningId, setJoiningId] = useState(null);
   const [challengeToDelete, setChallengeToDelete] = useState(null);
-  const [activeTab, setActiveTab] = useState('quests'); // 'quests' or 'squads'
+  const [activeTab, setActiveTab] = useState('challenges');
+  const [storeSubTab, setStoreSubTab] = useState('perks');
+  const [selectedShopItem, setSelectedShopItem] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState(10);
 
   const { setMobileTab, addToast } = useUIStore();
   const startSession = useWorkoutStore((state) => state.startSession);
   const setOverdrive = useWorkoutStore((state) => state.setOverdrive);
 
   const { user, profile } = useAuthStore();
+
+  const handlePurchaseItem = async (item, durationDays = null) => {
+    if (!user?.uid || !profile) return;
+    
+    const isConsumable = item.type === 'consumable';
+    let cost = item.cost;
+    let discount = 0;
+    
+    if (!isConsumable) {
+      if (!durationDays) {
+        setSelectedShopItem(item);
+        setSelectedDuration(10); // default to 10 days
+        return;
+      }
+      const rates = durationOptions[item.key];
+      cost = rates[durationDays];
+      if (item.type === 'aura') {
+        discount = getUpgradeDiscount(item.key, durationDays, profile.powerUps);
+      }
+    }
+    
+    const finalCost = cost - discount;
+    
+    if (xp < finalCost) {
+      addToast('Insufficient XP Balance!', 'error');
+      return;
+    }
+    
+    try {
+      const { doc, updateDoc, increment } = await import('firebase/firestore');
+      const { db } = await import('../../lib/firebase');
+      
+      const userRef = doc(db, 'users', user.uid);
+      let updates = {
+        xp: increment(-finalCost)
+      };
+      
+      if (isConsumable) {
+        updates[`powerUps.${item.key}`] = increment(1);
+        await updateDoc(userRef, updates);
+        
+        const nextPowerUps = {
+          ...profile.powerUps,
+          [item.key]: (profile.powerUps?.[item.key] || 0) + 1
+        };
+        useAuthStore.getState().setProfile({
+          ...profile,
+          xp: xp - finalCost,
+          powerUps: nextPowerUps
+        });
+        
+        addToast(`Purchased ${item.name}! 🚀`, 'success');
+      } else {
+        const key = item.key;
+        const type = item.type;
+        const powerUpKey = `unlocked_${type}_${key}_until`;
+        
+        const currentUntil = profile.powerUps?.[powerUpKey];
+        const currentMs = currentUntil 
+          ? (typeof currentUntil.toDate === 'function' ? currentUntil.toDate().getTime() : new Date(currentUntil).getTime())
+          : 0;
+        
+        let activeUpgradeKey = null;
+        if (key === 'golden' && isAuraActive('crimson', profile.powerUps)) {
+          activeUpgradeKey = 'unlocked_aura_crimson_until';
+        } else if (key === 'shadow') {
+          if (isAuraActive('golden', profile.powerUps)) {
+            activeUpgradeKey = 'unlocked_aura_golden_until';
+          } else if (isAuraActive('crimson', profile.powerUps)) {
+            activeUpgradeKey = 'unlocked_aura_crimson_until';
+          }
+        }
+
+        let baseTime = currentMs > Date.now() ? currentMs : Date.now();
+        if (activeUpgradeKey) {
+          const upgradeUntil = profile.powerUps?.[activeUpgradeKey];
+          const upgradeMs = upgradeUntil
+            ? (typeof upgradeUntil.toDate === 'function' ? upgradeUntil.toDate().getTime() : new Date(upgradeUntil).getTime())
+            : 0;
+          if (upgradeMs > Date.now()) {
+            baseTime = upgradeMs; // Inherit remaining active days from upgraded aura!
+          }
+        }
+
+        const newExpiration = new Date(baseTime + durationDays * 24 * 60 * 60 * 1000);
+        
+        updates[`powerUps.${powerUpKey}`] = newExpiration;
+        if (activeUpgradeKey) {
+          updates[`powerUps.${activeUpgradeKey}`] = new Date(0); // Deactivate the lower-tier aura
+        }
+        
+        if (type === 'aura') {
+          updates.aura = key;
+        } else {
+          updates.activeTitle = item.name;
+        }
+        
+        await updateDoc(userRef, updates);
+        
+        const nextPowerUps = {
+          ...profile.powerUps,
+          [powerUpKey]: newExpiration,
+          ...(activeUpgradeKey ? { [activeUpgradeKey]: new Date(0) } : {})
+        };
+        useAuthStore.getState().setProfile({
+          ...profile,
+          xp: xp - finalCost,
+          powerUps: nextPowerUps,
+          ...(type === 'aura' ? { aura: key } : { activeTitle: item.name })
+        });
+        
+        if (profile.squadCode) {
+          const codeRef = doc(db, 'squad_codes', profile.squadCode);
+          await updateDoc(codeRef, {
+            powerUps: nextPowerUps,
+            ...(type === 'aura' ? { aura: key } : { activeTitle: item.name }),
+            xp: xp - finalCost
+          }).catch(err => console.warn('[MobileChallenges] Failed to sync squad code on rental:', err));
+        }
+        
+        const successMsg = activeUpgradeKey 
+          ? `Upgraded to ${item.name}! Expiration extended by ${durationDays} days! ✨`
+          : `Rented & Equipped ${item.name} for ${durationDays} days! ✨`;
+        addToast(successMsg, 'success');
+        setSelectedShopItem(null);
+      }
+    } catch (err) {
+      console.error('[MobileChallenges] Shop purchase error:', err);
+      addToast('Failed to complete purchase.', 'error');
+    }
+  };
 
   const handleLeave = (id) => {
     setChallengeToDelete(id);
@@ -93,7 +270,8 @@ export const MobileChallenges = () => {
 
   // XP / Level calculations
   const xp = profile?.xp || 0;
-  const { level, levelName } = deriveLevelFromXP(xp);
+  const cumulativeXP = profile?.cumulativeXP ?? xp;
+  const { level, levelName } = deriveLevelFromXP(cumulativeXP);
 
   // Skill points calculations
   const skills = profile?.skills || {};
@@ -332,16 +510,35 @@ export const MobileChallenges = () => {
   return (
     <div className="flex flex-col gap-6 p-4 min-h-[100dvh] bg-[var(--bg-base)] text-[var(--text-primary)] pb-28">
       {/* ─── TITLE HEADER ────────────────────────────────────────────────── */}
-      <div className="border-b-2 border-[var(--border)] pb-4 mt-2 flex justify-between items-end">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight uppercase leading-none font-barlow">
-            Challenge Hub
-          </h1>
-          <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-1">
-            Build consistency & earn base XP
-          </p>
+      <div className="border-b-2 border-[var(--border)] pb-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          {/* Small Zenkai Logo */}
+          <div className="w-8 h-8 rounded bg-black border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 select-none">
+            <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight uppercase leading-none font-barlow text-white">
+              Challenge Hub
+            </h1>
+            <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-1">
+              Build consistency & earn base XP
+            </p>
+          </div>
         </div>
-        <Dumbbell className="text-[var(--primary)] mr-1" size={28} />
+
+        <div 
+          onClick={() => navigate('/profile')}
+          className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 border-2 border-black hover:scale-105 active:scale-95 shrink-0"
+          style={getAvatarStyle(profile?.aura, level, profile?.powerUps)}
+        >
+          {profile?.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+          ) : (
+            <span className="font-display font-extrabold text-[10px] text-white">
+              {profile?.name?.slice(0, 2).toUpperCase() || 'ZK'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Loading & Error States */}
@@ -359,687 +556,975 @@ export const MobileChallenges = () => {
           {/* ─── TAB SELECTOR ────────────────────────────────────────────────── */}
           <div className="flex border-2 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_black] z-10 shrink-0">
             <button
-              onClick={() => setActiveTab('quests')}
+              onClick={() => setActiveTab('challenges')}
               className={`flex-1 py-2.5 text-xs font-mono font-bold uppercase transition-all tracking-wider ${
-                activeTab === 'quests'
+                activeTab === 'challenges'
                   ? 'bg-[var(--primary)] text-white font-black'
                   : 'bg-[var(--surface)] text-[var(--text-secondary)] hover:text-white'
               }`}
             >
-              Solo Quests & Perks
+              Challenges
             </button>
             <button
-              onClick={() => setActiveTab('squads')}
+              onClick={() => setActiveTab('store')}
               className={`flex-1 py-2.5 text-xs font-mono font-bold uppercase transition-all tracking-wider ${
-                activeTab === 'squads'
+                activeTab === 'store'
                   ? 'bg-[var(--primary)] text-white font-black'
                   : 'bg-[var(--surface)] text-[var(--text-secondary)] hover:text-white'
               }`}
             >
-              Fantasy Squads
+              Store & Tree
             </button>
           </div>
 
-          {activeTab === 'quests' ? (
+          {activeTab === 'challenges' ? (
             <div className="flex flex-col gap-6">
               {/* ─── OVERDRIVE & WAGER WIDGETS ──────────────────────────────────── */}
-          <div className="flex flex-col gap-6">
-            {/* Overdrive Hour Card */}
-            <div className={`border-2 border-black rounded-lg p-4 shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden transition-all duration-300 ${
-              isOverdriveWindow
-                ? 'bg-gradient-to-br from-[#1b1c30] to-[#12131e] border-indigo-500 shadow-[4px_4px_0px_#6366f1]'
-                : 'bg-[var(--surface)]'
-            }`}>
-              {isOverdriveWindow && (
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
-              )}
-              <div className="flex justify-between items-start relative z-10">
-                <div>
-                  <span className={`px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider rounded border ${
-                    isOverdriveWindow
-                      ? 'text-indigo-400 border-indigo-500 bg-indigo-950/30'
-                      : 'text-[var(--text-secondary)] border-[var(--border)] bg-[var(--bg-elevated)]'
-                  }`}>
-                    {isOverdriveWindow ? '⚡ WINDOW ACTIVE' : '🕒 OVERDRIVE WINDOW'}
-                  </span>
-                  <h3 className="font-display text-lg font-bold uppercase tracking-wide font-barlow mt-2 flex items-center gap-1.5 text-white">
-                    Overdrive Hour
-                  </h3>
-                  <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                    Log a workout during your peak hour ({avgWorkoutHour || 18}:00 ± 2h) with camera proof to gain 1.5x XP.
-                  </p>
-                </div>
-                <Zap size={24} className={isOverdriveWindow ? 'text-indigo-400 animate-pulse' : 'text-[var(--text-muted)]'} />
-              </div>
-
-              <div className="mt-4 flex flex-col gap-3 relative z-10">
-                {isOverdriveWindow ? (
-                  <>
-                    {!isOverdriveVerified ? (
-                      <div>
-                        {verifyingImage ? (
-                          <div className="w-full py-2 border-2 border-black bg-indigo-950 text-indigo-400 font-display font-extrabold text-xs uppercase tracking-wider text-center flex justify-center items-center gap-2 cursor-not-allowed opacity-75">
-                            <span className="h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                            <span>Verifying Presence...</span>
-                          </div>
-                        ) : (
-                          <>
-                            <label
-                              htmlFor="overdrive-camera"
-                              className="w-full py-2 border-2 border-black bg-indigo-600 hover:bg-indigo-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-2 cursor-pointer"
-                            >
-                              <Camera size={14} />
-                              <span>Verify Gym Presence</span>
-                            </label>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              id="overdrive-camera"
-                              className="hidden"
-                              onChange={handleCameraChange}
-                            />
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-col gap-1 px-3 py-2 border-2 border-emerald-500 bg-emerald-950/20 text-emerald-400 rounded">
-                          <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase">
-                            <CheckCircle2 size={16} />
-                            <span>GYM STATUS VERIFIED ✅</span>
-                          </div>
-                          <div className="text-[10px] font-mono text-emerald-300 uppercase tracking-wide">
-                            Window Remaining: {formatOverdriveCountdown(overdriveRemainingMs)}
-                          </div>
-                        </div>
-                        {cameraImage && (
-                          <div className="w-full h-24 border-2 border-black rounded overflow-hidden shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                            <img src={cameraImage} alt="Gym proof" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        <button
-                          onClick={handleStartOverdriveSession}
-                          className="w-full py-2.5 border-2 border-black bg-[var(--accent-xp)] text-black hover:bg-[#a3f020] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1.5 cursor-pointer"
-                        >
-                          <Zap size={14} />
-                          <span>Start Overdrive Workout (+1.5x)</span>
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] p-3 rounded text-center">
-                    <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase">
-                      WINDOW LOCKS AT {avgWorkoutHour || 18}:00 LOCAL TIME
-                    </p>
-                    <p className="text-[9px] text-[var(--text-muted)] font-sans mt-1">
-                      Currently outside the ±2 hour window. Workouts logged now earn standard XP.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Flame Wager Card */}
-            <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-orange-500/5 rounded-full blur-xl pointer-events-none" />
-              <div className="flex justify-between items-start relative z-10">
-                <div>
-                  <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-orange-400 border border-orange-500/30 bg-orange-950/20 rounded">
-                    🔥 DOUBLE OR NOTHING
-                  </span>
-                  <h3 className="font-display text-lg font-bold uppercase tracking-wide font-barlow mt-2 flex items-center gap-1 text-white">
-                    Flame Wager
-                  </h3>
-                  <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                    Bet XP on your consistency. Complete 3 workouts in 7 days to double your wager.
-                  </p>
-                </div>
-                <Flame size={24} className="text-orange-500" />
-              </div>
-
-              {activeWager ? (
-                <div className="mt-4 flex flex-col gap-3 relative z-10 border-2 border-orange-500/40 bg-orange-950/15 p-3.5 rounded-lg shadow-[2px_2px_0px_rgba(249,115,22,0.15)]">
-                  <div className="flex justify-between items-center text-[10px] font-mono text-orange-400 font-extrabold uppercase tracking-wide">
-                    <span>ACTIVE XP WAGER: {activeWager.wagerAmount || 50} XP</span>
-                    <span className="bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded text-[8px]">
-                      {getRemainingTimeText(activeWager)}
-                    </span>
-                  </div>
-                  
-                  {/* Progress details */}
-                  <div className="mt-1 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
-                      <span>WORKOUT PROGRESS</span>
-                      <span className="text-white font-bold font-dm">
-                        {(() => {
-                          const prog = activeWager.progress?.[user?.uid] || {};
-                          const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
-                          return `${sum}/3`;
-                        })()} workouts
+              <div className="flex flex-col gap-6">
+                {/* Overdrive Hour Card */}
+                <div className={`border-2 border-black rounded-lg p-4 shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden transition-all duration-300 ${
+                  isOverdriveWindow
+                    ? 'bg-gradient-to-br from-[#1b1c30] to-[#12131e] border-indigo-500 shadow-[4px_4px_0px_#6366f1]'
+                    : 'bg-[var(--surface)]'
+                }`}>
+                  {isOverdriveWindow && (
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+                  )}
+                  <div className="flex justify-between items-start relative z-10">
+                    <div>
+                      <span className={`px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider rounded border ${
+                        isOverdriveWindow
+                          ? 'text-indigo-400 border-indigo-500 bg-indigo-950/30'
+                          : 'text-[var(--text-secondary)] border-[var(--border)] bg-[var(--bg-elevated)]'
+                      }`}>
+                        {isOverdriveWindow ? '⚡ WINDOW ACTIVE' : '🕒 OVERDRIVE WINDOW'}
                       </span>
+                      <h3 className="font-display text-lg font-bold uppercase tracking-wide font-barlow mt-2 flex items-center gap-1.5 text-white">
+                        Overdrive Hour
+                      </h3>
+                      <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                        Log a workout during your peak hour ({avgWorkoutHour || 18}:00 ± 2h) with camera proof to gain 1.5x XP.
+                      </p>
                     </div>
-                    
-                    {/* Neubrutalist Progress Bar */}
-                    <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-                      <div
-                        className="h-full bg-orange-500 transition-all duration-500 ease-out"
-                        style={{
-                          width: `${(() => {
-                            const prog = activeWager.progress?.[user?.uid] || {};
-                            const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
-                            return Math.min(100, Math.round((sum / 3) * 100));
-                          })()}%`
-                        }}
-                      />
-                    </div>
+                    <Zap size={24} className={isOverdriveWindow ? 'text-indigo-400 animate-pulse' : 'text-[var(--text-muted)]'} />
                   </div>
 
-                  <p className="text-[9px] text-[var(--text-muted)] font-sans mt-0.5 leading-snug">
-                    Complete your remaining workouts before expiration to claim a +{(activeWager.wagerAmount || 50) * 2} XP payout!
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-col gap-3 relative z-10">
-                  <div className="flex gap-2">
-                    {[50, 100, 200].map((amount) => (
-                      <button
-                        key={amount}
-                        onClick={() => setSelectedWager(amount)}
-                        className={`flex-1 py-1.5 border-2 border-black font-mono font-bold text-xs shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ${
-                          selectedWager === amount
-                            ? 'bg-orange-500 text-white shadow-none translate-x-0.5 translate-y-0.5'
-                            : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] hover:bg-orange-500/10'
-                        }`}
-                      >
-                        {amount} XP
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={handlePlaceWager}
-                    disabled={wagerLoading || xp < selectedWager}
-                    className="w-full py-2.5 border-2 border-black bg-orange-600 hover:bg-orange-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                  >
-                    {wagerLoading ? (
-                      <span>Placing Wager...</span>
-                    ) : xp < selectedWager ? (
-                      <span>INSUFFICIENT XP BALANCE</span>
-                    ) : (
+                  <div className="mt-4 flex flex-col gap-3 relative z-10">
+                    {isOverdriveWindow ? (
                       <>
-                        <span>Wager {selectedWager} XP</span>
-                        <ArrowRight size={12} />
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Fitness Skill Tree Section */}
-            <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col gap-4">
-              <div className="border-b border-[var(--border)] pb-3 flex justify-between items-center">
-                <div>
-                  <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-amber-400" />
-                    <span>Fitness Skill Tree</span>
-                  </h2>
-                  <p className="text-[9px] font-mono text-[var(--text-secondary)] uppercase mt-0.5">
-                    Level {level} {levelName} • {remainingPoints} Skill Points Available
-                  </p>
-                </div>
-                <div className="px-2.5 py-1 border-2 border-black bg-amber-400 text-black font-mono font-bold text-[10px] rounded shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                  {remainingPoints} SP
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {[
-                  {
-                    key: 'ironWill',
-                    name: 'Iron Will',
-                    description: 'Prevents streak decay on missed days. (Active passive)',
-                    icon: Shield,
-                    color: 'border-emerald-500/40 text-emerald-400 bg-emerald-950/10'
-                  },
-                  {
-                    key: 'adrenalineRush',
-                    name: 'Adrenaline Rush',
-                    description: 'Increase PR XP bonus from 10 to 12 XP. (Active passive)',
-                    icon: Zap,
-                    color: 'border-cyan-500/40 text-cyan-400 bg-cyan-950/10'
-                  },
-                  {
-                    key: 'recoveryProtocol',
-                    name: 'Recovery Protocol',
-                    description: 'Increase Flash Quest spawn chance to 20%. (Active passive)',
-                    icon: Flame,
-                    color: 'border-amber-500/40 text-amber-400 bg-amber-950/10'
-                  }
-                ].map((node) => {
-                  const Icon = node.icon;
-                  const isUnlocked = !!skills[node.key];
-                  const canUnlock = remainingPoints >= 4 && !isUnlocked;
-
-                  return (
-                    <div
-                      key={node.key}
-                      className={`border-2 border-black p-3 rounded-lg shadow-[2px_2px_0px_rgba(0,0,0,1)] flex items-start gap-3 transition-all ${
-                        isUnlocked
-                          ? 'bg-gradient-to-r from-[#172e24] to-[#111] border-emerald-500'
-                          : 'bg-[var(--bg-elevated)]'
-                      }`}
-                    >
-                      <div className={`p-2 border border-black rounded ${isUnlocked ? 'bg-emerald-500 text-black' : node.color}`}>
-                        <Icon size={18} />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-display text-sm font-bold uppercase tracking-wide font-barlow text-white">
-                            {node.name}
-                          </h4>
-                          {isUnlocked ? (
-                            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-emerald-400 px-1.5 py-0.5 border border-emerald-500/30 bg-emerald-950/30 rounded">
-                              UNLOCKED
-                            </span>
-                          ) : (
-                            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--text-secondary)] px-1.5 py-0.5 border border-[var(--border)] bg-[var(--surface)] rounded">
-                              4 SP COST
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[9px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                          {node.description}
-                        </p>
-
-                        {!isUnlocked && (
-                          <button
-                            disabled={!canUnlock}
-                            onClick={() => handleUnlockSkill(node.key)}
-                            className={`w-full mt-2.5 py-1.5 border-2 border-black font-display font-bold text-[10px] uppercase tracking-wider shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer disabled:opacity-45 disabled:pointer-events-none ${
-                              canUnlock
-                                ? 'bg-amber-400 text-black hover:bg-amber-500'
-                                : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] shadow-none'
-                            }`}
-                          >
-                            {canUnlock ? (
-                              <>
-                                <Unlock size={10} />
-                                <span>Unlock Perk (-4 SP)</span>
-                              </>
+                        {!isOverdriveVerified ? (
+                          <div>
+                            {verifyingImage ? (
+                              <div className="w-full py-2 border-2 border-black bg-indigo-950 text-indigo-400 font-display font-extrabold text-xs uppercase tracking-wider text-center flex justify-center items-center gap-2 cursor-not-allowed opacity-75">
+                                <span className="h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                <span>Verifying Presence...</span>
+                              </div>
                             ) : (
                               <>
-                                <Lock size={10} />
-                                <span>LOCKED (REQUIRES 4 SP)</span>
+                                <label
+                                  htmlFor="overdrive-camera"
+                                  className="w-full py-2 border-2 border-black bg-indigo-600 hover:bg-indigo-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-2 cursor-pointer"
+                                >
+                                  <Camera size={14} />
+                                  <span>Verify Gym Presence</span>
+                                </label>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  id="overdrive-camera"
+                                  className="hidden"
+                                  onChange={handleCameraChange}
+                                />
                               </>
                             )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* ─── ACTIVE CHALLENGES ─────────────────────────────────────────── */}
-          <div className="mt-4">
-            <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
-              <Zap size={14} className="text-[var(--accent-xp)] animate-pulse" />
-              <span>Active Challenges</span>
-            </h2>
-
-            {activeChallenges.length > 0 ? (
-              <div className="flex flex-col gap-6">
-                {/* Active Campaigns Slot */}
-                {activeCampaigns.length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-[10px] font-mono text-[var(--text-secondary)] tracking-widest uppercase font-bold">
-                      Campaign Slot
-                    </span>
-                    {activeCampaigns.map((challenge) => {
-                      const isFinalStage = challenge.progressPct >= 80 || challenge.weeksRemaining === 1;
-                      return (
-                        <motion.div
-                          key={challenge.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="border-2 border-[var(--border-bright)] bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="font-display text-lg font-bold text-[var(--text-primary)] uppercase tracking-wide font-barlow">
-                                {challenge.name}
-                              </h3>
-                              <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                                {challenge.description}
-                              </p>
-                            </div>
-                            <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--accent-xp)] border border-[var(--accent-xp)] bg-[#b5ff2d0e] rounded">
-                              +{challenge.rewardXP || 500} XP Reward
-                            </span>
                           </div>
-
-                          {/* Progress details */}
-                          <div className="mt-4 flex flex-col gap-2">
-                            <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
-                              <span>MISSION PROGRESS</span>
-                              <span className="text-[var(--text-primary)] font-bold font-dm">
-                                {challenge.progressPct}%
-                              </span>
-                            </div>
-                            
-                            {/* Neubrutalist Progress Bar */}
-                            <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-                              <div
-                                className="h-full bg-[var(--accent-xp)] transition-all duration-500 ease-out"
-                                style={{ width: `${challenge.progressPct}%` }}
-                              />
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)] mt-1">
-                              <span className="text-[var(--secondary)] font-sans font-medium">
-                                {challenge.currentMission}
-                              </span>
-                              <span className="flex items-center gap-1 text-[var(--text-muted)]">
-                                <CalendarDays size={10} />
-                                {getRemainingTimeText(challenge)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Challenge footer options */}
-                          <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
-                            <div className="flex gap-3 items-center">
-                              <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
-                                ID: {challenge.id.slice(0, 8)}
-                              </span>
-                              <button
-                                onClick={() => handleUseChallengeSkip(challenge.id)}
-                                disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
-                                className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
-                              >
-                                <FastForward size={10} />
-                                <span>Skip Day (Costs 1 ⏭️)</span>
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => handleLeave(challenge.id)}
-                              className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                            >
-                              <Trash2 size={10} />
-                              <span>Remove</span>
-                            </button>
-                          </div>
-
-                          {/* Boss Fight section */}
-                          {isFinalStage && (
-                            <div className="mt-4 border-2 border-dashed border-[#ff4a4a] bg-[#ff4a4a]/10 p-3 rounded-lg flex flex-col gap-2 relative overflow-hidden animate-pulse">
-                              <div className="flex justify-between items-center">
-                                <div>
-                                  <span className="text-[10px] font-mono font-bold text-[#ff4a4a] uppercase tracking-widest block">
-                                    ⚡ BOSS FIGHT UNLOCKED
-                                  </span>
-                                  <h4 className="font-display text-sm font-bold text-white uppercase tracking-wide font-barlow mt-0.5">
-                                    Boss: {challenge.name} Finale
-                                  </h4>
-                                </div>
-                                <Flame size={16} className="text-[#ff4a4a] animate-bounce" />
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-1 px-3 py-2 border-2 border-emerald-500 bg-emerald-950/20 text-emerald-400 rounded">
+                              <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase">
+                                <CheckCircle2 size={16} />
+                                <span>GYM STATUS VERIFIED ✅</span>
                               </div>
-                              <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-snug">
-                                Unlock the final AMRAP set to failure to conquer this challenge and claim a +200 XP premium bonus!
-                              </p>
-                              <button
-                                onClick={() => handleStartBossFight(challenge)}
-                                className="w-full mt-1 py-1.5 border border-black bg-[#ff4a4a] hover:bg-red-600 text-white font-display font-extrabold text-[10px] uppercase tracking-wider shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer"
-                              >
-                                <span>Start Boss Workout</span>
-                                <ArrowRight size={10} />
-                              </button>
+                              <div className="text-[10px] font-mono text-emerald-300 uppercase tracking-wide">
+                                Window Remaining: {formatOverdriveCountdown(overdriveRemainingMs)}
+                              </div>
                             </div>
-                          )}
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Active Quests Slot */}
-                {activeQuests.length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-[10px] font-mono text-[var(--text-secondary)] tracking-widest uppercase font-bold">
-                      Quest Slot
-                    </span>
-                    {activeQuests.map((challenge) => {
-                      const isFinalStage = challenge.progressPct >= 80 || challenge.weeksRemaining === 1;
-                      return (
-                        <motion.div
-                          key={challenge.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="border-2 border-[var(--border-bright)] bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="font-display text-lg font-bold text-[var(--text-primary)] uppercase tracking-wide font-barlow">
-                                {challenge.name}
-                              </h3>
-                              <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
-                                {challenge.description}
-                              </p>
-                            </div>
-                            <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--accent-xp)] border border-[var(--accent-xp)] bg-[#b5ff2d0e] rounded">
-                              +{challenge.rewardXP || 500} XP Reward
-                            </span>
-                          </div>
-
-                          {/* Progress details */}
-                          <div className="mt-4 flex flex-col gap-2">
-                            <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
-                              <span>MISSION PROGRESS</span>
-                              <span className="text-[var(--text-primary)] font-bold font-dm">
-                                {challenge.progressPct}%
-                              </span>
-                            </div>
-                            
-                            {/* Neubrutalist Progress Bar */}
-                            <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-                              <div
-                                className="h-full bg-[var(--accent-xp)] transition-all duration-500 ease-out"
-                                style={{ width: `${challenge.progressPct}%` }}
-                              />
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)] mt-1">
-                              <span className="text-[var(--secondary)] font-sans font-medium">
-                                {challenge.currentMission}
-                              </span>
-                              <span className="flex items-center gap-1 text-[var(--text-muted)]">
-                                <CalendarDays size={10} />
-                                {getRemainingTimeText(challenge)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Challenge footer options */}
-                          <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
-                            <div className="flex gap-3 items-center">
-                              <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
-                                ID: {challenge.id.slice(0, 8)}
-                              </span>
-                              <button
-                                onClick={() => handleUseChallengeSkip(challenge.id)}
-                                disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
-                                className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
-                              >
-                                <FastForward size={10} />
-                                <span>Skip Day (Costs 1 ⏭️)</span>
-                              </button>
-                            </div>
+                            {cameraImage && (
+                              <div className="w-full h-24 border-2 border-black rounded overflow-hidden shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                                <img src={cameraImage} alt="Gym proof" className="w-full h-full object-cover" />
+                              </div>
+                            )}
                             <button
-                              onClick={() => handleLeave(challenge.id)}
-                              className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              onClick={handleStartOverdriveSession}
+                              className="w-full py-2.5 border-2 border-black bg-[var(--accent-xp)] text-black hover:bg-[#a3f020] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1.5 cursor-pointer"
                             >
-                              <Trash2 size={10} />
-                              <span>Remove</span>
+                              <Zap size={14} />
+                              <span>Start Overdrive Workout (+1.5x)</span>
                             </button>
                           </div>
-
-                          {/* No Boss Fight for single-stage Quests */}
-                        </motion.div>
-                      );
-                    })}
+                        )}
+                      </>
+                    ) : (
+                      <div className="border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] p-3 rounded text-center">
+                        <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase">
+                          WINDOW LOCKS AT {avgWorkoutHour || 18}:00 LOCAL TIME
+                        </p>
+                        <p className="text-[9px] text-[var(--text-muted)] font-sans mt-1">
+                          Currently outside the ±2 hour window. Workouts logged now earn standard XP.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="border-2 border-dashed border-[var(--border)] bg-[var(--surface)] p-6 rounded-lg text-center flex flex-col items-center gap-2 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                <span className="text-xs font-sans text-[var(--text-secondary)] max-w-xs leading-relaxed">
-                  No active challenges right now. Accept one below to start leveling up! 🔥
-                </span>
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* ─── AVAILABLE TO JOIN ─────────────────────────────────────────── */}
-          <div className="mt-4">
-            <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
-              <Trophy size={14} className="text-[var(--primary)]" />
-              <span>Available Challenges</span>
-            </h2>
+                {/* Flame Wager Card */}
+                <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-orange-500/5 rounded-full blur-xl pointer-events-none" />
+                  <div className="flex justify-between items-start relative z-10">
+                    <div>
+                      <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-orange-400 border border-orange-500/30 bg-orange-950/20 rounded">
+                        🔥 DOUBLE OR NOTHING
+                      </span>
+                      <h3 className="font-display text-lg font-bold uppercase tracking-wide font-barlow mt-2 flex items-center gap-1 text-white">
+                        Flame Wager
+                      </h3>
+                      <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                        Bet XP on your consistency. Complete 3 workouts in 7 days to double your wager.
+                      </p>
+                    </div>
+                    <Flame size={24} className="text-orange-500" />
+                  </div>
 
-            {availableChallenges.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                {availableChallenges.map((challenge) => {
-                  const cooldownUntil = profile?.cooldowns?.[challenge.id] || profile?.cooldowns?.[challenge.type];
-                  const isLocked = cooldownUntil && cooldownUntil > Date.now();
-
-                  return (
-                    <motion.div
-                      key={challenge.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col gap-3 relative overflow-hidden ${isLocked ? 'opacity-85' : ''}`}
-                    >
-                      {/* Saffron side glow or gray if locked */}
-                      <div className={`absolute top-0 bottom-0 left-0 w-1 ${isLocked ? 'bg-[var(--text-secondary)]' : 'bg-[var(--primary)]'}`} />
+                  {activeWager ? (
+                    <div className="mt-4 flex flex-col gap-3 relative z-10 border-2 border-orange-500/40 bg-orange-950/15 p-3.5 rounded-lg shadow-[2px_2px_0px_rgba(249,115,22,0.15)]">
+                      <div className="flex justify-between items-center text-[10px] font-mono text-orange-400 font-extrabold uppercase tracking-wide">
+                        <span>ACTIVE XP WAGER: {activeWager.wagerAmount || 50} XP</span>
+                        <span className="bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded text-[8px]">
+                          {getRemainingTimeText(activeWager)}
+                        </span>
+                      </div>
                       
-                      <div className="pl-1">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-1.5">
-                            <h3 className={`font-display text-base font-bold uppercase tracking-wide font-barlow ${isLocked ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'}`}>
-                              {challenge.name}
-                            </h3>
-                            {isLocked && <Lock size={14} className="text-red-500 animate-pulse" />}
-                          </div>
-                          <span className={`px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider border rounded ${isLocked ? 'text-[var(--text-secondary)] border-[var(--border)] bg-[var(--bg-elevated)]' : 'text-[var(--accent-xp)] border-[var(--accent-xp)] bg-[#b5ff2d0e]'}`}>
-                            +500 XP Reward
+                      {/* Progress details */}
+                      <div className="mt-1 flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
+                          <span>WORKOUT PROGRESS</span>
+                          <span className="text-white font-bold font-dm">
+                            {(() => {
+                              const prog = activeWager.progress?.[user?.uid] || {};
+                              const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
+                              return `${sum}/3`;
+                            })()} workouts
                           </span>
                         </div>
-                        <p className={`text-xs font-sans mt-1 leading-snug ${isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>
-                          {challenge.description}
-                        </p>
-
-                        {/* Specs Row */}
-                        <div className="flex gap-4 mt-3 text-[10px] font-mono text-[var(--text-secondary)] border-t border-[var(--border)] pt-2.5">
-                          <div className="flex items-center gap-1">
-                            <CalendarDays size={12} className={isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--secondary)]'} />
-                            <span>Duration: {challenge.durationDays} days</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Flame size={12} className={isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--primary)]'} />
-                            <span>
-                              {challenge.type === 'weak_point'
-                                ? `Goal: ${challenge.goal?.targetSets || 15} sets of ${challenge.goal?.muscleGroup || 'Core'}`
-                                : 'Goal: 3 workouts/week'}
-                            </span>
-                          </div>
+                        
+                        {/* Neubrutalist Progress Bar */}
+                        <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
+                          <div
+                            className="h-full bg-orange-500 transition-all duration-500 ease-out"
+                            style={{
+                              width: `${(() => {
+                                const prog = activeWager.progress?.[user?.uid] || {};
+                                const sum = (prog.weeklyCount || []).reduce((acc, v) => acc + v, 0);
+                                return Math.min(100, Math.round((sum / 3) * 100));
+                              })()}%`
+                            }}
+                          />
                         </div>
                       </div>
 
-                      {isLocked ? (
-                        <button
-                          disabled
-                          className="w-full mt-1 py-2.5 border-2 border-black bg-[var(--bg-elevated)] text-[var(--text-muted)] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] text-center flex justify-center items-center gap-1.5 cursor-not-allowed opacity-75"
+                      <p className="text-[9px] text-[var(--text-muted)] font-sans mt-0.5 leading-snug">
+                        Complete your remaining workouts before expiration to claim a +{(activeWager.wagerAmount || 50) * 2} XP payout!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex flex-col gap-3 relative z-10">
+                      <div className="flex gap-2">
+                        {[50, 100, 200].map((amount) => (
+                          <button
+                            key={amount}
+                            onClick={() => setSelectedWager(amount)}
+                            className={`flex-1 py-1.5 border-2 border-black font-mono font-bold text-xs shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ${
+                              selectedWager === amount
+                                ? 'bg-orange-500 text-white shadow-none translate-x-0.5 translate-y-0.5'
+                                : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] hover:bg-orange-500/10'
+                            }`}
+                          >
+                            {amount} XP
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={handlePlaceWager}
+                        disabled={wagerLoading || xp < selectedWager}
+                        className="w-full py-2.5 border-2 border-black bg-orange-600 hover:bg-orange-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                      >
+                        {wagerLoading ? (
+                          <span>Placing Wager...</span>
+                        ) : xp < selectedWager ? (
+                          <span>INSUFFICIENT XP BALANCE</span>
+                        ) : (
+                          <>
+                            <span>Wager {selectedWager} XP</span>
+                            <ArrowRight size={12} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Challenges */}
+              <div className="mt-2">
+                <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
+                  <Zap size={14} className="text-[var(--accent-xp)] animate-pulse" />
+                  <span>Active Challenges</span>
+                </h2>
+
+                {activeChallenges.length > 0 ? (
+                  <div className="flex flex-col gap-6">
+                    {/* Active Campaigns Slot */}
+                    {activeCampaigns.length > 0 && (
+                      <div className="flex flex-col gap-3">
+                        <span className="text-[10px] font-mono text-[var(--text-secondary)] tracking-widest uppercase font-bold">
+                          Campaign Slot
+                        </span>
+                        {activeCampaigns.map((challenge) => {
+                          const isFinalStage = challenge.progressPct >= 80 || challenge.weeksRemaining === 1;
+                          return (
+                            <motion.div
+                              key={challenge.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="border-2 border-[var(--border-bright)] bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h3 className="font-display text-lg font-bold text-[var(--text-primary)] uppercase tracking-wide font-barlow">
+                                    {challenge.name}
+                                  </h3>
+                                  <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                                    {challenge.description}
+                                  </p>
+                                </div>
+                                <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--accent-xp)] border border-[var(--accent-xp)] bg-[#b5ff2d0e] rounded">
+                                  +{challenge.rewardXP || 500} XP Reward
+                                </span>
+                              </div>
+
+                              {/* Progress details */}
+                              <div className="mt-4 flex flex-col gap-2">
+                                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
+                                  <span>MISSION PROGRESS</span>
+                                  <span className="text-[var(--text-primary)] font-bold font-dm">
+                                    {challenge.progressPct}%
+                                  </span>
+                                </div>
+                                
+                                {/* Neubrutalist Progress Bar */}
+                                <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
+                                  <div
+                                    className="h-full bg-[var(--accent-xp)] transition-all duration-500 ease-out"
+                                    style={{ width: `${challenge.progressPct}%` }}
+                                  />
+                                </div>
+
+                                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)] mt-1">
+                                  <span className="text-[var(--secondary)] font-sans font-medium">
+                                    {challenge.currentMission}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-[var(--text-muted)]">
+                                    <CalendarDays size={10} />
+                                    {getRemainingTimeText(challenge)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Challenge footer options */}
+                              <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
+                                <div className="flex gap-3 items-center">
+                                  <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
+                                    ID: {challenge.id.slice(0, 8)}
+                                  </span>
+                                  <button
+                                    onClick={() => handleUseChallengeSkip(challenge.id)}
+                                    disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
+                                    className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
+                                  >
+                                    <FastForward size={10} />
+                                    <span>Skip Day (Costs 1 ⏭️)</span>
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => handleLeave(challenge.id)}
+                                  className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <Trash2 size={10} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+
+                              {/* Boss Fight section */}
+                              {isFinalStage && (
+                                <div className="mt-4 border-2 border-dashed border-[#ff4a4a] bg-[#ff4a4a]/10 p-3 rounded-lg flex flex-col gap-2 relative overflow-hidden animate-pulse">
+                                  <div className="flex justify-between items-center">
+                                    <div>
+                                      <span className="text-[10px] font-mono font-bold text-[#ff4a4a] uppercase tracking-widest block">
+                                        ⚡ BOSS FIGHT UNLOCKED
+                                      </span>
+                                      <h4 className="font-display text-sm font-bold text-white uppercase tracking-wide font-barlow mt-0.5">
+                                        Boss: {challenge.name} Finale
+                                      </h4>
+                                    </div>
+                                    <Flame size={16} className="text-[#ff4a4a] animate-bounce" />
+                                  </div>
+                                  <p className="text-[9px] text-[var(--text-secondary)] font-sans leading-snug">
+                                    Unlock the final AMRAP set to failure to conquer this challenge and claim a +200 XP premium bonus!
+                                  </p>
+                                  <button
+                                    onClick={() => handleStartBossFight(challenge)}
+                                    className="w-full mt-1 py-1.5 border border-black bg-[#ff4a4a] hover:bg-red-600 text-white font-display font-extrabold text-[10px] uppercase tracking-wider shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>Start Boss Workout</span>
+                                    <ArrowRight size={10} />
+                                  </button>
+                                </div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Active Quests Slot */}
+                    {activeQuests.length > 0 && (
+                      <div className="flex flex-col gap-3">
+                        <span className="text-[10px] font-mono text-[var(--text-secondary)] tracking-widest uppercase font-bold">
+                          Quest Slot
+                        </span>
+                        {activeQuests.map((challenge) => {
+                          return (
+                            <motion.div
+                              key={challenge.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="border-2 border-[var(--border-bright)] bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h3 className="font-display text-lg font-bold text-[var(--text-primary)] uppercase tracking-wide font-barlow">
+                                    {challenge.name}
+                                  </h3>
+                                  <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                                    {challenge.description}
+                                  </p>
+                                </div>
+                                <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--accent-xp)] border border-[var(--accent-xp)] bg-[#b5ff2d0e] rounded">
+                                  +{challenge.rewardXP || 500} XP Reward
+                                </span>
+                              </div>
+
+                              {/* Progress details */}
+                              <div className="mt-4 flex flex-col gap-2">
+                                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)]">
+                                  <span>MISSION PROGRESS</span>
+                                  <span className="text-[var(--text-primary)] font-bold font-dm">
+                                    {challenge.progressPct}%
+                                  </span>
+                                </div>
+                                
+                                {/* Neubrutalist Progress Bar */}
+                                <div className="w-full h-3 bg-[var(--bg-elevated)] border-2 border-black rounded-full overflow-hidden shadow-[1px_1px_0px_rgba(0,0,0,1)]">
+                                  <div
+                                    className="h-full bg-[var(--accent-xp)] transition-all duration-500 ease-out"
+                                    style={{ width: `${challenge.progressPct}%` }}
+                                  />
+                                </div>
+
+                                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-secondary)] mt-1">
+                                  <span className="text-[var(--secondary)] font-sans font-medium">
+                                    {challenge.currentMission}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-[var(--text-muted)]">
+                                    <CalendarDays size={10} />
+                                    {getRemainingTimeText(challenge)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Challenge footer options */}
+                              <div className="mt-3.5 flex justify-between items-center border-t border-[var(--border)] pt-2.5">
+                                <div className="flex gap-3 items-center">
+                                  <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase">
+                                    ID: {challenge.id.slice(0, 8)}
+                                  </span>
+                                  <button
+                                    onClick={() => handleUseChallengeSkip(challenge.id)}
+                                    disabled={(profile?.powerUps?.challengeSkip || 0) <= 0}
+                                    className="text-[9px] font-mono text-[var(--accent-xp)] hover:text-[var(--primary)] disabled:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
+                                  >
+                                    <FastForward size={10} />
+                                    <span>Skip Day (Costs 1 ⏭️)</span>
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => handleLeave(challenge.id)}
+                                  className="text-[9px] font-mono text-red-500 hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <Trash2 size={10} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-[var(--border)] bg-[var(--surface)] p-6 rounded-lg text-center flex flex-col items-center gap-2 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <span className="text-xs font-sans text-[var(--text-secondary)] max-w-xs leading-relaxed">
+                      No active challenges right now. Accept one below to start leveling up! 🔥
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Available Challenges */}
+              <div className="mt-4">
+                <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
+                  <Trophy size={14} className="text-[var(--primary)]" />
+                  <span>Available Challenges</span>
+                </h2>
+
+                {availableChallenges.length > 0 ? (
+                  <div className="flex flex-col gap-4">
+                    {availableChallenges.map((challenge) => {
+                      const cooldownUntil = profile?.cooldowns?.[challenge.id] || profile?.cooldowns?.[challenge.type];
+                      const isLocked = cooldownUntil && cooldownUntil > Date.now();
+
+                      return (
+                        <motion.div
+                          key={challenge.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col gap-3 relative overflow-hidden ${isLocked ? 'opacity-85' : ''}`}
                         >
-                          <Lock size={12} />
-                          <span>{getRemainingCooldownText(cooldownUntil)}</span>
-                        </button>
-                      ) : (
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleJoin(challenge.id)}
-                          disabled={joiningId !== null}
-                          className="w-full mt-1 py-2.5 border-2 border-black bg-[var(--primary)] hover:bg-[var(--accent-xp)] hover:text-black font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer disabled:opacity-50"
-                        >
-                          {joiningId === challenge.id ? (
-                            <span>Accepting...</span>
+                          <div className={`absolute top-0 bottom-0 left-0 w-1 ${isLocked ? 'bg-[var(--text-secondary)]' : 'bg-[var(--primary)]'}`} />
+                          
+                          <div className="pl-1">
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className={`font-display text-base font-bold uppercase tracking-wide font-barlow ${isLocked ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'}`}>
+                                  {challenge.name}
+                                </h3>
+                                {isLocked && <Lock size={14} className="text-red-500 animate-pulse" />}
+                              </div>
+                              <span className={`px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider border rounded ${isLocked ? 'text-[var(--text-secondary)] border-[var(--border)] bg-[var(--bg-elevated)]' : 'text-[var(--accent-xp)] border-[var(--accent-xp)] bg-[#b5ff2d0e]'}`}>
+                                +500 XP Reward
+                              </span>
+                            </div>
+                            <p className={`text-xs font-sans mt-1 leading-snug ${isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>
+                              {challenge.description}
+                            </p>
+
+                            <div className="flex gap-4 mt-3 text-[10px] font-mono text-[var(--text-secondary)] border-t border-[var(--border)] pt-2.5">
+                              <div className="flex items-center gap-1">
+                                <CalendarDays size={12} className={isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--secondary)]'} />
+                                <span>Duration: {challenge.durationDays} days</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Flame size={12} className={isLocked ? 'text-[var(--text-muted)]' : 'text-[var(--primary)]'} />
+                                <span>
+                                  {challenge.type === 'weak_point'
+                                    ? `Goal: ${challenge.goal?.targetSets || 15} sets of ${challenge.goal?.muscleGroup || 'Core'}`
+                                    : 'Goal: 3 workouts/week'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isLocked ? (
+                            <button
+                              disabled
+                              className="w-full mt-1 py-2.5 border-2 border-black bg-[var(--bg-elevated)] text-[var(--text-muted)] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] text-center flex justify-center items-center gap-1.5 cursor-not-allowed opacity-75"
+                            >
+                              <Lock size={12} />
+                              <span>{getRemainingCooldownText(cooldownUntil)}</span>
+                            </button>
                           ) : (
-                            <>
-                              <span>Accept Challenge</span>
-                              <ArrowRight size={12} />
-                            </>
+                            <motion.button
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => handleJoin(challenge.id)}
+                              disabled={joiningId !== null}
+                              className="w-full mt-1 py-2.5 border-2 border-black bg-[var(--primary)] hover:bg-[var(--accent-xp)] hover:text-black font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              {joiningId === challenge.id ? (
+                                <span>Accepting...</span>
+                              ) : (
+                                <>
+                                  <span>Accept Challenge</span>
+                                  <ArrowRight size={12} />
+                                </>
+                              )}
+                            </motion.button>
                           )}
-                        </motion.button>
-                      )}
-                    </motion.div>
-                  );
-                })}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-[var(--border)] bg-[var(--surface)] p-6 rounded-lg text-center shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <span className="text-xs font-sans text-[var(--text-secondary)]">
+                      You have accepted all available challenges! 🏆
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="border-2 border-dashed border-[var(--border)] bg-[var(--surface)] p-6 rounded-lg text-center shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                <span className="text-xs font-sans text-[var(--text-secondary)]">
-                  You have accepted all available challenges! 🏆
-                </span>
-              </div>
-            )}
-          </div>
 
-          {/* ─── COMPLETED CHALLENGES ──────────────────────────────────────── */}
-          {completedChallenges.length > 0 && (
-            <div className="mt-4">
-              <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
-                <Award size={14} className="text-[var(--accent-xp)]" />
-                <span>Completed Badges</span>
-              </h2>
+              {/* Completed Badges */}
+              {completedChallenges.length > 0 && (
+                <div className="mt-4">
+                  <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-3 flex items-center gap-1.5">
+                    <Award size={14} className="text-[var(--accent-xp)]" />
+                    <span>Completed Badges</span>
+                  </h2>
 
-              <div className="grid grid-cols-2 gap-3">
-                {completedChallenges.map((challenge) => (
-                  <motion.div
-                    key={challenge.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="border-2 border-[var(--accent-xp)] bg-[#b5ff2d05] p-3 rounded-lg shadow-[2px_2px_0px_rgba(0,0,0,1)] flex flex-col items-center text-center gap-1.5"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-[#b5ff2d10] border border-[var(--accent-xp)] flex items-center justify-center text-[var(--accent-xp)]">
-                      <Award size={20} />
-                    </div>
-                    <div className="flex flex-col min-w-0 w-full">
-                      <span className="font-display text-xs font-bold uppercase tracking-wide truncate text-white font-barlow">
-                        {challenge.type === 'comeback'
-                          ? 'Comeback'
-                          : challenge.type === 'streak'
-                          ? (challenge.subtype === 'wager' ? 'Wager' : 'Streak')
-                          : (challenge.subtype === 'quest' ? 'Quest' : 'Weak Point')}
-                      </span>
-                      <span className="text-[8px] font-mono text-[var(--accent-xp)] uppercase tracking-wider mt-0.5 flex items-center justify-center gap-0.5 font-dm">
-                        <CheckCircle2 size={8} />
-                        Claimed +{challenge.rewardXP || 500} XP
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
+                  <div className="grid grid-cols-2 gap-3">
+                    {completedChallenges.map((challenge) => (
+                      <motion.div
+                        key={challenge.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="border-2 border-[var(--accent-xp)] bg-[#b5ff2d05] p-3 rounded-lg shadow-[2px_2px_0px_rgba(0,0,0,1)] flex flex-col items-center text-center gap-1.5"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-[#b5ff2d10] border border-[var(--accent-xp)] flex items-center justify-center text-[var(--accent-xp)]">
+                          <Award size={20} />
+                        </div>
+                        <div className="flex flex-col min-w-0 w-full">
+                          <span className="font-display text-xs font-bold uppercase tracking-wide truncate text-white font-barlow">
+                            {challenge.type === 'comeback'
+                              ? 'Comeback'
+                              : challenge.type === 'streak'
+                              ? (challenge.subtype === 'wager' ? 'Wager' : 'Streak')
+                              : (challenge.subtype === 'quest' ? 'Quest' : 'Weak Point')}
+                          </span>
+                          <span className="text-[8px] font-mono text-[var(--accent-xp)] uppercase tracking-wider mt-0.5 flex items-center justify-center gap-0.5 font-dm">
+                            <CheckCircle2 size={8} />
+                            Claimed +{challenge.rewardXP || 500} XP
+                          </span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {/* Store Sub-tabs */}
+              <div className="flex bg-[var(--bg-elevated)] p-1 rounded-lg border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] shrink-0">
+                <button
+                  onClick={() => setStoreSubTab('perks')}
+                  className={`flex-1 py-1.5 font-display text-[10px] font-extrabold uppercase tracking-widest rounded transition-all ${
+                    storeSubTab === 'perks'
+                      ? 'bg-amber-400 text-black shadow-[1.5px_1.5px_0px_black] border-2 border-black'
+                      : 'text-[var(--text-secondary)] hover:text-white border-2 border-transparent'
+                  }`}
+                >
+                  Perks Tree
+                </button>
+                <button
+                  onClick={() => setStoreSubTab('shop')}
+                  className={`flex-1 py-1.5 font-display text-[10px] font-extrabold uppercase tracking-widest rounded transition-all ${
+                    storeSubTab === 'shop'
+                      ? 'bg-amber-400 text-black shadow-[1.5px_1.5px_0px_black] border-2 border-black'
+                      : 'text-[var(--text-secondary)] hover:text-white border-2 border-transparent'
+                  }`}
+                >
+                  Armory Shop
+                </button>
               </div>
+
+              {storeSubTab === 'perks' ? (
+                /* Fitness Skill Tree Section */
+                <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col gap-4">
+                  <div className="border-b border-[var(--border)] pb-3 flex justify-between items-center">
+                    <div>
+                      <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-400" />
+                        <span>Fitness Skill Tree</span>
+                      </h2>
+                      <p className="text-[9px] font-mono text-[var(--text-secondary)] uppercase mt-0.5">
+                        Level {level} {levelName} • {remainingPoints} Skill Points Available
+                      </p>
+                    </div>
+                    <div className="px-2.5 py-1 border-2 border-black bg-amber-400 text-black font-mono font-bold text-[10px] rounded shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                      {remainingPoints} SP
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {[
+                      {
+                        key: 'ironWill',
+                        name: 'Iron Will',
+                        description: 'Prevents streak decay on missed days. (Active passive)',
+                        icon: Shield,
+                        color: 'border-emerald-500/40 text-emerald-400 bg-emerald-950/10'
+                      },
+                      {
+                        key: 'adrenalineRush',
+                        name: 'Adrenaline Rush',
+                        description: 'Increase PR XP bonus from 10 to 12 XP. (Active passive)',
+                        icon: Zap,
+                        color: 'border-cyan-500/40 text-cyan-400 bg-cyan-950/10'
+                      },
+                      {
+                        key: 'recoveryProtocol',
+                        name: 'Recovery Protocol',
+                        description: 'Increase Flash Quest spawn chance to 20%. (Active passive)',
+                        icon: Flame,
+                        color: 'border-amber-500/40 text-amber-400 bg-amber-950/10'
+                      }
+                    ].map((node) => {
+                      const Icon = node.icon;
+                      const isUnlocked = !!skills[node.key];
+                      const canUnlock = remainingPoints >= 4 && !isUnlocked;
+
+                      return (
+                        <div
+                          key={node.key}
+                          className={`border-2 p-3 rounded-lg flex items-start gap-3 transition-all ${
+                            isUnlocked
+                              ? 'bg-gradient-to-r from-[#172e24] to-[#111] border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.25),2px_2px_0px_rgba(0,0,0,1)]'
+                              : 'bg-[var(--bg-elevated)] border-black shadow-[2px_2px_0px_rgba(0,0,0,1)]'
+                          }`}
+                        >
+                          <div className={`p-2 border border-black rounded ${isUnlocked ? 'bg-emerald-500 text-black' : node.color}`}>
+                            <Icon size={18} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-display text-sm font-bold uppercase tracking-wide font-barlow text-white">
+                                {node.name}
+                              </h4>
+                              {isUnlocked ? (
+                                <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-emerald-400 px-1.5 py-0.5 border border-emerald-500/30 bg-emerald-950/30 rounded">
+                                  UNLOCKED
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--text-secondary)] px-1.5 py-0.5 border border-[var(--border)] bg-[var(--surface)] rounded flex items-center gap-1">
+                                  <Lock size={8} />
+                                  <span>4 SP COST</span>
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[9px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                              {node.description}
+                            </p>
+
+                            {!isUnlocked && (
+                              <button
+                                disabled={!canUnlock}
+                                onClick={() => handleUnlockSkill(node.key)}
+                                className={`w-full mt-2.5 py-1.5 border-2 border-black font-display font-bold text-[10px] uppercase tracking-wider shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1 cursor-pointer disabled:opacity-45 disabled:pointer-events-none ${
+                                  canUnlock
+                                    ? 'bg-amber-400 text-black hover:bg-amber-500'
+                                    : 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] shadow-none'
+                                }`}
+                              >
+                                {canUnlock ? (
+                                  <>
+                                    <Unlock size={10} />
+                                    <span>Unlock Perk (-4 SP)</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock size={10} />
+                                    <span>LOCKED (REQUIRES 4 SP)</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* Armory & XP Shop Section */
+                <div className="border-2 border-black bg-[var(--surface)] p-4 rounded-lg shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col gap-4">
+                  <div className="border-b border-[var(--border)] pb-3 flex justify-between items-center">
+                    <div>
+                      <h2 className="font-display text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5 font-barlow">
+                        <Sparkles size={14} className="text-amber-400" />
+                        <span>Zenkai Armory & XP Shop</span>
+                      </h2>
+                      <p className="text-[9px] font-mono text-[var(--text-secondary)] uppercase mt-0.5">
+                        Spend your XP to unlock consumables, titles, and glowing auras
+                      </p>
+                    </div>
+                    <div className="px-2.5 py-1 border-2 border-black bg-amber-400 text-black font-mono font-bold text-[10px] rounded shadow-[2px_2px_0px_rgba(0,0,0,1)] font-barlow">
+                      {xp} XP
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {shopItems.map((item) => {
+                      const isConsumable = item.type === 'consumable';
+                      const isTitle = item.type === 'title';
+                      const isAura = item.type === 'aura';
+
+                      let count = 0;
+                      let isUnlocked = false;
+                      let isEquipped = false;
+
+                      if (isConsumable) {
+                        count = profile?.powerUps?.[item.key] || 0;
+                      } else if (isTitle) {
+                        isUnlocked = isTitleActive(item.key, profile?.powerUps);
+                        isEquipped = isUnlocked && profile?.activeTitle === item.name;
+                      } else if (isAura) {
+                        isUnlocked = isAuraActive(item.key, profile?.powerUps);
+                        isEquipped = isUnlocked && profile?.aura === item.key;
+                      }
+
+                      const Icon = item.icon;
+
+                      return (
+                        <div
+                          key={item.key}
+                          className="border-2 border-black bg-[var(--bg-elevated)] p-3 rounded-lg shadow-[2px_2px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-3 transition-all"
+                        >
+                          <div className="flex flex-col gap-2">
+                            {/* Top visual row */}
+                            <div className="flex justify-between items-start">
+                              {isAura ? (
+                                <div
+                                  className="w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0"
+                                  style={{
+                                    borderColor: item.color,
+                                    boxShadow: `0 0 8px ${item.color}`,
+                                    background: `${item.color}15`
+                                  }}
+                                >
+                                  <span className="text-[10px]">✨</span>
+                                </div>
+                              ) : (
+                                <div className={`p-1.5 border border-black rounded shrink-0 ${isConsumable ? 'bg-neutral-800 text-[var(--primary)]' : 'bg-neutral-800 text-[var(--secondary)]'}`}>
+                                  <Icon size={14} />
+                                </div>
+                              )}
+
+                              {/* Status Badge */}
+                              {isConsumable ? (
+                                <span className="text-[8px] font-mono text-amber-400 font-bold bg-neutral-900 border border-neutral-800 px-1 py-0.5 rounded">
+                                  {count} OWNED
+                                </span>
+                              ) : isUnlocked ? (
+                                <span className="text-[7px] font-mono text-emerald-400 border border-emerald-500/30 bg-emerald-950/30 px-1 py-0.5 rounded font-bold uppercase">
+                                  {isEquipped ? 'EQUIPPED' : 'RENTED'} ({getDaysLeft(profile?.powerUps?.[`unlocked_${item.type}_${item.key}_until`])})
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* Text Details */}
+                            <div className="min-w-0">
+                              <h4 className="font-display text-xs font-extrabold uppercase tracking-wide font-barlow text-white leading-tight">
+                                {isTitle ? `[${item.name}]` : item.name}
+                              </h4>
+                              <p className="text-[9px] text-[var(--text-secondary)] font-sans mt-1 leading-snug">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Button Row */}
+                          <div>
+                            {isConsumable ? (
+                              <button
+                                onClick={() => handlePurchaseItem(item)}
+                                disabled={xp < item.cost}
+                                className="w-full py-1.5 border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-display font-extrabold text-[9px] uppercase tracking-wide shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-45 disabled:pointer-events-none transition-all cursor-pointer font-barlow"
+                              >
+                                Buy {item.cost} XP
+                              </button>
+                            ) : isUnlocked ? (
+                              <div className="flex flex-col gap-1 w-full">
+                                {!isEquipped && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const { doc, updateDoc } = await import('firebase/firestore');
+                                        const { db } = await import('../../lib/firebase');
+                                        const userRef = doc(db, 'users', user.uid);
+                                        const updateField = isTitle ? { activeTitle: item.name } : { aura: item.key };
+                                        await updateDoc(userRef, updateField);
+                                        useAuthStore.getState().setProfile({ ...profile, ...updateField });
+                                        addToast(`Equipped ${isTitle ? 'title' : 'aura'}: ${item.name}!`, 'success');
+
+                                        if (profile.squadCode) {
+                                          const codeRef = doc(db, 'squad_codes', profile.squadCode);
+                                          await updateDoc(codeRef, updateField).catch(err => console.warn(err));
+                                        }
+                                      } catch (e) {
+                                        addToast(`Failed to equip ${isTitle ? 'title' : 'aura'}`, 'error');
+                                      }
+                                    }}
+                                    className="w-full py-1.5 border border-black bg-neutral-800 text-white font-display font-extrabold text-[9px] uppercase tracking-wide shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer font-barlow"
+                                  >
+                                    Equip
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handlePurchaseItem(item)}
+                                  className="w-full py-1.5 border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-display font-extrabold text-[9px] uppercase tracking-wide shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer font-barlow"
+                                >
+                                  Extend
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handlePurchaseItem(item)}
+                                className="w-full py-1.5 border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-display font-extrabold text-[9px] uppercase tracking-wide shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer font-barlow"
+                              >
+                                Unlock
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          </div>
-        ) : (
-          <SquadMatchmaker />
-        )}
+
+          {/* ─── DURATION / RENTAL SELECTOR MODAL ──────────────────────────────── */}
+          {selectedShopItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="w-full max-w-sm border-4 border-black bg-[var(--surface)] p-6 rounded-lg shadow-[8px_8px_0px_rgba(0,0,0,1)] relative overflow-hidden"
+              >
+                {/* Glow highlight based on aura or title color */}
+                <div 
+                  className="absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl pointer-events-none opacity-20"
+                  style={{
+                    backgroundColor: selectedShopItem.color || '#eab308'
+                  }}
+                />
+                
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-amber-400 border border-amber-500/30 bg-amber-950/20 rounded">
+                    🛒 SHOP RENTAL
+                  </span>
+                </div>
+                
+                <h3 className="font-display text-xl font-black uppercase tracking-wide font-barlow text-white">
+                  Rent {selectedShopItem.type === 'title' ? `[${selectedShopItem.name}]` : selectedShopItem.name}
+                </h3>
+                
+                <p className="text-xs text-[var(--text-secondary)] font-sans mt-1 leading-relaxed">
+                  Choose your rental period. Purchasing an active rental will extend your current expiration date.
+                </p>
+
+                {/* Duration Options */}
+                <div className="flex flex-col gap-2 mt-4">
+                  {[10, 15, 30].map((days) => {
+                    const price = durationOptions[selectedShopItem.key]?.[days] || 0;
+                    const discount = selectedShopItem.type === 'aura' ? getUpgradeDiscount(selectedShopItem.key, days, profile?.powerUps) : 0;
+                    const finalPrice = price - discount;
+                    const isSelected = selectedDuration === days;
+                    return (
+                      <button
+                        key={days}
+                        onClick={() => setSelectedDuration(days)}
+                        className={`flex justify-between items-center px-4 py-3 border-2 border-black rounded font-mono text-xs shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ${
+                          isSelected
+                            ? 'bg-amber-400 text-black shadow-none translate-x-0.5 translate-y-0.5 font-bold'
+                            : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] hover:bg-neutral-800'
+                        }`}
+                      >
+                        <span className="uppercase tracking-wider">{days} Days Rental</span>
+                        <div className="flex items-center gap-1.5 font-bold">
+                          {discount > 0 && <span className="text-[10px] line-through text-red-500">{price} XP</span>}
+                          <span>{finalPrice} XP</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Transaction Details */}
+                <div className="mt-4 p-3 bg-[var(--bg-elevated)] border-2 border-black rounded flex flex-col gap-1.5 font-mono text-[10px] uppercase text-[var(--text-secondary)]">
+                  {(() => {
+                    const baseCost = durationOptions[selectedShopItem.key]?.[selectedDuration] || 0;
+                    const discount = selectedShopItem.type === 'aura' ? getUpgradeDiscount(selectedShopItem.key, selectedDuration, profile?.powerUps) : 0;
+                    const finalCost = baseCost - discount;
+                    const remainingBalance = xp - finalCost;
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Current Balance:</span>
+                          <span className="text-white font-bold">{xp} XP</span>
+                        </div>
+                        {discount > 0 && (
+                          <div className="flex justify-between text-emerald-400 font-bold font-mono text-[10px]">
+                            <span>Upgrade Discount:</span>
+                            <span>+{discount} XP</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>Rental Cost:</span>
+                          <span className="text-amber-400 font-bold">-{finalCost} XP</span>
+                        </div>
+                        <div className="border-t border-[var(--border)] my-1" />
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white">Remaining Balance:</span>
+                          <span className={`font-bold ${remainingBalance >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                            {remainingBalance} XP
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-6">
+                  {(() => {
+                    const baseCost = durationOptions[selectedShopItem.key]?.[selectedDuration] || 0;
+                    const discount = selectedShopItem.type === 'aura' ? getUpgradeDiscount(selectedShopItem.key, selectedDuration, profile?.powerUps) : 0;
+                    const finalCost = baseCost - discount;
+                    return (
+                      <button
+                        onClick={() => handlePurchaseItem(selectedShopItem, selectedDuration)}
+                        disabled={xp < finalCost}
+                        className="flex-1 py-2.5 border-2 border-black bg-amber-400 hover:bg-amber-500 disabled:opacity-40 disabled:pointer-events-none text-black font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center cursor-pointer font-barlow"
+                      >
+                        CONFIRM RENTAL
+                      </button>
+                    );
+                  })()}
+                  
+                  <button
+                    onClick={() => setSelectedShopItem(null)}
+                    className="flex-1 py-2.5 border-2 border-black bg-[var(--bg-elevated)] hover:bg-[var(--surface)] text-[var(--text-primary)] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center cursor-pointer font-barlow"
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         {/* ─── CUSTOM CONFIRMATION DIALOG ──────────────────────────────────── */}
           {challengeToDelete && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">

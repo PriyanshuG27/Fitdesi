@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { House, TrendingUp, Plus, Dumbbell, User } from 'lucide-react';
+import { House, TrendingUp, Plus, Users, Trophy } from 'lucide-react';
 
 export const BottomNav = () => {
   const location = useLocation();
@@ -9,8 +9,8 @@ export const BottomNav = () => {
     { path: '/home', label: 'Home', Icon: House },
     { path: '/progress', label: 'Progress', Icon: TrendingUp },
     { path: '/workout', label: 'Workout', Icon: Plus, isWorkout: true },
-    { path: '/challenges', label: 'Challenges', Icon: Dumbbell },
-    { path: '/profile', label: 'Profile', Icon: User },
+    { path: '/squads', label: 'Squads', Icon: Users },
+    { path: '/challenges', label: 'Arena', Icon: Trophy },
   ];
 
   return (

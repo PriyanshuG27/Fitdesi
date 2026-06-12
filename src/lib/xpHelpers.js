@@ -104,3 +104,61 @@ export function evaluateStreak(lastDate, currentStreak) {
 
   return { newStreak, streakBonuses };
 }
+
+// ─── Aura & Title Expiration Helpers ──────────────────────────────────────────
+export function isAuraActive(auraKey, powerUps) {
+  if (!powerUps) return false;
+  const until = powerUps[`unlocked_aura_${auraKey}_until`];
+  if (!until) return false;
+  const untilMs = typeof until.toDate === 'function' ? until.toDate().getTime() : new Date(until).getTime();
+  return untilMs > Date.now();
+}
+
+export function isTitleActive(titleKey, powerUps) {
+  if (!powerUps) return false;
+  const until = powerUps[`unlocked_title_${titleKey}_until`];
+  if (!until) return false;
+  const untilMs = typeof until.toDate === 'function' ? until.toDate().getTime() : new Date(until).getTime();
+  return untilMs > Date.now();
+}
+
+// ─── Avatar Glowing Styles Helper ─────────────────────────────────────────────
+export function getAvatarStyle(aura, level, powerUps) {
+  let style = {
+    boxShadow: 'none',
+    borderColor: 'var(--border)',
+    borderWidth: '2px',
+    borderStyle: 'solid'
+  };
+  
+  let resolvedAura = aura;
+  if (['crimson', 'golden', 'shadow'].includes(aura)) {
+    if (!isAuraActive(aura, powerUps)) {
+      resolvedAura = null; // Custom aura has expired
+    }
+  }
+  
+  if (resolvedAura === 'crimson') {
+    style.boxShadow = '0 0 12px #ef4444';
+    style.borderColor = '#ef4444';
+  } else if (resolvedAura === 'golden') {
+    style.boxShadow = '0 0 12px #eab308';
+    style.borderColor = '#eab308';
+  } else if (resolvedAura === 'shadow') {
+    style.boxShadow = '0 0 12px #a855f7';
+    style.borderColor = '#a855f7';
+  } else {
+    const lvl = parseInt(level, 10) || 1;
+    if (lvl >= 21) {
+      style.boxShadow = '0 0 16px #eab308';
+      style.borderColor = '#eab308';
+    } else if (lvl >= 11) {
+      style.boxShadow = '0 0 12px #ef4444';
+      style.borderColor = '#ef4444';
+    } else if (lvl >= 6) {
+      style.boxShadow = '0 0 8px #06b6d4';
+      style.borderColor = '#06b6d4';
+    }
+  }
+  return style;
+}

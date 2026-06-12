@@ -85,19 +85,24 @@ export function useXPEngine() {
         const userSnap = await transaction.get(userRef);
         const userData = userSnap.exists() ? userSnap.data() : {};
         const currentXP = typeof userData.xp === 'number' ? userData.xp : 0;
+        const currentCumulative = typeof userData.cumulativeXP === 'number'
+          ? userData.cumulativeXP
+          : currentXP;
 
         const newXP = currentXP + xpAmount;
-        const prevDerived = deriveLevelFromXP(currentXP);
-        const newDerived  = deriveLevelFromXP(newXP);
+        const newCumulative = currentCumulative + xpAmount;
+        const prevDerived = deriveLevelFromXP(currentCumulative);
+        const newDerived  = deriveLevelFromXP(newCumulative);
         const levelUp     = newDerived.level > prevDerived.level;
 
         transaction.update(userRef, {
-          xp:        newXP,
-          level:     newDerived.level,
-          levelName: newDerived.levelName,
+          xp:           newXP,
+          cumulativeXP: newCumulative,
+          level:        newDerived.level,
+          levelName:    newDerived.levelName,
         });
 
-        return { newXP, levelUp, newDerived, userData };
+        return { newXP, newCumulative, levelUp, newDerived, userData };
       });
 
       // Write xpLog entry AFTER transaction (outside transaction to avoid contention)
@@ -114,7 +119,7 @@ export function useXPEngine() {
       });
 
       // Sync local store from transaction result
-      setXP(result.newXP, result.userData.streak ?? 0);
+      setXP(result.newXP, result.newCumulative, result.userData.streak ?? 0);
 
       return {
         newXP:        result.newXP,
@@ -142,7 +147,7 @@ export function useXPEngine() {
       const userSnap = await runTransaction(db, async (t) => t.get(userRef));
       if (userSnap.exists()) {
         const data = userSnap.data();
-        setXP(data.xp ?? 0, data.streak ?? 0);
+        setXP(data.xp ?? 0, data.cumulativeXP ?? data.xp ?? 0, data.streak ?? 0);
       }
     } catch (err) {
       console.error('[useXPEngine] loadXP failed:', err);

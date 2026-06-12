@@ -14,6 +14,7 @@ import { db } from '../../lib/firebase';
 import { useUIStore } from '../../stores/useUIStore';
 import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
 import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
+import { getAvatarStyle } from '../../lib/xpHelpers';
 
 const BoosterTimer = ({ until }) => {
   const [timeLeft, setTimeLeft] = useState(until - Date.now());
@@ -108,7 +109,7 @@ export const MobileHome = () => {
   // Sync XP store with user profile on change
   useEffect(() => {
     if (profile) {
-      setXP(profile.xp ?? 0, profile.streak ?? 0);
+      setXP(profile.xp ?? 0, profile.cumulativeXP ?? profile.xp ?? 0, profile.streak ?? 0);
     }
   }, [profile, setXP]);
 
@@ -255,14 +256,20 @@ export const MobileHome = () => {
         return <BoosterTimer until={boosterUntil} />;
       })()}
       {/* ─── TACTILE HEADER (HUD) ────────────────────────────────────────────── */}
-      <div className="flex justify-between items-center border-b-2 border-[var(--border)] pb-4 mt-2">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-widest leading-none">
-            Welcome back,
-          </span>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight uppercase leading-none mt-1">
-            {firstName}
-          </h1>
+      <div className="flex justify-between items-center border-b-2 border-[var(--border)] pb-4">
+        <div className="flex items-center gap-3">
+          {/* Small Zenkai Logo */}
+          <div className="w-8 h-8 rounded bg-black border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 select-none">
+            <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-widest leading-none">
+              Welcome back,
+            </span>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight uppercase leading-none mt-1 font-barlow text-white">
+              {firstName}
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -289,9 +296,19 @@ export const MobileHome = () => {
             <span className="font-mono text-sm font-bold">{streak}</span>
           </motion.div>
 
-          {/* Level badge */}
-          <div className="flex items-center gap-1 px-3 py-1.5 rounded-md border-2 border-[var(--accent-xp)] bg-[#b5ff2d0c] text-[var(--accent-xp)] font-display font-extrabold text-sm uppercase tracking-wide">
-            Lvl {level}
+          {/* Clickable profile avatar with Aura styling */}
+          <div 
+            onClick={() => navigate('/profile')}
+            className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 border-2 border-black hover:scale-105 active:scale-95 shrink-0"
+            style={getAvatarStyle(profile?.aura, level, profile?.powerUps)}
+          >
+            {profile?.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="font-display font-extrabold text-[10px] text-white">
+                {profile?.name?.slice(0, 2).toUpperCase() || 'ZK'}
+              </span>
+            )}
           </div>
         </div>
       </div>

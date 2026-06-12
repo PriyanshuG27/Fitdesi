@@ -38,6 +38,8 @@ export const mockCollection = vi.fn((_db, ...pathSegments) => {
 });
 export const mockUpdateDoc = vi.fn();
 export const mockAddDoc = vi.fn();
+export const mockArrayUnion = vi.fn((...args) => args);
+export const mockArrayRemove = vi.fn((...args) => args);
 export const mockServerTimestamp = vi.fn(() => ({ _type: 'serverTimestamp' }));
 export const mockRunTransaction = vi.fn();
 export const mockDeleteDoc = vi.fn();
@@ -98,6 +100,8 @@ vi.mock('firebase/firestore', () => ({
   orderBy: vi.fn(),
   limit: vi.fn(),
   where: vi.fn(),
+  arrayUnion: mockArrayUnion,
+  arrayRemove: mockArrayRemove,
 }));
 
 // Mock firebase/functions

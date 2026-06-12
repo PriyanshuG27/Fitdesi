@@ -1,4 +1,4 @@
-import { mockDoc, mockSetDoc, mockGetDoc, mockGetDocs, mockOnSnapshot, mockDeleteDoc } from '../__mocks__/firebase';
+import { mockDoc, mockSetDoc, mockGetDoc, mockGetDocs, mockOnSnapshot, mockDeleteDoc, mockUpdateDoc } from '../__mocks__/firebase';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
@@ -53,6 +53,7 @@ describe('SquadMatchmaker Draft & Invite System', () => {
   let mockFreeAgents = [];
   let mockPresence = [];
   let mockPolls = [];
+  let mockActivityFeed = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,6 +65,7 @@ describe('SquadMatchmaker Draft & Invite System', () => {
     mockFreeAgents = [];
     mockPresence = [];
     mockPolls = [];
+    mockActivityFeed = [];
 
     // Reset stores
     useAuthStore.setState({
@@ -156,6 +158,8 @@ describe('SquadMatchmaker Draft & Invite System', () => {
           docs = mockPresence;
         } else if (path.endsWith('/polls')) {
           docs = mockPolls;
+        } else if (path.endsWith('/activity_feed')) {
+          docs = mockActivityFeed;
         }
 
         callback({
@@ -449,6 +453,10 @@ describe('SquadMatchmaker Draft & Invite System', () => {
 
     const leaveBtn = await screen.findByRole('button', { name: /Leave Squad/i });
     fireEvent.click(leaveBtn);
+
+    // Wait for the custom confirmation dialog and click "Confirm"
+    const confirmBtn = await screen.findByRole('button', { name: /Confirm/i });
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(mockDeleteDoc).toHaveBeenCalled();
@@ -913,7 +921,10 @@ describe('SquadMatchmaker Draft & Invite System', () => {
     const copyBtn = screen.getByRole('button', { name: /Code: SQ-TEST/i });
     fireEvent.click(copyBtn);
     expect(mockWriteText).toHaveBeenCalledWith('SQ-TEST');
-    expect(window.alert).toHaveBeenCalledWith('Squad Code copied to clipboard!');
+
+    // Wait for the custom alert and click OK to dismiss it
+    const okBtn = await screen.findByRole('button', { name: /OK/i });
+    fireEvent.click(okBtn);
 
     // 3. Command Decay Warning & Nudge
     const warroomTab = screen.getByText(/🛡️ Command War Room/i);
@@ -989,7 +1000,11 @@ describe('SquadMatchmaker Draft & Invite System', () => {
     // 3. Kick member
     const kickBtn = screen.getByTitle('Kick member');
     fireEvent.click(kickBtn);
-    expect(window.confirm).toHaveBeenCalledWith('Remove this member?');
+
+    // Click Confirm on the custom dialog
+    const confirmBtn = await screen.findByRole('button', { name: /Confirm/i });
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(mockSetDoc).toHaveBeenCalled();
     });
@@ -1095,6 +1110,58 @@ describe('SquadMatchmaker Draft & Invite System', () => {
     fireEvent.click(declineBtn);
     await waitFor(() => {
       expect(mockSetDoc).toHaveBeenCalled();
+    });
+  });
+
+  it('renders squad activity feed and triggers high-fives and kudos social actions', async () => {
+    mockSquads = [{
+      data: () => ({
+        squadCode: 'SQ-TEST',
+        squadName: 'Iron Temple Bros',
+        memberLimit: 5,
+        memberUids: ['uid-test-123', 'uid-other-999'],
+        members: [
+          { uid: 'uid-test-123', name: 'Priyanshu (You)', squadCode: 'FIT-PRIY123' },
+          { uid: 'uid-other-999', name: 'Bob Builder', squadCode: 'FIT-BOBB123' }
+        ],
+        creatorUid: 'uid-test-123',
+      }),
+    }];
+
+    mockActivityFeed = [{
+      id: 'activity-123',
+      data: () => ({
+        uid: 'uid-other-999',
+        name: 'Bob Builder',
+        workoutName: 'Workout: push_day',
+        isQuickLog: false,
+        exercisesCount: 4,
+        totalSets: 12,
+        totalVolume: 5000,
+        prNames: ['Bench Press'],
+        cardTheme: 'pr_smash',
+        highFives: [],
+        kudos: [],
+        createdAt: new Date(),
+      }),
+    }];
+
+    renderSquad();
+
+    // Verify activity feed item is rendered
+    await waitFor(() => {
+      expect(screen.getByText('Squad Activity Feed')).toBeInTheDocument();
+      expect(screen.getByText('Workout: push_day')).toBeInTheDocument();
+      expect(screen.getByText('0 High-Fives')).toBeInTheDocument();
+      expect(screen.getByText('0 Kudos')).toBeInTheDocument();
+    });
+
+    // Click High-Five reaction
+    const highFiveBtn = screen.getByRole('button', { name: /High-Fives/i });
+    fireEvent.click(highFiveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateDoc).toHaveBeenCalled();
     });
   });
 });

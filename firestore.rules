@@ -26,6 +26,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
 
+    // Are the signed-in user and the target user in the same gym?
+    function isSameGym(targetUid) {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(targetUid)) &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(targetUid)).data.get('gymId', '') != '' &&
+        get(/databases/$(database)/documents/users/$(targetUid)).data.get('gymId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('gymId', '');
+    }
+
     // ── Field-level validation helpers for users/{uid} ────────────────────────
 
     // Whitelist of every field written across all phases.
@@ -60,7 +69,7 @@ service cloud.firestore {
         // Gamification — Phase 5
         'cooldowns', 'skills',
         // New Profile Fields
-        'latestLiftsMap', 'latestRestTimesMap', 'gymId', 'gymName', 'disableRestTimer', 'lookingForSquad',
+        'latestLiftsMap', 'latestRestTimesMap', 'gymId', 'gymName', 'disableRestTimer', 'lookingForSquad', 'totalSessions', 'aura', 'activeTitle',
         // Academic Buffer & Prehab
         'examDeloadActive', 'examStartDate', 'examEndDate', 'lastPrehabDate',
         // Plan regeneration limits
@@ -96,8 +105,8 @@ service cloud.firestore {
     // ─── users/{uid} ─────────────────────────────────────────────────────────
 
     match /users/{uid} {
-      // Owner reads their own full profile
-      allow get: if isOwner(uid);
+      // Any authenticated user can get a specific user profile (prevents scraping since list is restricted)
+      allow get: if isAuth();
 
       // Other authenticated users in the same gym can only read/list profiles via query.
       // We tightly scope this to prevent scraping the entire user database by enforcing:
@@ -118,13 +127,9 @@ service cloud.firestore {
       // Owner creates their own profile (signup — Phase 1)
       allow create: if isOwner(uid);
 
-      // Owner updates — only whitelisted fields with numeric guards
-      // (prevents XP/level injection via browser console)
-      allow update: if isOwner(uid)
-        && isValidUserData()
-        && isValidXP()
-        && isValidLevel()
-        && isValidEquipmentList();
+      // Owner updates, or gym members updating powerUps for streak rescue
+      allow update: if (isOwner(uid) && isValidUserData() && isValidXP() && isValidLevel() && isValidEquipmentList())
+        || (isSameGym(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['powerUps']));
 
       // Profiles are never deleted from client
       allow delete: if false;
@@ -265,8 +270,15 @@ service cloud.firestore {
 
       // Each user only writes their own presence document
       match /presence/{uid} {
-        allow read:  if isAuth();
-        allow write: if isOwner(uid);
+        allow read:  if isAuth() && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
+        allow write: if isOwner(uid) && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
+      }
+      // Activity feed: squad members post summaries, teammates kudos
+      match /activity_feed/{activityId} {
+        allow read:   if isAuth() && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
+        allow create: if isAuth() && request.resource.data.uid == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
+        allow update: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
+        allow delete: if isAuth() && resource.data.uid == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/shared_squads/$(squadCode)).data.memberUids;
       }
       // Polls: any squad participant can vote; creator can update/delete
       match /polls/{pollId} {

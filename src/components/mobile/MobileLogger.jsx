@@ -154,6 +154,45 @@ export const MobileLogger = () => {
     fetchPRs();
   }, [user, isActive]);
 
+  const updateActivePresence = useCallback(async (status) => {
+    if (!user?.uid || !profile?.squadCode) return;
+    const squadCode = profile.squadCode;
+    if (!(squadCode.startsWith('ZK-') || squadCode.startsWith('SQ-') || squadCode.startsWith('FIT-'))) return;
+    
+    try {
+      const { doc, setDoc, deleteDoc, serverTimestamp } = await import('firebase/firestore');
+      const presenceRef = doc(db, 'shared_squads', squadCode, 'presence', user.uid);
+      if (status === 'active') {
+        await setDoc(presenceRef, {
+          status: 'active',
+          name: profile.name || 'Anonymous Bro',
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await deleteDoc(presenceRef);
+      }
+    } catch (err) {
+      console.error('[MobileLogger] Failed to update presence:', err);
+    }
+  }, [user?.uid, profile?.squadCode, profile?.name]);
+
+  useEffect(() => {
+    if (isActive && activeSession && !activeSession.isQuickLog) {
+      updateActivePresence('active');
+    }
+    return () => {
+      if (user?.uid && profile?.squadCode) {
+        const squadCode = profile.squadCode;
+        if (squadCode.startsWith('ZK-') || squadCode.startsWith('SQ-') || squadCode.startsWith('FIT-')) {
+          import('firebase/firestore').then(({ doc, deleteDoc }) => {
+            const presenceRef = doc(db, 'shared_squads', squadCode, 'presence', user.uid);
+            deleteDoc(presenceRef).catch(e => {});
+          });
+        }
+      }
+    };
+  }, [isActive, activeSession?.isQuickLog, updateActivePresence, user?.uid, profile?.squadCode]);
+
   // ─── Screen Wake Lock API ──────────────────────────────────────────────────
   const wakeLockRef = React.useRef(null);
 
@@ -622,14 +661,23 @@ export const MobileLogger = () => {
                 </span>
               </label>
 
-              {/* Start Button */}
-              <button
-                type="button"
-                onClick={handleStartSession}
-                className="w-full h-11 bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white font-body font-bold text-xs tracking-widest uppercase rounded-xl flex items-center justify-center transition-colors cursor-pointer select-none shadow-[0_4px_12px_var(--primary-glow)]"
-              >
-                Start Session →
-              </button>
+              {/* Start Buttons */}
+              <div className="flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleStartSession}
+                  className="w-full h-11 bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white font-body font-bold text-xs tracking-widest uppercase rounded-xl flex items-center justify-center transition-colors cursor-pointer select-none shadow-[0_4px_12px_var(--primary-glow)]"
+                >
+                  Start Session →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startSession(selectedMood, stomachFlag, true)}
+                  className="w-full h-11 bg-[var(--surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] border-2 border-black font-body font-bold text-xs tracking-widest uppercase rounded-xl flex items-center justify-center transition-all cursor-pointer select-none shadow-[3px_3px_0px_black] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                >
+                  Quick Log Past Workout 🕒
+                </button>
+              </div>
             </div>
 
           </div>
@@ -651,10 +699,16 @@ export const MobileLogger = () => {
               <X size={20} />
             </button>
 
-            {/* Session Timer */}
-            <div className="font-mono text-xl font-bold tracking-widest text-[var(--text-primary)]">
-              {formattedTime}
-            </div>
+            {/* Session Timer or Quick Log Badge */}
+            {activeSession?.isQuickLog ? (
+              <div className="px-3 py-1 border border-amber-500/50 bg-amber-950/20 text-amber-400 font-mono text-xs font-bold uppercase tracking-wider rounded">
+                Quick Log
+              </div>
+            ) : (
+              <div className="font-mono text-xl font-bold tracking-widest text-[var(--text-primary)]">
+                {formattedTime}
+              </div>
+            )}
 
             {/* END Text Button */}
             <button
@@ -669,6 +723,11 @@ export const MobileLogger = () => {
 
           {/* MAIN SCROLL AREA */}
           <main className="flex-1 overflow-y-auto px-4 py-4 pb-36">
+            {activeSession?.isQuickLog && (
+              <div className="mb-4 flex items-center justify-center gap-2 px-3.5 py-3 border-2 border-amber-500 bg-amber-950/20 text-amber-400 text-xs font-mono font-bold uppercase rounded-xl select-none shadow-[2px_2px_0px_black]">
+                <span>🕒 QUICK LOG MODE (RETROACTIVE)</span>
+              </div>
+            )}
             {/* ─── OFFLINE NATURAL LANGUAGE DICTATION LOGGER ─── */}
             <div className="mb-6 bg-[var(--bg-surface)] border-2 border-black p-4 rounded-2xl shadow-[4px_4px_0px_rgba(0,0,0,1)] select-none">
               <span className="block font-display text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
@@ -838,6 +897,9 @@ export const MobileLogger = () => {
                       );
                       const targetSet = targetEx ? { targetWeight: targetEx.targetWeight, reps: targetEx.reps } : null;
 
+                      const existingPR = prsMap[ex.exerciseKey] || prsMap[ex.exerciseId] || null;
+                      const previousPRWeight = existingPR && existingPR.weight !== 'BW' ? parseFloat(existingPR.weight) || 0 : 0;
+
                       return (
                         <SetRow
                           key={setIndex}
@@ -853,6 +915,7 @@ export const MobileLogger = () => {
                           onDone={handleMarkSetDone}
                           isPR={checkIfSetIsPR(ex.exerciseId, s)}
                           onDelete={ex.sets.length > 1 ? handleRemoveSet : null}
+                          previousPRWeight={previousPRWeight}
                         />
                       );
                     })}

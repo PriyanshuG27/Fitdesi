@@ -3,7 +3,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { auth, db } from '../../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import { User, LogOut, Check, Dumbbell, ShieldAlert, Sparkles, Flame, Trophy, Award, Landmark, ToggleLeft, ToggleRight } from 'lucide-react';
+import { User, LogOut, Check, Dumbbell, ShieldAlert, Sparkles, Flame, Trophy, Award, Landmark, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // Side widgets integrated into the profile layout
@@ -61,6 +61,9 @@ const MEDICAL_CATEGORIES = [
 export const DesktopProfile = () => {
   const { uid, profile } = useAuthStore();
   const [activeTab, setActiveTab] = useState('equipment');
+  const [hideWhatsNew, setHideWhatsNew] = useState(() => {
+    return localStorage.getItem('zenkai_hide_whats_new_v1_1') === 'true';
+  });
 
   // Edit States
   const [editEquipment, setEditEquipment] = useState([]);
@@ -445,6 +448,40 @@ export const DesktopProfile = () => {
 
           {/* Trophy Cabinet Achievement list */}
           <TrophyCabinetView />
+
+           {/* What's New Widget */}
+          {!hideWhatsNew && (
+            <div className="border-2 border-black bg-[var(--surface)] p-6 rounded-2xl shadow-[5px_5px_0px_rgba(0,0,0,1)] text-left flex flex-col gap-4 relative">
+              <button
+                onClick={() => {
+                  localStorage.setItem('zenkai_hide_whats_new_v1_1', 'true');
+                  setHideWhatsNew(true);
+                }}
+                className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors"
+                title="Hide What's New"
+              >
+                <X size={16} />
+              </button>
+              <div className="flex items-center gap-2 border-b border-[#222] pb-3">
+                <Sparkles size={20} className="text-[var(--primary)] shrink-0" />
+                <div>
+                  <h3 className="font-display font-black text-lg text-white uppercase tracking-tight leading-none">
+                    What's New in v1.1
+                  </h3>
+                  <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-wider mt-1 block">Zenkai Desktop Build v1.1.0</span>
+                </div>
+              </div>
+              <ul className="text-xs text-neutral-300 font-sans list-disc pl-5 space-y-2 leading-relaxed pr-4">
+                <li><strong className="text-white">Custom In-App Dialogs:</strong> Native browser popups have been fully replaced with custom-animated neubrutalist modals.</li>
+                <li><strong className="text-white">Smart Workout Reminders:</strong> Sends in-app and browser notifications 1 hour prior to your teammate's scheduled workouts.</li>
+                <li><strong className="text-white">Rest Days / Not Going:</strong> Added a "Not Going" (Rest Day 😴) option to Gym check-ins and scheduling polls.</li>
+                <li><strong className="text-white">Midnight Clearing:</strong> Polls and check-ins now clear automatically at midnight local time to keep the board fresh.</li>
+                <li><strong className="text-white">Weekly Challenge Regeneration Cooldown:</strong> Enforced a strict 48-hour rate-limit on weekly challenge rerolls.</li>
+                <li><strong className="text-white">Tougher Boss HP:</strong> Boss raids now scale dynamically with a 12,000kg baseline per member to keep the battles competitive.</li>
+                <li><strong className="text-white">Currency Separation:</strong> Spendable XP (Aura shop) is now separated from your Lifetime XP so buying cosmetics never decreases your level.</li>
+              </ul>
+            </div>
+          )}
 
         </div>
 

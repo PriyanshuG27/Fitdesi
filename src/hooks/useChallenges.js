@@ -187,6 +187,28 @@ export function useChallenges() {
     fetchTemplates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+  // Clear any incorrect 'weak_point' type cooldown (e.g. from removing duplicate flash quests)
+  useEffect(() => {
+    if (!user?.uid || !profile) return;
+    if (profile.cooldowns && profile.cooldowns.weak_point) {
+      const userRef = doc(db, 'users', user.uid);
+      const updatedCooldowns = { ...profile.cooldowns };
+      delete updatedCooldowns.weak_point;
+
+      setDoc(userRef, { cooldowns: updatedCooldowns }, { merge: true })
+        .then(() => {
+          useAuthStore.getState().setProfile({
+            ...profile,
+            cooldowns: updatedCooldowns,
+          });
+        })
+        .catch((err) => {
+          console.error('[useChallenges] Failed to clear invalid weak_point cooldown:', err);
+        });
+    }
+  }, [user?.uid, profile]);
+
   // Real-time challenges listener — pure snapshot processing, zero extra reads
   useEffect(() => {
     if (!user?.uid) {
@@ -878,8 +900,9 @@ export function useChallenges() {
         }
       }
 
-      // 5. Write cooldown if we resolved a challenge type
-      if (challengeType) {
+      // 5. Write cooldown if we resolved a challenge type and it was a campaign
+      const isCampaign = !challengeData?.subtype || challengeData.subtype === 'campaign';
+      if (challengeType && isCampaign) {
         const cooldownTime = Date.now() + 24 * 60 * 60 * 1000;
         const userRef = doc(db, 'users', user.uid);
         

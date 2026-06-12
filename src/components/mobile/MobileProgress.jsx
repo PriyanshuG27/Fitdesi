@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, BarChart2, Calendar, ArrowUpRight, ArrowDownRight, Dumbbell, RefreshCw, X, Share2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { getAvatarStyle } from '../../lib/xpHelpers';
 import { useStrengthData, useVolumeData, usePRList, clearStrengthCache } from '../../hooks/useProgress';
 import { StrengthChart } from '../shared/StrengthChart';
 import { VolumeChart } from '../shared/VolumeChart';
@@ -34,6 +36,7 @@ const formatPRDate = (dateVal) => {
 
 
 export const MobileProgress = () => {
+  const navigate = useNavigate();
   const uid = useAuthStore((state) => state.uid);
   const profile = useAuthStore((state) => state.profile);
   const { prs, loading: prsLoading, refresh: refreshPRs } = usePRList(uid);
@@ -465,16 +468,45 @@ export const MobileProgress = () => {
   return (
     <div className="flex flex-col gap-5 p-4 min-h-[100dvh] bg-[var(--bg-base)] text-[var(--text-primary)] pb-28">
       {/* ─── SCREEN TITLE ───────────────────────────────────────────────────── */}
-      <div className="flex justify-between items-center mt-2 border-b-2 border-[var(--border)] pb-3">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight uppercase leading-none">
-          Telemetry
-        </h1>
-        <button
-          onClick={handleRefresh}
-          className="p-2 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
-        >
-          <RefreshCw size={14} />
-        </button>
+      <div className="flex justify-between items-center border-b-2 border-[var(--border)] pb-3">
+        <div className="flex items-center gap-3">
+          {/* Small Zenkai Logo - only visible on mobile (hidden on lg) */}
+          <div className="lg:hidden w-8 h-8 rounded bg-black border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 select-none">
+            <img src="/logos/zenkai_official_logo.png" alt="Zenkai Logo" className="w-full h-full object-contain p-0.5" />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight uppercase leading-none font-barlow text-white">
+              Telemetry
+            </h1>
+            <p className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider mt-1">
+              Strength & volume stats
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            className="p-2 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
+          >
+            <RefreshCw size={14} />
+          </button>
+          
+          {/* Clickable profile avatar - only visible on mobile (hidden on lg) */}
+          <div 
+            onClick={() => navigate('/profile')}
+            className="lg:hidden w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer overflow-hidden transition-all duration-300 border-2 border-black hover:scale-105 active:scale-95 shrink-0"
+            style={getAvatarStyle(profile?.aura, profile?.level || 1, profile?.powerUps)}
+          >
+            {profile?.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="font-display font-extrabold text-[10px] text-white">
+                {profile?.name?.slice(0, 2).toUpperCase() || 'ZK'}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ─── SEGMENTED TAB SELECTOR (LIQUID SLIDER) ─────────────────────────── */}

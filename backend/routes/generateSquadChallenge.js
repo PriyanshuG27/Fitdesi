@@ -32,9 +32,13 @@ module.exports = [authGuard, async (req, res) => {
 
     // 2. If it is a regeneration request, perform checks
     if (isRegen) {
-      const hasRegen = squadData.hasRegeneratedThisWeek || false;
-      if (hasRegen) {
-        return res.status(400).json({ error: 'You can only regenerate the weekly challenge once.' });
+      const lastRegen = squadData.lastRegenTimestamp || 0;
+      const fortyEightHours = 2 * 24 * 60 * 60 * 1000;
+      if (lastRegen > Date.now() - fortyEightHours) {
+        const nextAllowed = new Date(lastRegen + fortyEightHours);
+        return res.status(400).json({ 
+          error: `Challenge was recently regenerated. Next regeneration allowed on: ${nextAllowed.toLocaleString()}` 
+        });
       }
 
       const votes = squadData.regenerationVotes || [];
@@ -50,7 +54,7 @@ module.exports = [authGuard, async (req, res) => {
     }
 
     // 3. Generate and save the challenge
-    const activeChallenge = await generateChallengeForSquad(squadCode);
+    const activeChallenge = await generateChallengeForSquad(squadCode, isRegen);
 
     return res.status(200).json({ success: true, activeChallenge });
 
