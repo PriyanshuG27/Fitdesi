@@ -25,14 +25,15 @@ export const OnboardingGuard = ({ children }) => {
   }
 
   const onboardingComplete = profile?.onboardingComplete === true;
+  const onboardingSkipped = profile?.onboardingSkipped === true;
 
   // Onboarding incomplete → force to onboarding (unless already there)
   if (!onboardingComplete && !onOnboardingPath) {
     return <Navigate to="/onboarding/type" replace />;
   }
 
-  // Onboarding complete → don't let them re-enter onboarding flow
-  if (onboardingComplete && onOnboardingPath) {
+  // Onboarding complete (and NOT skipped) → don't let them re-enter onboarding flow
+  if (onboardingComplete && !onboardingSkipped && onOnboardingPath) {
     return <Navigate to="/home" replace />;
   }
 

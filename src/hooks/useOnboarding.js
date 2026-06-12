@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -16,11 +16,11 @@ const VALID_EQUIPMENT = [
   'Barbell', 'Dumbbells', 'Kettlebell', 'Trap Bar', 'Medicine Ball', 'Weight Plates',
   'Ab Wheel', 'Resistance Bands', 'TRX / Suspension', 'Battle Ropes', 'Parallettes', 'Gymnastic Rings', 'Power Rack',
   'Treadmill', 'Stationary Bike', 'Rowing Machine', 'Elliptical', 'Stair Climber', 'Jump Rope',
-  'Foam Roller'
+  'Foam Roller', 'Bodyweight / No Equipment'
 ];
 
 export const useOnboarding = () => {
-  const { uid, setProfile } = useAuthStore();
+  const { uid, setProfile, profile } = useAuthStore();
   const navigate = useNavigate();
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -53,6 +53,26 @@ export const useOnboarding = () => {
     currentSupplements: [],
     medicalFlags: [],
   });
+
+  // Pre-populate state if user already has profile details (e.g. skipped onboarding previously)
+  useEffect(() => {
+    if (profile) {
+      setState(s => ({
+        userType: profile.userType ?? s.userType,
+        age: profile.age !== null && profile.age !== undefined ? String(profile.age) : s.age,
+        gender: profile.gender ?? s.gender,
+        heightCm: profile.heightCm !== null && profile.heightCm !== undefined ? String(profile.heightCm) : s.heightCm,
+        weightKg: profile.weightKg !== null && profile.weightKg !== undefined ? String(profile.weightKg) : s.weightKg,
+        goal: profile.goal ?? s.goal,
+        equipmentList: Array.isArray(profile.equipmentList) && profile.equipmentList.length > 0 ? profile.equipmentList : s.equipmentList,
+        workoutFrequency: profile.workoutFrequency ?? s.workoutFrequency,
+        sessionDuration: profile.sessionDuration ?? s.sessionDuration,
+        dietType: profile.dietType ?? s.dietType,
+        currentSupplements: Array.isArray(profile.currentSupplements) ? profile.currentSupplements : s.currentSupplements,
+        medicalFlags: Array.isArray(profile.medicalFlags) ? profile.medicalFlags : s.medicalFlags,
+      }));
+    }
+  }, [profile]);
 
   const updateState = (key, val) => {
     setState(s => ({ ...s, [key]: val }));
@@ -118,7 +138,7 @@ export const useOnboarding = () => {
       case 2:
         return state.goal && VALID_GOALS.includes(state.goal);
       case 3:
-        return state.workoutFrequency && state.sessionDuration;
+        return state.workoutFrequency && state.sessionDuration && state.equipmentList.length > 0;
       case 4:
         return state.dietType && VALID_DIET_TYPES.includes(state.dietType);
       default:
@@ -168,6 +188,7 @@ export const useOnboarding = () => {
         payload = {
           medicalFlags: state.medicalFlags,
           onboardingComplete: true,
+          onboardingSkipped: false,
         };
       }
 
@@ -193,19 +214,20 @@ export const useOnboarding = () => {
     try {
       const filteredEquipment = state.equipmentList.filter(item => VALID_EQUIPMENT.includes(item));
       await updateDoc(doc(db, 'users', uid), {
-        userType: state.userType,
-        gender: state.gender,
-        age: state.age ? Number(state.age) : null,
-        heightCm: state.heightCm ? Number(state.heightCm) : null,
-        weightKg: state.weightKg ? Number(state.weightKg) : null,
-        goal: state.goal,
-        workoutFrequency: state.workoutFrequency,
-        sessionDuration: state.sessionDuration,
-        equipmentList: filteredEquipment,
-        dietType: state.dietType,
+        userType: state.userType || 'Beginner',
+        gender: state.gender || 'male',
+        age: state.age ? Number(state.age) : 25,
+        heightCm: state.heightCm ? Number(state.heightCm) : 175,
+        weightKg: state.weightKg ? Number(state.weightKg) : 70,
+        goal: state.goal || 'General Fitness',
+        workoutFrequency: state.workoutFrequency || '3-4 days/week',
+        sessionDuration: state.sessionDuration || '45-60 mins',
+        equipmentList: filteredEquipment.length > 0 ? filteredEquipment : ['Dumbbells', 'Barbell', 'Pull-up Bar', 'Flat Bench'],
+        dietType: state.dietType || 'Vegetarian',
         currentSupplements: state.currentSupplements,
         medicalFlags: state.medicalFlags,
         onboardingComplete: true,
+        onboardingSkipped: true,
       });
       await syncProfile();
       navigate('/home', { replace: true });
@@ -237,6 +259,7 @@ export const useOnboarding = () => {
         currentSupplements: state.currentSupplements,
         medicalFlags: state.medicalFlags,
         onboardingComplete: true,
+        onboardingSkipped: false,
       });
       await syncProfile();
       navigate('/home', { replace: true });

@@ -45,7 +45,7 @@ const EQUIPMENT_CATEGORIES = [
   { label: 'Free Weights', Icon: Dumbbell, items: ['Barbell', 'Dumbbells', 'Kettlebell', 'Trap Bar', 'Medicine Ball', 'Weight Plates'] },
   { label: 'Core & Functional', Icon: Activity, items: ['Ab Wheel', 'Resistance Bands', 'TRX / Suspension', 'Battle Ropes', 'Parallettes', 'Gymnastic Rings', 'Power Rack'] },
   { label: 'Cardio', Icon: Zap, items: ['Treadmill', 'Stationary Bike', 'Rowing Machine', 'Elliptical', 'Stair Climber', 'Jump Rope'] },
-  { label: 'Recovery', Icon: Heart, items: ['Foam Roller'] },
+  { label: 'Recovery', Icon: Heart, items: ['Foam Roller', 'Bodyweight / No Equipment'] },
 ];
 
 const DIET_TYPES = [
@@ -129,7 +129,7 @@ export const OnboardingPage = () => {
 
   // Helper validation checks for enabling Continue buttons
   const isStep1Valid = state.gender && state.age && state.heightCm && state.weightKg;
-  const isStep3Valid = state.workoutFrequency && state.sessionDuration;
+  const isStep3Valid = state.workoutFrequency && state.sessionDuration && state.equipmentList.length > 0;
 
   return (
     <OnboardingLayout

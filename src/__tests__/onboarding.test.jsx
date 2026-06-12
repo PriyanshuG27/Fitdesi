@@ -139,7 +139,8 @@ describe('useOnboarding Hook', () => {
         expect.objectContaining({
           userType: 'Beginner',
           goal: 'Muscle Gain',
-          onboardingComplete: true
+          onboardingComplete: true,
+          onboardingSkipped: true
         })
       );
       expect(mockNavigate).toHaveBeenCalledWith('/home', { replace: true });
@@ -203,6 +204,48 @@ describe('useOnboarding Hook', () => {
 
       expect(result.current.currentStep).toBe(0);
       expect(result.current.error).toBe('Please fill out all required fields for this step.');
+    });
+
+    it('fails to advance step 3 if equipmentList is empty', async () => {
+      mockUpdateDoc.mockResolvedValue(undefined);
+      const { result } = renderHook(() => useOnboarding(), { wrapper });
+
+      // Step 0: UserType
+      act(() => { result.current.updateState('userType', 'Beginner'); });
+      await act(async () => { await result.current.advance(); });
+
+      // Step 1: Body info
+      act(() => {
+        result.current.updateState('gender', 'Male');
+        result.current.updateState('age', '25');
+        result.current.updateState('heightCm', '175');
+        result.current.updateState('weightKg', '70');
+      });
+      await act(async () => { await result.current.advance(); });
+
+      // Step 2: Goal
+      act(() => { result.current.updateState('goal', 'Strength'); });
+      await act(async () => { await result.current.advance(); });
+      expect(result.current.currentStep).toBe(3);
+
+      // Step 3: Gym Frequency, Duration but EMPTY equipment
+      act(() => {
+        result.current.updateState('workoutFrequency', '3');
+        result.current.updateState('sessionDuration', '60 min');
+        result.current.updateState('equipmentList', []);
+      });
+      await act(async () => { await result.current.advance(); });
+
+      // Fails to advance because equipmentList is empty
+      expect(result.current.currentStep).toBe(3);
+      expect(result.current.error).toBe('Please fill out all required fields for this step.');
+
+      // Toggle equipment on
+      act(() => { result.current.toggleEquipment('Barbell'); });
+      await act(async () => { await result.current.advance(); });
+
+      // Successfully advanced to Step 4
+      expect(result.current.currentStep).toBe(4);
     });
 
     it('advances steps sequentially when data is valid', async () => {
