@@ -70,7 +70,9 @@ export async function enablePushNotifications(uid, addToast) {
       return false;
     }
 
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    const swReg = registrations.find(r => r.active || r.installing || r.waiting)
+      || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     const messaging = getMessaging(app);
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
     if (!token) return false;
@@ -135,14 +137,17 @@ export function useFCM() {
           return;
         }
 
-        // Register the FCM service worker explicitly
+        // Use the existing PWA service worker (sw.js) which now includes FCM handling.
+        // This avoids scope conflicts from having two service workers at '/'.
         let swRegistration;
         try {
-          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-            scope: '/',
-          });
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          swRegistration = registrations.find(r => r.active || r.installing || r.waiting);
+          if (!swRegistration) {
+            swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          }
         } catch (swErr) {
-          console.warn('[FCM] Could not register firebase-messaging-sw.js:', swErr);
+          console.warn('[FCM] Could not get service worker registration:', swErr);
           return;
         }
 

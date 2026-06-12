@@ -1,3 +1,56 @@
+// ─── Firebase Cloud Messaging (FCM) — Background Push Notifications ──────────
+// Firebase scripts must be imported at the top of the service worker.
+// This merges FCM handling into the single PWA service worker to avoid
+// scope conflicts between sw.js and firebase-messaging-sw.js.
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+
+  firebase.initializeApp({
+    apiKey: 'AIzaSyAR3fj_g6G_nxtfKHl1CVera44SGGqv8Nc',
+    authDomain: 'fitdesi-74283.firebaseapp.com',
+    projectId: 'fitdesi-74283',
+    storageBucket: 'fitdesi-74283.firebasestorage.app',
+    messagingSenderId: '878645616985',
+    appId: '1:878645616985:web:f4bb46ad2f332e1917ec48',
+  });
+
+  const messaging = firebase.messaging();
+
+  // Handle background messages (app closed or in a different tab)
+  messaging.onBackgroundMessage((payload) => {
+    const { title, body, icon } = payload.notification ?? {};
+    self.registration.showNotification(title ?? 'Zenkai', {
+      body: body ?? 'You have a new notification.',
+      icon: icon ?? 'https://zenkaifit.vercel.app/logos/zenkai_official_logo.png',
+      badge: 'https://zenkaifit.vercel.app/logos/zenkai_official_logo.png',
+      data: payload.data ?? {},
+      actions: [{ action: 'open', title: '📱 Open App' }],
+    });
+  });
+} catch (e) {
+  console.warn('[SW] FCM init failed (non-fatal):', e.message);
+}
+
+// Handle notification click — open or focus app tab
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url ?? '/home';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus();
+          client.navigate(targetUrl);
+          return;
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
+    })
+  );
+});
+
+// ─── PWA Cache ────────────────────────────────────────────────────────────────
 const CACHE_NAME = 'zenkai-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
