@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, Trophy, Zap, Dumbbell, Play, RefreshCw, CalendarDays, ArrowRight } from 'lucide-react';
+import { Flame, Trophy, Zap, Dumbbell, Play, RefreshCw, CalendarDays, ArrowRight, Camera, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { usePlanStore } from '../../stores/usePlanStore';
 import { useXPStore } from '../../stores/useXPStore';
@@ -15,6 +15,9 @@ import { useUIStore } from '../../stores/useUIStore';
 import { useWeeklyRecap } from '../../hooks/useWeeklyRecap';
 import { WeeklyRecapScreen } from '../shared/WeeklyRecapScreen';
 import { getAvatarStyle } from '../../lib/xpHelpers';
+import { useWorkoutStore } from '../../stores/useWorkoutStore';
+import { compressGymImage } from '../../utils/imageCompressor';
+import { callZenkaiAPI } from '../../lib/apiClient';
 
 const BoosterTimer = ({ until }) => {
   const [timeLeft, setTimeLeft] = useState(until - Date.now());
@@ -125,7 +128,7 @@ export const MobileHome = () => {
   };
   const { planLoading, currentPlan, planDays, weekId, planError, hasFetched, isNewUser } = usePlanStore();
   const { xp, totalXP, level, levelName, xpToNextLevel, streak, setXP } = useXPStore();
-  const { challenges, userProgress } = useChallenges();
+  const { challenges, userProgress, avgWorkoutHour } = useChallenges();
   const {
     recap,
     isRecapDay,
@@ -134,6 +137,115 @@ export const MobileHome = () => {
     markAsSeen,
   } = useWeeklyRecap();
   const [showRecapScreen, setShowRecapScreen] = useState(false);
+
+  // Overdrive Hour state & logic
+  const startSession = useWorkoutStore((state) => state.startSession);
+  const setOverdrive = useWorkoutStore((state) => state.setOverdrive);
+
+  const [overdriveRemainingMs, setOverdriveRemainingMs] = useState(0);
+  const [localVerified, setLocalVerified] = useState(false);
+  const [cameraImage, setCameraImage] = useState(null);
+  const [verifyingImage, setVerifyingImage] = useState(false);
+  const [verificationAttempts, setVerificationAttempts] = useState(0);
+
+  useEffect(() => {
+    const updateTimer = () => {
+      if (!profile?.overdriveVerifiedAt) {
+        setOverdriveRemainingMs(0);
+        return;
+      }
+      
+      const verifiedTime = profile.overdriveVerifiedAt.toDate
+        ? profile.overdriveVerifiedAt.toDate().getTime()
+        : new Date(profile.overdriveVerifiedAt).getTime();
+        
+      const elapsed = Date.now() - verifiedTime;
+      const limit = 2.5 * 60 * 60 * 1000; // 2.5 hours
+      setOverdriveRemainingMs(Math.max(0, limit - elapsed));
+    };
+
+    updateTimer();
+    const intervalId = setInterval(updateTimer, 1000);
+    return () => clearInterval(intervalId);
+  }, [profile?.overdriveVerifiedAt]);
+
+  const isOverdriveVerified = localVerified || overdriveRemainingMs > 0;
+
+  useEffect(() => {
+    if (overdriveRemainingMs <= 0) {
+      setLocalVerified(false);
+    }
+  }, [overdriveRemainingMs]);
+
+  const formatOverdriveCountdown = (ms) => {
+    if (ms <= 0) return '';
+    const totalSecs = Math.ceil(ms / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+    
+    return `${parts.join(' ')} remaining`;
+  };
+
+  const currentHour = new Date().getHours();
+  const isOverdriveWindow = Math.abs(currentHour - (avgWorkoutHour || 18)) <= 2;
+
+  const handleCameraChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setVerifyingImage(true);
+    addToast('Verifying image with Gemini AI... 🔍', 'info');
+    try {
+      const cleanBase64Payload = await compressGymImage(file, 1024, 0.7);
+      setCameraImage(`data:image/jpeg;base64,${cleanBase64Payload}`);
+
+      const res = await callZenkaiAPI('verifyGymImage', { image: cleanBase64Payload });
+      
+      if (res.data?.success && res.data?.verified) {
+        setLocalVerified(true);
+        setVerificationAttempts(0);
+        addToast('Gym equipment verified! Overdrive Hour active. ⚡', 'success');
+      } else {
+        setLocalVerified(false);
+        setCameraImage(null);
+        const nextAttempts = verificationAttempts + 1;
+        setVerificationAttempts(nextAttempts);
+        if (nextAttempts >= 2) {
+          addToast('Verification failed. Try taking a clear close-up of a gym item like a dumbbell or barbell! 🏋️‍♂️', 'error');
+        } else {
+          addToast('Verification failed: No gym/workout equipment detected. ❌', 'error');
+        }
+      }
+    } catch (err) {
+      console.error('[MobileHome] Gym verification error:', err);
+      setLocalVerified(false);
+      setCameraImage(null);
+      addToast(err.message || 'Failed to verify gym presence. Please try again.', 'error');
+    } finally {
+      setVerifyingImage(false);
+    }
+  };
+
+  const handleStartOverdriveSession = () => {
+    if (!isOverdriveVerified) {
+      addToast('Please verify gym status first.', 'warning');
+      return;
+    }
+    setOverdrive(true);
+    startSession({
+      id: `overdrive_session_${Date.now()}`,
+      name: 'Overdrive Hour Workout 🔥',
+      exercises: []
+    });
+    navigate('/workout');
+    addToast('Overdrive active: 1.5x XP Multiplier enabled! ⚡', 'success');
+  };
 
   const [lastSession, setLastSession] = useState(null);
   const [lastSessionLoading, setLastSessionLoading] = useState(true);
@@ -426,6 +538,82 @@ export const MobileHome = () => {
           </p>
         </div>
       </div>
+
+      {/* ─── OVERDRIVE WIDGET ────────────────────────────────────────────────── */}
+      {isOverdriveWindow && (
+        <div className="border-2 border-black rounded-lg p-4 bg-gradient-to-br from-[#1b1c30] to-[#12131e] border-indigo-500 shadow-[4px_4px_0px_#6366f1] relative overflow-hidden mt-4">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <span className="px-2 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider rounded border text-indigo-400 border-indigo-500 bg-indigo-950/30">
+                ⚡ WINDOW ACTIVE
+              </span>
+              <h3 className="font-display text-lg font-bold uppercase tracking-wide font-barlow mt-2 flex items-center gap-1.5 text-white">
+                Overdrive Hour
+              </h3>
+              <p className="text-[10px] text-[var(--text-secondary)] font-sans mt-0.5 leading-snug">
+                Log a workout during your peak hour ({avgWorkoutHour || 18}:00 ± 2h) with camera proof to gain 1.5x XP.
+              </p>
+            </div>
+            <Zap size={24} className="text-indigo-400 animate-pulse" />
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 relative z-10">
+            {!isOverdriveVerified ? (
+              <div>
+                {verifyingImage ? (
+                  <div className="w-full py-2 border-2 border-black bg-indigo-950 text-indigo-400 font-display font-extrabold text-xs uppercase tracking-wider text-center flex justify-center items-center gap-2 cursor-not-allowed opacity-75">
+                    <span className="h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Verifying Presence...</span>
+                  </div>
+                ) : (
+                  <>
+                    <label
+                      htmlFor="overdrive-camera-home"
+                      className="w-full py-2 border-2 border-black bg-indigo-600 hover:bg-indigo-700 text-white font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-2 cursor-pointer"
+                    >
+                      <Camera size={14} />
+                      <span>Verify Gym Presence</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      id="overdrive-camera-home"
+                      className="hidden"
+                      onChange={handleCameraChange}
+                    />
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1 px-3 py-2 border-2 border-emerald-500 bg-emerald-950/20 text-emerald-400 rounded">
+                  <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase">
+                    <CheckCircle2 size={16} />
+                    <span>GYM STATUS VERIFIED ✅</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-emerald-300 uppercase tracking-wide">
+                    Window Remaining: {formatOverdriveCountdown(overdriveRemainingMs)}
+                  </div>
+                </div>
+                {cameraImage && (
+                  <div className="w-full h-24 border-2 border-black rounded overflow-hidden shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <img src={cameraImage} alt="Gym proof" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <button
+                  onClick={handleStartOverdriveSession}
+                  className="w-full py-2.5 border-2 border-black bg-[var(--accent-xp)] text-black hover:bg-[#a3f020] font-display font-extrabold text-xs uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all text-center flex justify-center items-center gap-1.5 cursor-pointer"
+                >
+                  <Zap size={14} />
+                  <span>Start Overdrive Workout (+1.5x)</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── TODAY'S MISSION OR PLAN GENERATION ──────────────────────────────── */}
       <div>
