@@ -6,7 +6,7 @@ import { create } from 'zustand';
 // This eliminates the full-screen AuthSpinner for returning users.
 const PROFILE_CACHE_KEY = 'zenkai_profile_cache';
 
-function readProfileCache() {
+export function readProfileCache() {
   try {
     const raw = localStorage.getItem(PROFILE_CACHE_KEY);
     return raw ? JSON.parse(raw) : null;
