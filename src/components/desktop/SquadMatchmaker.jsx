@@ -94,9 +94,8 @@ export const SquadMatchmaker = () => {
   }, [activityList, selectedActivityId]);
 
   const level = useMemo(() => {
-    if (!profile?.xp) return 1;
-    return deriveLevelFromXP(profile.xp).level;
-  }, [profile?.xp]);
+    return profile?.level || 1;
+  }, [profile?.level]);
 
   // Form inputs
   const [newSquadName, setNewSquadName] = useState('');

@@ -428,8 +428,10 @@ export function useWorkoutLogger() {
       xpEarned = Math.round((BASE_SESSION_XP + newPRs.length * currentPR_XP + bossBonusXP + adrenalineBonus + gritBonus) * overdriveMultiplier * boosterMultiplier);
     }
     const newXP      = currentXP + xpEarned;
-    const prevDerived = deriveLevelFromXP(currentXP);
-    const newDerived  = deriveLevelFromXP(newXP);
+    const currentCumulative = typeof userData.cumulativeXP === 'number' ? userData.cumulativeXP : currentXP;
+    const newCumulative = currentCumulative + xpEarned;
+    const prevDerived = deriveLevelFromXP(currentCumulative);
+    const newDerived  = deriveLevelFromXP(newCumulative);
     const levelUp     = newDerived.level > prevDerived.level;
 
     // ── h-1. Compute bestLift for recap (stored on session doc, avoids subcollection reads in useWeeklyRecap)
@@ -662,6 +664,7 @@ export function useWorkoutLogger() {
       newPRs,
       xpEarned,
       newXP,
+      newCumulative,
       newDerived,
       newStreak,
       levelUp,
@@ -719,7 +722,7 @@ export function useWorkoutLogger() {
   const _commitBatch = useCallback(async (payload) => {
     const {
       uid, userRef, sessionId, sessionDoc, exerciseDocs,
-      newPRs, xpEarned, newXP, newDerived, newStreak,
+      newPRs, xpEarned, newXP, newCumulative, newDerived, newStreak,
       powerUps, latestLiftsMap, latestRestTimesMap,
       squadCode, userName, weeklyVolume, squadChallengeUpdates,
       isQuickLog, totalVolume, teamSquadCodes, strengthScore
@@ -757,6 +760,7 @@ export function useWorkoutLogger() {
     // Op 5 — User profile update
     const userUpdates = {
       xp:                 newXP,
+      cumulativeXP:       newCumulative,
       level:              newDerived.level,
       levelName:          newDerived.levelName,
       streak:             newStreak,
