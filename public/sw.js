@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // ─── PWA Cache ────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'zenkai-cache-v2';
+const CACHE_NAME = 'zenkai-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -66,6 +66,8 @@ const ASSETS_TO_CACHE = [
   '/zenkai_banner_v5.svg',
   '/gemini_badge_v3.svg',
   '/logos/zenkai_official_logo.png',
+  '/logos/zenkai_official_logo.webp',
+  '/logos/zenkai_app_icon.webp',
 ];
 
 // Install Event - cache core static resources
