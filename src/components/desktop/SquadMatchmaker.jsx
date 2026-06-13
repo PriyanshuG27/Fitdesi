@@ -476,21 +476,28 @@ export const SquadMatchmaker = () => {
       snap.forEach((docSnap) => {
         const data = docSnap.data();
         if (data.uid !== uid) {
+          const benchPR = parseFloat(data.benchPR) || 0;
+          const squatPR = parseFloat(data.squatPR) || 0;
+          const volume = parseFloat(data.volume) || 0;
+          const consistency = parseFloat(data.consistency) || 0;
+          const level = parseInt(data.level, 10) || 1;
+          const streak = parseInt(data.streak, 10) || 0;
+
           agents.push({
             uid: data.uid,
             name: data.name,
             squadCode: data.squadCode,
-            consistency: data.consistency || 0,
-            squatPR: data.squatPR || 0,
-            benchPR: data.benchPR || 0,
+            consistency,
+            squatPR,
+            benchPR,
             goal: data.goal || 'Fitness',
-            streak: data.streak || 0,
+            streak,
             attributes: [
-              { subject: 'Strength', A: data.strengthScore !== undefined ? data.strengthScore : Math.min(100, Math.round(((data.benchPR || 0) + (data.squatPR || 0)) / 3)), B: 100, fullMark: 100 },
-              { subject: 'Volume', A: Math.min(100, Math.round((data.volume || 0) / 100)), B: 100, fullMark: 100 },
-              { subject: 'Consistency', A: data.consistency || 0, B: 100, fullMark: 100 },
-              { subject: 'Level', A: Math.min(100, (data.level || 1) * 5), B: 100, fullMark: 100 },
-              { subject: 'Streak', A: Math.min(100, (data.streak || 0) * 5), B: 100, fullMark: 100 }
+              { subject: 'Strength', A: typeof data.strengthScore === 'number' ? data.strengthScore : Math.min(100, Math.round((benchPR + squatPR) / 3)), B: 100, fullMark: 100 },
+              { subject: 'Volume', A: Math.min(100, Math.round(volume / 250)), B: 100, fullMark: 100 },
+              { subject: 'Consistency', A: consistency, B: 100, fullMark: 100 },
+              { subject: 'Level', A: Math.min(100, level * 5), B: 100, fullMark: 100 },
+              { subject: 'Streak', A: Math.min(100, streak * 5), B: 100, fullMark: 100 }
             ]
           });
         }
@@ -1064,8 +1071,8 @@ export const SquadMatchmaker = () => {
       const streak = parseInt(merged.streak, 10) || 0;
       
       merged.attributes = [
-        { subject: 'Strength', A: merged.strengthScore !== undefined ? merged.strengthScore : Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
-        { subject: 'Volume', A: Math.min(100, Math.round(volume / 100)), B: 100, fullMark: 100 },
+        { subject: 'Strength', A: typeof merged.strengthScore === 'number' ? merged.strengthScore : Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
+        { subject: 'Volume', A: Math.min(100, Math.round(volume / 250)), B: 100, fullMark: 100 },
         { subject: 'Consistency', A: consistency, B: 100, fullMark: 100 },
         { subject: 'Level', A: Math.min(100, level * 5), B: 100, fullMark: 100 },
         { subject: 'Streak', A: Math.min(100, streak * 5), B: 100, fullMark: 100 }
@@ -1083,8 +1090,8 @@ export const SquadMatchmaker = () => {
       const streak = parseInt(member.streak, 10) || 0;
       
       member.attributes = [
-        { subject: 'Strength', A: member.strengthScore !== undefined ? member.strengthScore : Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
-        { subject: 'Volume', A: Math.min(100, Math.round(volume / 100)), B: 100, fullMark: 100 },
+        { subject: 'Strength', A: typeof member.strengthScore === 'number' ? member.strengthScore : Math.min(100, Math.round((bench + squat) / 3)), B: 100, fullMark: 100 },
+        { subject: 'Volume', A: Math.min(100, Math.round(volume / 250)), B: 100, fullMark: 100 },
         { subject: 'Consistency', A: consistency, B: 100, fullMark: 100 },
         { subject: 'Level', A: Math.min(100, level * 5), B: 100, fullMark: 100 },
         { subject: 'Streak', A: Math.min(100, streak * 5), B: 100, fullMark: 100 }
