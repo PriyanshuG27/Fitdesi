@@ -83,6 +83,4 @@ export const useAuthStore = create((set) => ({
   },
 }));
 
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  window.__zustand_authStore = useAuthStore;
-}
+
