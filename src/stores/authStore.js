@@ -82,3 +82,7 @@ export const useAuthStore = create((set) => ({
     set({ user: null, uid: null, profile: null, loading: false, cacheHydrated: false, error: null });
   },
 }));
+
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  window.__zustand_authStore = useAuthStore;
+}
