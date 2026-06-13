@@ -1,371 +1,154 @@
-# Zenkai — App Flow
+# Zenkai — Application Flow & User Journeys
 
-**Version:** 1.0  
-**Date:** June 2026  
-
----
-
-## 1. Top-Level Flow
-
-```
-[ Open App ]
-      │
-      ▼
-[ Firebase Auth Check ]
-      │
-      ├── Not authenticated ──► [ Landing Page ] ──► [ Login / Signup ]
-      │                                                       │
-      │                                                       ▼
-      │                                            [ Onboarding Check ]
-      │                                                       │
-      │                              ┌────────────────────────┤
-      │                              │                        │
-      │                          Not done                  Skipped / Done
-      │                              │                        │
-      │                              ▼                        │
-      │                     [ Onboarding Flow ]               │
-      │                              │                        │
-      └── Authenticated ─────────────┴────────────────────────▼
-                                                     [ Home Screen ]
-```
+This document details the screen flows, state transitions, and user journeys across mobile and desktop views in Zenkai.
 
 ---
 
-## 2. Auth Flow
-
-### 2.1 New User — Email Signup
-```
-[ Landing ] 
-    → CTA "Get Started" 
-    → [ Signup Screen ]
-        Fields: Name, Email, Password
-        → Validate (email format, password ≥ 8 chars)
-        → Firebase createUserWithEmailAndPassword
-        → On success: set user doc skeleton in Firestore
-        → Redirect → [ Onboarding: User Type ]
-```
-
-### 2.2 New User — Google OAuth
-```
-[ Landing ]
-    → "Continue with Google"
-    → Firebase signInWithPopup (GoogleAuthProvider)
-    → Check Firestore: does users/{uid} exist?
-        ├── No  → Create user doc → [ Onboarding: User Type ]
-        └── Yes → [ Home Screen ]  (returning Google user)
-```
-
-### 2.3 Returning User
-```
-[ Login Screen ]
-    → Email + Password → signInWithEmailAndPassword
-    → On success: check onboardingComplete flag
-        ├── false → [ Onboarding: resume where left off ]
-        └── true  → [ Home Screen ]
-```
-
-### 2.4 Persistent Session
-```
-App mount → onAuthStateChanged listener fires
-    → user found in session → skip auth screens → [ Home Screen ]
-    → no user → [ Landing ]
-```
-
----
-
-## 3. Onboarding Flow
-
-Single linear flow. Each step writes to Firestore immediately on "Next" — so partial completion is resumable.
+## 1. Authentication & Onboarding Flow
 
 ```
-[ User Type Screen ]
-    Options: Comeback / Beginner / Consistent Trainer / Challenge Seeker
-    → Select one → Next
-    → Writes: users/{uid}.userType
-
+   [ App Launch ]
          │
          ▼
-
-[ Equipment Picker ]
-    Multi-select grid of equipment icons
-    Options: Barbell, Dumbbells, Cables, Smith Machine, 
-             Pull-up Bar, Bench, Leg Press, EZ Bar, 
-             Resistance Bands, Kettlebell
-    → Select any → Next (min 0 selected allowed)
-    → Writes: users/{uid}.equipmentList
-
+[ Auth State Checked ]
          │
-         ▼
-
-[ Medical Flags ]
-    Toggle list: Varicocele, Bad Knees, Lower Back Issues,
-                 Post-Surgery (specify area), Shoulder Impingement
-    → Select any (or none) → Continue
-    → Writes: users/{uid}.medicalFlags, onboardingComplete: true
-
-         │
-         ▼
-
-[ Home Screen ]  ← Onboarding XP burst (+100 XP for completing)
+         ├──► Not Authenticated ──► [ Landing Page ] ──► [ Login / Signup ]
+         │                                                      │
+         ▼                                                      ▼
+[ Authenticated ] ────────────────────────────────────► [ Onboarding Check ]
+                                                                │
+                                                ┌───────────────┴───────────────┐
+                                                ▼ (Incomplete)                  ▼ (Complete)
+                                       [ Onboarding Steps ]            [ Dashboard / Home ]
+                                        - User Type Selection
+                                        - Equipment Checklist
+                                        - Medical Flags
 ```
 
-**Skip logic:** "Skip for now" appears on every step. Tapping skip marks onboarding complete with whatever has been set so far. User can edit all fields in Profile later.
-
-**Back navigation:** Allowed between steps. Never resets prior selections.
+### 1.1 First-Time Signup & Onboarding
+- **Sign Up**: User registers via Email/Password or Google OAuth.
+- **Profile Initialization**: System creates a user profile document in Firestore.
+- **Onboarding Steps**:
+  1. **User Type**: Selects "comeback", "beginner", "consistent", or "challenger".
+  2. **Equipment Checklist**: Multi-select of available equipment (Barbell, Dumbbells, etc.).
+  3. **Medical Flags**: Toggles flags (e.g. "lower_back") to restrict injury-prone movements.
+- **XP Burst**: Completing onboarding awards `+100 XP` and updates `onboardingComplete = true`.
 
 ---
 
-## 4. Core Workout Logging Loop
-
-This is the most critical flow. Every tap must feel instant.
-
-### 4.1 Starting a Session
+## 2. Active Workout Logging Loop (Mobile-First)
 
 ```
-[ Home Screen ]
-    "Start Workout" button (Today's Mission card) OR bottom nav "+" 
-
-         │
-         ▼
-
-[ Session Setup ] (takes <10s)
-    ┌── Stomach/Fatigue flag: "How's your body today?"
-    │       Good / Feeling Off (flag → AI adjusts next plan)
-    └── Mood: 💪 Locked In / 😐 Average / 😴 Low Energy
-
-    → "Let's Go" → [ Active Logger ]
-    → sessionStore.isActive = true, startTime = now
+[ Dashboard ] ──► [ Setup Screen ] ──► [ Active Logger ] ──► [ Summary Screen ]
+                   - Stomach check      - Timer counting up     - PR Celebrations
+                   - Mood tags          - Set entry check-off   - XP award display
+                                        - Rest Timer audio
 ```
 
-### 4.2 Active Logger
-
-```
-[ Active Logger ]
-    Top: Session timer (counting up) | Mood tag | End Session button
-    
-    [ Exercise Search ]
-        Type exercise name → search curated exercise bank
-        → Select → Exercise added to session
-    
-    [ Set Entry ]
-        Per exercise:
-        ┌─────────────────────────────────┐
-        │  Barbell Bench Press            │
-        │  ─────────────────────────────  │
-        │  Set 1: [−] 60 kg [+]  [−] 8 reps [+]  [✓ Done] │
-        │  Set 2: [−] 60 kg [+]  [−] 8 reps [+]  [✓ Done] │
-        │  + Add Set                      │
-        └─────────────────────────────────┘
-
-    [ ✓ Done ] tap on a set:
-        → Micro-animation: checkmark scales in
-        → PR check runs: compare to users/{uid}/prs/{exerciseId}
-            ├── PR broken → PR celebration (full-screen burst)
-            └── No PR     → Normal set complete
-        → XP +50 queued (awarded on session finish)
-
-    [ + Add Exercise ] → reopens Exercise Search
-    [ End Session ] → confirmation bottom sheet → [ Session Complete ]
-```
-
-### 4.3 Session Complete Screen
-
-```
-[ Session Complete ]
-    ┌──────────────────────────────────┐
-    │  🔥 Session Done                 │
-    │  ──────────────────────────────  │
-    │  Duration: 52 min                │
-    │  Exercises: 4 | Sets: 16         │
-    │  Total Volume: 4,240 kg          │
-    │  PRs Hit: 2                      │
-    │  ──────────────────────────────  │
-    │  XP Earned                       │
-    │  Session: +50                    │
-    │  PRs (×2): +20                   │
-    │  Streak bonus: +30               │
-    │  ──────────────────────────────  │
-    │  Total: +100 XP                  │
-    │  ──────────────────────────────  │
-    │  [ Back to Home ]                │
-    └──────────────────────────────────┘
-
-Background:
-    → Writes session doc to Firestore
-    → Writes exercise subdocs
-    → Updates PR docs if broken
-    → Calls awardXP() → updates user XP + level
-    → Updates streak (if first session today)
-    → Level-up check → if yes: level-up animation
-```
-
-### 4.4 State after Complete
-
-```
-sessionStore reset → isActive: false, exercises: []
-xpStore updated
-If level-up: xpStore.levelName updated + level-up animation fires
-Home screen: streak counter +1, XP bar advances
-```
+1. **Start Session**: User clicks "Start Workout" on the dashboard.
+2. **Setup Screen**: Asks pre-workout questions:
+   - *Stomach Check*: Feeling off or locked in?
+   - *Mood Tag*: "locked_in", "average", or "low_energy".
+3. **Active Logger**:
+   - Displays exercises in the daily plan.
+   - Users can search for and add exercises.
+   - Checking off a set starts the circular rest timer (which schedules a server-side notification).
+4. **Summary & PR celebration**:
+   - Submitting calculates volume and checks for PRs.
+   - Triggers level checks and displays XP rewards.
 
 ---
 
-## 5. Plan Generation Flow
+## 3. University Gym Scouting & Trading Matrix (Desktop)
 
 ```
-[ Trigger: Monday auto OR manual "Refresh Plan" button ]
-         │
-         ▼
-[ Client: calls generatePlan Cloud Function ]
-    Shows: loading skeleton on Plan screen
-         │
-         ▼
-[ Cloud Function ]
-    → Reads last 14 sessions from Firestore
-    → Reads user profile (equipment, flags, userType)
-    → If sessions < 3: uses beginner defaults + equipment
-    → Builds prompt → calls Gemini Flash
-    → Parses JSON response
-    → Validates: all exercises ∈ equipment constraints,
-                 no exercises violate medical flags
-    → Writes to users/{uid}/weeklyPlans/{weekId}
-    → Returns { success: true }
-         │
-         ▼
-[ Client: Plan screen updates ]
-    Shows: 6-day plan as day cards
-    Each card: focus group + exercise list + sets/reps/weight
-
-[ Error state ]
-    Gemini fails → shows "Couldn't generate plan. Try again." button
-    Parse fails   → same error state, logs to console
+[ Profile ] ──► Toggle "Looking for Squad" & Select "Home Gym ID"
+                      │
+                      ▼
+[ Squads tab ] ──► [ Scouting Matrix Table ] ──► Click on Free Agent
+                                                       │
+                                                       ▼
+                                             [ Scouting Radar Card ]
+                                             - Strength / Volume / Consistency
+                                             - Click "Draft / Send Invite"
+                                                       │
+                                             ┌─────────┴─────────┐
+                                             ▼ (Under capacity)  ▼ (At capacity)
+                                        [ Send Invite ]     [ Open Trade Modal ]
+                                                             - Select member to release
+                                                             - Release & Invite Agent
 ```
+
+1. **Registration**: User selects their Home Gym (`gymId`) in their profile and toggles "Looking for Squad" to register as a Free Agent.
+2. **Scouting Table**: Squad members view other gym members sorted by strength, volume, or consistency.
+3. **Athlete Scouting Card**: Renders a Recharts Radar Chart plotting:
+   - *Strength*: Bodyweight-relative compound lifts standard score.
+   - *Volume*: Weekly volume index.
+   - *Consistency*: 14-day training consistency.
+   - *Level* & *Streak*: Scaled scores.
+4. **Draft/Trade**:
+   - If squad size $<$ limit: Sends a draft invitation (`squad_invites` state set to pending).
+   - If squad is full: Prompts the user with a Trade Modal to select a member to release, updates the squad document, and sends the invitation.
 
 ---
 
-## 6. Challenge Flow
-
-### 6.1 Starting a Challenge
+## 4. PvE Titan Raid Boss Loop
 
 ```
-[ Challenges Hub ]
-    Available challenges:
-    ┌─────────────────────────────────────┐
-    │  🔥 Comeback Challenge              │
-    │  6–12 weeks | 2× XP | Phoenix Badge │
-    │  [ Start ]                          │
-    ├─────────────────────────────────────┤
-    │  ⚡ Streak Challenge                │
-    │  3×/week for 8 weeks | Streak Shield│
-    │  [ Start ]                          │
-    └─────────────────────────────────────┘
-
-[ Start ] tap → confirmation modal:
-    "Starting this challenge will track your progress 
-    for the next {duration}. Ready?"
-    [ Confirm ] → writes to challenges collection
-                → user added to participants
-                → challenge appears in "Active" section
+  [ Squad Dashboard ] ──► Summon Titan Boss (costs keys, cooldown applies)
+                                │
+                                ▼
+  [ Active Challenge ] ──► Lift volume targeting Titan's muscle weakness (1.5x damage)
+                                │
+                                ▼
+  [ Titan Defeated ] ───► HP reaches 0. Squad wins Boss Keys & bonus multipliers
 ```
 
-### 6.2 Active Challenge Progress
-
-```
-Each session logged → useChallenges.updateProgress() called
-    → Checks: does this session satisfy today's challenge mission?
-        ├── Yes → progress doc updated, mission XP +25 awarded
-        └── No  → no update
-
-Active challenge card on Home:
-    Shows progress bar, days remaining, current mission
-    Tap → [ Challenge Detail ] screen: full timeline
-```
-
-### 6.3 Challenge Completion
-
-```
-Final mission logged → completion detected
-    → Full-screen milestone moment (specific to challenge type)
-    → Badge written to user doc
-    → Large XP burst awarded
-    → Challenge marked complete in Firestore
-    → Shareable completion card generated
-```
+1. **Summoning**: Squad members summon a Titan Raid Boss using Boss Keys.
+2. **Raid Active**: Displays a red Health Bar matching the Titan's HP (scaled by squad size and win streak).
+3. **Weakness Multiplier**: The Titan has a muscle weakness (e.g. `LEGS`). Workout sets targeting this group deal **1.5x damage** (volume translated to damage) to the Titan.
+4. **Victory**: Reducing HP to 0 defeats the Titan, granting rewards (Boss Keys, XP multipliers) and updating the win streak.
 
 ---
 
-## 7. Progress Flow
+## 5. Shared Squad Presence & Scheduling Polls
 
-```
-[ Progress Screen ]
-    Default view: last 30 days, all exercises
-
-    [ Strength Chart ]
-        X-axis: dates | Y-axis: weight (kg)
-        Exercise selector dropdown (or tab bar mobile)
-        → Select "Barbell Bench Press"
-        → Line chart renders with all logged weights
-        → Tap point → tooltip: date, weight, reps
-
-    [ Volume Chart ]
-        Weekly total volume as bar chart
-        Last 12 weeks
-
-    [ PR List ]
-        All-time bests per exercise
-        Sorted by: date (newest first) or weight (heaviest first)
-```
+- **Presence Check-In**:
+  - Squad members select their target gym arrival time (e.g. `17:30`) or mark a rest day ("Not Going").
+  - Checking in sends a push notification to teammates.
+  - A background scheduler sends workout reminders 1 hour before the checked-in time.
+- **Scheduling Polls**:
+  - Members create polls with multiple options (e.g. *"What time are we training tomorrow?"*).
+  - Teammates vote on options, updating check-in selections.
 
 ---
 
-## 8. Weekly Recap Flow
+## 6. Academic Exam Buffer Flow (Desktop)
 
-```
-[ Every Sunday, first app open ]
-    → Recap banner on Home: "Your week is ready 🔥"
-    → Tap → [ Weekly Recap Screen ]
-
-    Content:
-        Sessions logged this week: N
-        Total volume: X kg
-        PRs broken: N
-        XP earned: N
-        Streak status
-        Top lift of the week
-
-    [ Share ] → generates image card → native share sheet (mobile) 
-                                     → download PNG (desktop)
-    [ Close ] → back to Home
-```
+1. **Selection**: User goes to Profile $\rightarrow$ Academic Buffer Panel.
+2. **Setup**: Highlights exam weeks on the calendar.
+3. **Activation**:
+   - Automatically deloads routine volumes to **1/9th of normal** during exam weeks.
+   - Toggles streak protection rules to prevent streak resets during academic windows.
 
 ---
 
-## 9. Profile + Settings Flow
+## 7. Sunday AI Magazine & Newspaper Layout
 
-```
-[ Profile Screen ]
-    User card: name, level, XP, badges earned
-    
-    Sections:
-    ├── Edit Profile: name
-    ├── My Equipment: re-opens equipment picker
-    ├── Medical Flags: re-opens flags screen
-    ├── Notification Preferences: toggle smart nudge, streak alert
-    └── Sign Out: confirmation → Firebase signOut → Landing
-
-    Desktop: shown as settings sidebar panel
-    Mobile: full-screen scroll
-```
+1. **Weekly Compilation**: On Sundays, the app compiles the past 7 days of training metrics.
+2. ** AI Processing**: Calls the Express API to summarize the data into a newspaper layout.
+3. **Reprints**:
+   - Issue is cached in Firestore under `/users/{uid}/weekly_magazines`.
+   - Users are restricted to 1 weekly reprint attempt.
+4. **Easter Egg**: Users locate the promo code `ZK-SYNERGY-2026` in the Classifieds section to redeem in the Squad Matchmaker.
 
 ---
 
-## 10. Error States
+## 8. Poster Studio & Canvas Exports
 
-| Scenario | Behaviour |
-|---|---|
-| No internet on session log | Optimistic UI — show as logged. Firestore SDK queues write and syncs on reconnect |
-| Gemini API down | "Plan unavailable. Try again." button. Last plan stays visible |
-| Auth token expired | Silently refresh via Firebase SDK. If refresh fails → redirect to login |
-| Exercise not found in search | "Not found — add custom" option (post-MVP) |
-| No sessions yet on Progress | Empty state: "Log your first workout to see progress" + Start Workout CTA |
-| No plan generated yet | "Your first plan is ready to generate" + Generate button |
+1. **Stage Hydration**: Loads the user's weekly achievements onto a Canvas layout (`react-konva`).
+2. **Stickers**: Drag, scale, and rotate neubrutalist milestone badges.
+3. **Exporting**:
+   - High-res render is compiled into a base64 string.
+   - Uploads to Firebase Storage and generates a public URL.
+   - Encodes the URL into a QR Code. Teammates can scan the QR code to view and download the poster.

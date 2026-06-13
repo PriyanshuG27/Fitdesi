@@ -52,6 +52,47 @@ describe('authStore with localStorage caching', () => {
     expect(useAuthStore.getState().cacheHydrated).toBe(true);
   });
 
+  it('strips PII fields from localStorage cache when setProfile is called', async () => {
+    const { useAuthStore } = await import('../stores/authStore');
+    
+    useAuthStore.getState().setProfile({
+      uid: 'u123',
+      name: 'Live User',
+      email: 'live@email.com',
+      age: 25,
+      heightCm: 180,
+      weightKg: 75,
+      goal: 'Get Fit',
+      workoutFrequency: '3 days',
+      sessionDuration: '60 mins',
+      dietType: 'Vegan',
+      currentSupplements: ['Creatine'],
+      equipmentList: ['Barbell'],
+      medicalFlags: ['knee_pain'],
+      examStartDate: '2026-06-14',
+      examEndDate: '2026-06-20',
+    });
+
+    const cached = JSON.parse(localStorage.getItem('zenkai_profile_cache'));
+    expect(cached.uid).toBe('u123');
+    expect(cached.name).toBe('Live User');
+    
+    // PII fields should be undefined in the cache
+    expect(cached.email).toBeUndefined();
+    expect(cached.age).toBeUndefined();
+    expect(cached.heightCm).toBeUndefined();
+    expect(cached.weightKg).toBeUndefined();
+    expect(cached.goal).toBeUndefined();
+    expect(cached.workoutFrequency).toBeUndefined();
+    expect(cached.sessionDuration).toBeUndefined();
+    expect(cached.dietType).toBeUndefined();
+    expect(cached.currentSupplements).toBeUndefined();
+    expect(cached.equipmentList).toBeUndefined();
+    expect(cached.medicalFlags).toBeUndefined();
+    expect(cached.examStartDate).toBeUndefined();
+    expect(cached.examEndDate).toBeUndefined();
+  });
+
   it('handles write errors silently in writeProfileCache', async () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('Storage full');

@@ -1,60 +1,44 @@
-# Zenkai — Deployment Document
+# Zenkai — Deployment Manual
 
-**Version:** 1.0  
-**Date:** June 2026  
-**Target:** Vercel (frontend) + Firebase (Firestore + Auth + Functions)  
+This document details the production build, environment configuration, and hosting setups for the Zenkai application.
 
 ---
 
-## 1. Architecture Overview
+## 1. Production Architecture Overview
+
+The system is split into three main components:
 
 ```
-GitHub repo (main branch)
-    │
-    ├── push to main
-    │       │
-    │       ├── GitHub Actions CI runs all tests
-    │       │       ↓ (pass)
-    │       └── Vercel auto-deploys frontend
-    │
-    └── manual deploy (Firebase)
-            ├── firebase deploy --only firestore:rules
-            ├── firebase deploy --only firestore:indexes
-            └── firebase deploy --only functions
+                  [ Git Repository (GitHub) ]
+                               │
+            ┌──────────────────┴──────────────────┐
+            ▼ (Continuous Deployment)             ▼ (Manual or Web Service)
+  [ Vercel Web Hosting ]               [ Render Cloud Hosting ]
+     React PWA Client                    Node.js Express API
+            │                                     │
+            └───────────────┬─────────────────────┘
+                            ▼
+                [ Firebase Console Services ]
+                 Auth + Firestore Database
 ```
 
-Vercel handles frontend automatically via GitHub integration.  
-Firebase requires manual deploy for rules, indexes, and functions.
+1. **Frontend**: React client hosted on **Vercel** with automatic deployment on pushes to `main`.
+2. **Backend**: Express server hosted on **Render** (Node.js web service).
+3. **Database & Auth**: Firestore and Firebase Auth, managed via the **Firebase CLI** for rules and indexes deployment.
 
 ---
 
-## 2. One-Time Vercel Setup
+## 2. Vercel Frontend Deployment
 
-```bash
-# Install Vercel CLI
-npm install -g vercel
+Vercel hosts the compiled static assets and resolves index paths for SPA routes.
 
-# Link project (run once in repo root)
-vercel link
-# Select: Link to existing project or create new
+### 2.1 Build Configurations
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Framework Preset**: `Vite`
 
-# Set environment variables
-vercel env add VITE_FIREBASE_API_KEY
-vercel env add VITE_FIREBASE_AUTH_DOMAIN
-vercel env add VITE_FIREBASE_PROJECT_ID
-vercel env add VITE_FIREBASE_STORAGE_BUCKET
-vercel env add VITE_FIREBASE_MESSAGING_SENDER_ID
-vercel env add VITE_FIREBASE_APP_ID
-# → Select: Production + Preview for each
-```
-
-Or set via Vercel Dashboard → Project → Settings → Environment Variables.
-
----
-
-## 3. `vercel.json` Configuration
-
-Create at project root:
+### 2.2 Client Routing Rewrite Rule
+Vercel requires a redirection configuration in `vercel.json` at the root of the project to prevent `404 Not Found` errors when refreshing routes like `/home` or `/profile`:
 
 ```json
 {
@@ -66,206 +50,56 @@ Create at project root:
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net; img-src 'self' data:;"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
-        {
-          "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=()"
-        }
-      ]
-    },
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
   ]
 }
 ```
 
-Replace `YOUR_PROJECT_ID` with your actual Firebase project ID.
+---
 
-**The SPA rewrite rule is critical.** Without it, direct navigation to `/home` returns 404 from Vercel.
+## 3. Render Backend Deployment
+
+The Node.js Express backend is deployed as a Web Service on Render.
+
+### 3.1 Web Service Settings
+- **Runtime**: `Node`
+- **Root Directory**: `backend`
+- **Build Command**: `npm install`
+- **Start Command**: `npm start`
+- **Plan**: `Web Service` (Free or Starter tier)
+
+### 3.2 CORS Locking
+Set `ALLOWED_ORIGINS` to your production Vercel URL (e.g. `https://zenkai.vercel.app`) in the Render environment settings to block cross-origin requests from other domains.
 
 ---
 
-## 4. Firebase Deploy Sequence
+## 4. Firebase CLI Database Deployments
 
-Always deploy in this order — rules before functions before data changes.
+Firestore security rules and indexes must be deployed from the command line using the Firebase CLI.
 
 ```bash
-# Step 1: Deploy security rules (always first)
+# 1. Log in to your Firebase account
+firebase login
+
+# 2. Select your active production project
+firebase use production-project-id
+
+# 3. Deploy Firestore security rules
 firebase deploy --only firestore:rules
 
-# Step 2: Deploy composite indexes
+# 4. Deploy composite queries indexes
 firebase deploy --only firestore:indexes
-# Note: index builds take 2-5 minutes on Firebase Console
-
-# Step 3: Deploy Cloud Functions
-firebase deploy --only functions
-# Note: first deploy takes 3-5 minutes (Docker build)
-
-# Deploy everything at once (when confident):
-firebase deploy --only firestore:rules,firestore:indexes,functions
-```
-
-**Never run `firebase deploy` without `--only` flags** — it deploys hosting too, which conflicts with Vercel.
-
----
-
-## 5. Pre-Deploy Checklist
-
-Complete every item before pushing to `main`. Not suggestions — requirements.
-
-### Code Quality
-- [ ] `npm run build` completes with no errors locally
-- [ ] `npx vitest run` — all tests pass
-- [ ] `npx vitest run --coverage` — coverage above thresholds
-- [ ] No `console.log` statements in production code (grep: `grep -r "console.log" src/ --include="*.js" --include="*.jsx"`)
-- [ ] No `TODO` or `FIXME` comments in code paths that ship
-
-### Security (from SECURITY.md)
-- [ ] `grep -r "GEMINI" src/` returns zero results
-- [ ] `grep -r "AIza" src/` returns zero results  
-- [ ] `.env` not in git: `git ls-files | grep .env` returns nothing
-- [ ] All Firestore security rule tests pass
-- [ ] Rate limiting implemented and tested in generatePlan
-- [ ] `vercel.json` CSP headers present
-
-### Environment
-- [ ] All `VITE_FIREBASE_*` variables set in Vercel dashboard
-- [ ] Gemini key set via `firebase functions:config:set`
-- [ ] `VITE_USE_EMULATOR` is NOT set in Vercel (only in local `.env.local`)
-
-### Firebase
-- [ ] Firestore security rules deployed: `firebase deploy --only firestore:rules`
-- [ ] Indexes deployed: `firebase deploy --only firestore:indexes`
-- [ ] Functions deployed: `firebase deploy --only functions`
-- [ ] Auth providers enabled: Email/Password + Google (Firebase Console)
-
-### UI / UX
-- [ ] Test on physical Android device (Chrome) — mobile layout
-- [ ] Test on desktop Chrome — desktop layout
-- [ ] All empty states render correctly (no data, fresh account)
-- [ ] All error states render correctly (simulate offline, bad auth)
-- [ ] PR celebration fires correctly
-- [ ] Level-up animation fires on threshold
-
----
-
-## 6. Deploy Commands Summary
-
-```bash
-# Full production deploy sequence
-npm run build                                                    # verify build
-npx vitest run                                                   # verify tests
-firebase deploy --only firestore:rules,firestore:indexes         # rules + indexes
-firebase deploy --only functions                                 # Cloud Functions
-git push origin main                                             # triggers Vercel auto-deploy
 ```
 
 ---
 
-## 7. Post-Deploy Smoke Tests
+## 5. Pre-Deployment Verification Checklist
 
-Run manually after every production deploy. Takes 5 minutes.
+Complete this checklist before merging changes to `main`:
 
-| Test | How | Expected |
-|---|---|---|
-| Landing page loads | Open production URL | Renders in < 2s, no console errors |
-| Google login works | Click "Continue with Google" | Redirects to home after auth |
-| Email signup works | Create new account | Onboarding starts |
-| Workout logging works | Log a set, complete session | XP awarded, session in Firestore |
-| PR detection works | Log weight > stored PR | Celebration overlay fires |
-| Plan generation works | Click "Generate Plan" | Plan renders within 8s |
-| Mobile layout works | Open on phone | Bottom nav visible, logger full-screen |
-| Streak increments | Complete session two days in a row | Streak counter +1 |
-
-If any smoke test fails → run `vercel rollback` immediately (see Section 8).
-
----
-
-## 8. Rollback Procedure
-
-### Frontend (Vercel) — instant
-```bash
-# List recent deployments
-vercel ls
-
-# Rollback to previous deployment
-vercel rollback [deployment-url]
-
-# Or via Vercel Dashboard → Deployments → right-click previous → Promote to Production
-```
-
-### Cloud Functions — redeploy previous version
-```bash
-# Cloud Functions have no built-in rollback
-# Solution: revert the commit, redeploy
-
-git revert HEAD --no-edit
-git push origin main
-firebase deploy --only functions
-```
-
-### Firestore Security Rules — same approach
-```bash
-# Revert rules file
-git checkout HEAD~1 -- firestore.rules
-firebase deploy --only firestore:rules
-```
-
-**Data in Firestore is not rolled back** — Firestore has no automatic rollback. For data corruption, use Firestore point-in-time recovery (must be enabled in advance in Firebase Console → Firestore → Point-in-time recovery).
-
----
-
-## 9. Monitoring (Post-MVP)
-
-For MVP, monitor via:
-- Firebase Console → Functions → Logs (check for errors after deploy)
-- Firebase Console → Firestore → Usage (confirm reads/writes within free tier)
-- Vercel → Analytics → Web Vitals (confirm LCP < 2s)
-
-Post-MVP additions:
-- Sentry for frontend error tracking
-- Firebase Alerting for function error rate spikes
-- Vercel notifications for failed deployments
-
----
-
-## 10. Free Tier Limits to Watch
-
-Firebase Spark plan is free. Zenkai MVP stays within it easily, but know the limits:
-
-| Resource | Free limit | Expected usage |
-|---|---|---|
-| Firestore reads | 50,000/day | ~5,000/day for 10 active users |
-| Firestore writes | 20,000/day | ~2,000/day for 10 active users |
-| Cloud Functions invocations | 2M/month | ~300/month for 10 active users |
-| Functions compute | 400,000 GB-sec/month | Well within limit |
-| Firebase Auth | Unlimited | — |
-
-**Upgrade to Blaze (pay-as-you-go) is required to call external APIs from Cloud Functions.** This is already a requirement for Gemini. Blaze still has the same free tier — you only pay above it.
+- [ ] **Local Build**: Runs `npm run build` locally with no errors.
+- [ ] **Tests Passing**: Runs `npm run test` and verifies all 455 unit/integration tests pass.
+- [ ] **No Secrets Committed**: Verifies `.env` files are not tracked by Git (`git status`).
+- [ ] **Server URL Set**: Confirms `VITE_API_BASE_URL` in Vercel points to the Render server URL.
+- [ ] **CORS Configured**: Confirms `ALLOWED_ORIGINS` in Render contains the Vercel app domain.
+- [ ] **Database Rules Deployed**: Confirms the latest `firestore.rules` are deployed.
+- [ ] **Firestore Indexes Deployed**: Confirms composite indexes are built and operational on the Firebase Console.

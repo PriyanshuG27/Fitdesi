@@ -126,6 +126,21 @@ describe('validatePlanRequest', () => {
       expect(e.code).toBe('invalid-argument');
     }
   });
+
+  it('handles personalRequirements validation length boundaries and types', () => {
+    // Under/at limit should pass
+    expect(() => validatePlanRequest({ personalRequirements: 'a'.repeat(300) })).not.toThrow();
+    // Over limit should throw
+    expect(() => validatePlanRequest({ personalRequirements: 'a'.repeat(301) })).toThrow();
+    try {
+      validatePlanRequest({ personalRequirements: 'a'.repeat(301) });
+    } catch (e) {
+      expect(e.code).toBe('invalid-argument');
+      expect(e.message).toContain('personalRequirements must be 300 characters or fewer');
+    }
+    // Non-string should throw
+    expect(() => validatePlanRequest({ personalRequirements: 123 })).toThrow();
+  });
 });
 
 // ═════════════════════════════════════════════

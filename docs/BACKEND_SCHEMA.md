@@ -1,19 +1,16 @@
-# Zenkai — Backend Schema
+# Zenkai — Backend Schema & REST API Specifications
 
-**Version:** 1.0  
-**Date:** June 2026  
-**Database:** Cloud Firestore  
-**Functions:** Firebase Cloud Functions (Node.js 20)  
+This document outlines the Firestore database model, subcollections, security rules, indexes, and HTTP REST endpoints exposed by the Zenkai Express engine.
 
 ---
 
-## 1. Firestore Collections — Full Schema
+## 1. Firestore Database Schema
+
+Zenkai uses Cloud Firestore as its primary real-time database.
 
 ### Collection: `users`
-
+Under `/users/{uid}`, stores public profile data.
 ```
-users/{uid}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
 uid               string      yes        Same as Auth UID
@@ -22,468 +19,288 @@ email             string      yes        From Firebase Auth
 userType          string      yes        "comeback" | "beginner" | "consistent" | "challenger"
 onboardingComplete boolean    yes        false until onboarding done or skipped
 createdAt         timestamp   yes        Server timestamp on doc creation
-
-// XP + Level
-xp                number      yes        Total cumulative XP, never decreases. Default: 0
-level             number      yes        1–31+. Default: 1
+xp                number      yes        Total cumulative XP. Default: 0
+cumulativeXP      number      yes        Verified cumulative XP. Default: 0
+level             number      yes        Current level (1–31+). Default: 1
 levelName         string      yes        "Rookie" | "Challenger" | "Athlete" | "Elite"
-
-// Streak
-streak            number      yes        Current streak in days. Default: 0
+streak            number      yes        Current consistency streak. Default: 0
 streakLastDate    string      no         ISO date string "YYYY-MM-DD" of last logged session
-
-// Equipment
 equipmentList     string[]    yes        Array of equipment IDs. Default: []
-                                         Valid: "barbell" | "dumbbells" | "cables" | 
-                                                "smith_machine" | "pullup_bar" | "bench" | 
-                                                "leg_press" | "ez_bar" | "resistance_bands" | 
-                                                "kettlebell"
-
-// Medical
 medicalFlags      string[]    yes        Array of flag IDs. Default: []
-                                         Valid: "varicocele" | "bad_knees" | "lower_back" | 
-                                                "post_surgery" | "shoulder_impingement"
+gymId             string      no         Home Gym ID for Scouting Matrix
+gymName           string      no         Home Gym Display Name
+overdriveVerifiedAt timestamp no         Timestamp when gym image check-in was approved
+lastPrehabDate    string      no         ISO date YYYY-MM-DD of last mobility XP claim
+powerUps          map         yes        Map of power-up counts (see below)
 
-// Power-ups (Post-MVP)
-powerUps          map         yes        Default: all 0
-  streakShield    number                 Count remaining
-  xpBooster       number                 Count remaining
-  challengeSkip   number                 Count remaining
-  planRefresh     number                 Count remaining
-
-// Badges (Post-MVP)
-badges            string[]    yes        Default: []
-                                         e.g., "phoenix_comeback", "streak_30", "first_pr"
+// powerUps item fields:
+{
+  streakShield:  number,
+  xpBooster:     number,
+  challengeSkip: number,
+  planRefresh:   number,
+  bossFightKey:  number
+}
 ```
+
+---
+
+### Subcollection: `users/{uid}/private`
+Under `/users/{uid}/private/profile`, stores private user metadata (e.g. encrypted or credentials-scoped fields). Separated from the public user document for security.
 
 ---
 
 ### Subcollection: `users/{uid}/sessions`
-
-One document per workout session.
-
+Stores completed workout sessions.
 ```
-users/{uid}/sessions/{sessionId}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-sessionId         string      yes        Auto-generated Firestore ID
-date              timestamp   yes        Session start time (server timestamp)
-dateString        string      yes        "YYYY-MM-DD" — for streak/daily queries
-moodTag           string      no         "locked_in" | "average" | "low_energy"
-stomachFlag       boolean     yes        true if user flagged fatigue pre-session
-totalVolume       number      yes        Sum of (weight × reps) across all sets, in kg
-totalSets         number      yes        Total completed sets
-durationMinutes   number      no         Session duration in minutes
-xpEarned          number      yes        XP awarded for this session
-debrief           map         no         AI Coach post-workout debrief:
-  pain            string[]               Exercise keys causing joint pain
-  easy            string[]               Exercise keys that felt too easy
-  brokenEquipment string[]               Exercise keys with broken/unavailable machines
-
+sessionId         string      yes        Auto-generated document ID
+date              timestamp   yes        Start timestamp
+dateString        string      yes        "YYYY-MM-DD" for streak query
+moodTag           string      yes        "locked_in" | "average" | "low_energy"
+stomachFlag       boolean     yes        Fatigue pre-session check
+totalVolume       number      yes        Sum of (weight × reps) across all sets (kg)
+totalSets         number      yes        Total sets completed
+durationMinutes   number      no         Session duration
+xpEarned          number      yes        XP awarded for this workout
+debrief           map         no         AI review metrics
 ```
 
----
-
-### Subcollection: `users/{uid}/sessions/{sessionId}/exercises`
-
-One document per exercise within a session.
-
+#### Nested Subcollection: `users/{uid}/sessions/{sessionId}/exercises`
 ```
-users/{uid}/sessions/{sessionId}/exercises/{exerciseId}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-exerciseId        string      yes        Auto-generated
-name              string      yes        Display name e.g. "Barbell Bench Press"
-exerciseKey       string      yes        Normalised key e.g. "barbell_bench_press" (for PR lookup)
-muscleGroup       string      yes        "chest" | "back" | "legs" | "shoulders" | "arms" | "core"
-sets              array       yes        Array of set objects (see below)
-
-// sets[] item structure:
-{
-  reps:     number   // Completed reps
-  weight:   number   // Weight in kg
-  done:     boolean  // true when logged
-}
-
-volume            number      yes        Sum of (weight × reps) for this exercise
+exerciseId        string      yes        Auto-generated ID
+name              string      yes        Display name
+exerciseKey       string      yes        Normalized lookup key
+muscleGroup       string      yes        "chest" | "back" | "legs" | etc.
+volume            number      yes        Exercise total volume
+sets              array       yes        Array of set rows (reps, weight, done)
 ```
 
 ---
 
 ### Subcollection: `users/{uid}/prs`
-
-One document per exercise — stores the all-time PR. Updated when broken.
-
+Tracks personal records per exercise.
 ```
-users/{uid}/prs/{exerciseKey}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-exerciseKey       string      yes        e.g. "barbell_bench_press" (doc ID)
+exerciseKey       string      yes        Normalized key (document ID)
 exerciseName      string      yes        Display name
-weight            number      yes        Heaviest weight ever lifted for this exercise
-reps              number      yes        Reps performed at that weight
-date              timestamp   yes        When this PR was set
-previousWeight    number      no         Prior PR weight (for delta display)
+weight            number      yes        Max weight ever lifted (kg)
+reps              number      yes        Reps done at that weight
+date              timestamp   yes        Date achieved
+previousWeight    number      no         Prior record
 ```
-
-**PR detection logic:** On set complete, query `prs/{exerciseKey}`. If `newWeight > prs.weight` (at same or higher reps) OR no PR exists → update doc, trigger PR celebration.
 
 ---
 
 ### Subcollection: `users/{uid}/weeklyPlans`
-
-One document per week. Old plans are kept (history).
-
+Tracks 6-day routines generated by AI.
 ```
-users/{uid}/weeklyPlans/{weekId}
-
-weekId format: "2026-W23" (ISO week)
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-weekId            string      yes        e.g. "2026-W23"
-generatedAt       timestamp   yes        When Gemini generated this
-source            string      yes        "gemini" | "default_beginner"
-plan              map         yes        Full plan structure (see below)
-
-// plan structure (as stored):
-{
-  "days": [
-    {
-      "day": 1,
-      "focus": "Push",
-      "exercises": [
-        {
-          "name": "Barbell Bench Press",
-          "exerciseKey": "barbell_bench_press",
-          "sets": 4,
-          "reps": "8-10",
-          "targetWeight": 60
-        }
-      ]
-    },
-    ...
-    { "day": 7, "focus": "Rest", "exercises": [] }
-  ]
-}
+weekId            string      yes        ISO week e.g. "2026-W23" (document ID)
+generatedAt       timestamp   yes        Generation timestamp
+source            string      yes        "gemini" | "groq"
+plan              map         yes        Structured day-by-day routines
 ```
 
 ---
 
 ### Subcollection: `users/{uid}/xpLog`
-
-Append-only log of every XP event.
-
+Audit ledger of XP transactions.
 ```
-users/{uid}/xpLog/{entryId}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-entryId           string      yes        Auto-generated
-source            string      yes        "session_logged" | "pr_hit" | "challenge_mission" |
-                                         "streak_3" | "streak_7" | "streak_30" |
-                                         "body_measurement" | "onboarding_complete" |
-                                         "level_up_bonus" | "social_invite"
-amount            number      yes        XP awarded (always positive)
+entryId           string      yes        Auto-generated ID
+source            string      yes        Event key e.g. "session_logged"
+amount            number      yes        XP amount (positive or negative)
 timestamp         timestamp   yes        Server timestamp
-sessionId         string      no         Reference if source is session-related
-challengeId       string      no         Reference if source is challenge-related
+reason            string      no         Display label
 ```
 
 ---
 
-### Collection: `challenges`
-
+### Collection: `squad_codes`
+Public directory of athletes and members. Used by the Scouting Matrix to match free agents and update dashboards.
 ```
-challenges/{challengeId}
-
 Field             Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-challengeId       string      yes        Auto-generated
-type              string      yes        "comeback" | "streak" | "arm_builder" | "custom"
-creatorUid        string      yes        UID of user who started/created
-participants      string[]    yes        Array of UIDs (includes creator)
-startDate         timestamp   yes
-endDate           timestamp   yes
-status            string      yes        "active" | "completed" | "abandoned"
-goal              map         yes        Type-specific goal config (see below)
-progress          map         yes        { uid: progressData } — one entry per participant
-
-// goal examples per type:
-// comeback: { durationWeeks: 8, startCapacityPct: 40 }
-// streak:   { workoutsPerWeek: 3, durationWeeks: 8 }
-
-// progress[uid] example:
-// comeback: { currentWeek: 3, completedSessions: 9, badgeEarned: false }
-// streak:   { currentWeek: 3, weeklyCount: [3,3,2,0,...], badgeEarned: false }
+uid               string      yes        User UID (document ID)
+name              string      yes        Display Name
+xp                number      yes        XP
+level             number      yes        Level
+streak            number      yes        Streak
+volume            number      yes        Current weekly volume
+squadCode         string      yes        Joined squad code (empty if none)
+lookingForSquad   boolean     yes        If true, registered as Free Agent
+gymId             string      no         Home Gym ID
+gymName           string      no         Home Gym Name
+benchPR           number      yes        Barbell Bench Press record
+squatPR           number      yes        Barbell Squat record
+strengthScore     number      yes        Hypertrophy index (0-100)
+consistency       number      yes        14-day training consistency (0-100)
+goal              string      yes        User fitness goal
+avatarUrl         string      no         Avatar URL
+aura              string      no         Avatar glowing aura color
+updatedAt         timestamp   yes        Last sync timestamp
 ```
 
 ---
 
-### Subcollection: `users/{uid}/measurements` (Post-MVP)
-
+### Collection: `shared_squads`
+Coordinates PvE challenges, activity feeds, check-ins, and voting.
 ```
-users/{uid}/measurements/{dateString}
-
-Field             Type        Required   Notes
+Field                   Type        Required   Notes
 ─────────────────────────────────────────────────────────────────
-dateString        string      yes        "YYYY-MM-DD" (doc ID)
-date              timestamp   yes
-arms              number      no         In cm
-chest             number      no         In cm
-waist             number      no         In cm
-shoulders         number      no         In cm
+squadCode               string      yes        Unique code e.g. "ZK-TEST123"
+squadName               string      yes        Display Name
+creatorUid              string      yes        Owner UID
+memberUids              string[]    yes        Array of joined UIDs
+members                 array       yes        Array of member profile structures
+activeChallenge         map         no         PvE Titan Raid state
+winStreak               number      yes        Consequent Titan victories
+regenerationVotes       string[]    no         UIDs who voted to regenerate Titan
+lastRegenTimestamp      number      no         Epoch MS of last challenge change
+createdAt               timestamp   yes        Created time
+weeklyXPMultiplier      number      yes        Multiplier (e.g. 1.06)
+dailyCheckIns           map         yes        Map of daily check-in statuses
+```
+
+#### Subcollection: `shared_squads/{squadCode}/presence`
+Tracks check-in schedules.
+```
+Field                   Type        Required   Notes
+─────────────────────────────────────────────────────────────────
+uid                     string      yes        User UID (document ID)
+name                    string      yes        Display name
+time                    string      yes        Selected time e.g. "17:30" or "Not Going"
+targetTimestamp         timestamp   no         Date time target
+createdAt               timestamp   yes        Check-in timestamp
+personalNotified        boolean     yes        Personal 1h reminder sent
+teammatesNotified       boolean     yes        Teammates 1h reminder sent
+```
+
+#### Subcollection: `shared_squads/{squadCode}/polls`
+Tracks schedule voting polls.
+```
+Field                   Type        Required   Notes
+─────────────────────────────────────────────────────────────────
+pollId                  string      yes        Auto-generated ID (document ID)
+question                string      yes        Question text
+options                 string[]    yes        Array of choices
+votes                   map         yes        Map of votes: { [uid]: optionIdx }
+creatorUid              string      yes        Creator UID
+creatorName             string      yes        Creator Name
+createdAt               timestamp   yes        Created time
+status                  string      yes        "active" | "closed"
+```
+
+#### Subcollection: `shared_squads/{squadCode}/activity_feed`
+Workout feed of squad members.
+```
+Field                   Type        Required   Notes
+─────────────────────────────────────────────────────────────────
+activityId              string      yes        Session ID (document ID)
+uid                     string      yes        Athlete UID
+name                    string      yes        Athlete Name
+workoutName             string      yes        Workout summary name
+exercisesCount          number      yes        Exercises logged
+totalSets               number      yes        Sets logged
+totalVolume             number      yes        Volume logged (kg)
+prNames                 string[]    yes        PRs set during session
+cardTheme               string      yes        "pr_smash" | "titan_slayer" | "standard"
+highFives               string[]    yes        UIDs who high-fived this post
+kudos                   string[]    yes        UIDs who sent kudos to this post
+createdAt               timestamp   yes        Workout date
+durationMinutes         number      yes        Session duration
+moodTag                 string      yes        Mood tag
+exercises               array       yes        Exercises summary list
 ```
 
 ---
 
-## 2. XP Level Thresholds
-
-```javascript
-const LEVELS = [
-  { level: 1,  name: 'Rookie',     xpRequired: 0    },
-  { level: 2,  name: 'Rookie',     xpRequired: 100  },
-  { level: 3,  name: 'Rookie',     xpRequired: 250  },
-  { level: 4,  name: 'Rookie',     xpRequired: 450  },
-  { level: 5,  name: 'Rookie',     xpRequired: 700  },
-  { level: 6,  name: 'Challenger', xpRequired: 1000 },
-  { level: 10, name: 'Challenger', xpRequired: 2500 },
-  { level: 15, name: 'Challenger', xpRequired: 6000 },
-  { level: 16, name: 'Athlete',    xpRequired: 7000 },
-  { level: 20, name: 'Athlete',    xpRequired: 12000},
-  { level: 30, name: 'Athlete',    xpRequired: 28000},
-  { level: 31, name: 'Elite',      xpRequired: 30000},
-];
+### Collection: `squad_invites`
+Tracks scouting draft invitations.
+```
+Field                   Type        Required   Notes
+─────────────────────────────────────────────────────────────────
+inviteId                string      yes        Format: `${squadCode}_${inviteeUid}`
+squadCode               string      yes        Squad Code
+squadName               string      yes        Squad Name
+inviterUid              string      yes        Sender UID
+inviterName             string      yes        Sender Name
+inviteeUid              string      yes        Recipient UID
+status                  string      yes        "pending" | "accepted" | "declined"
+createdAt               timestamp   yes        Timestamp sent
 ```
 
 ---
 
-## 3. Exercise Bank Structure (Static JSON, bundled with app)
+## 2. Backend REST API Endpoints
 
-Stored as `src/data/exercises.json`. Not in Firestore.
+The Node.js Express backend exposes the following REST endpoints. All non-public endpoints require a valid Firebase Auth ID Token passed in the `Authorization: Bearer <token>` header, parsed by the `authGuard` middleware.
 
-```json
-[
-  {
-    "key": "barbell_bench_press",
-    "name": "Barbell Bench Press",
-    "muscleGroup": "chest",
-    "equipmentRequired": ["barbell", "bench"],
-    "medicallyRestricted": [],
-    "aliases": ["bench press", "flat bench"]
-  },
-  {
-    "key": "overhead_press",
-    "name": "Overhead Press",
-    "muscleGroup": "shoulders",
-    "equipmentRequired": ["barbell"],
-    "medicallyRestricted": ["shoulder_impingement"],
-    "aliases": ["OHP", "military press", "shoulder press"]
-  }
-]
-```
+### 2.1 `POST /api/verifyGymImage`
+- **Purpose**: Vision-based validation of gym check-in photos.
+- **Payload**: `{ image: "base64DataString" }`
+- **Rate Limit**: Max 2 attempts per 5 minutes, 5 attempts per 24 hours (tracked in user document).
+- **Processing**: Queries Gemini Vision (primary) or Groq Vision (fallback) to verify if the photo displays a real gym.
+- **Success**: Returns `{ success: true, verified: true, modelUsed: "gemini-flash" }` and updates `overdriveVerifiedAt` in Firestore.
 
-**Filtering logic:** On exercise search, filter by:
-1. `equipmentRequired` — all items must be in user's `equipmentList`
-2. `medicallyRestricted` — no overlap with user's `medicalFlags`
-3. Text match on `name` or `aliases`
+### 2.2 `POST /api/generatePlan`
+- **Purpose**: Generates a 6-day fitness plan using Gemini/Groq.
+- **Payload**: `{ usePowerUp: boolean }`
+- **Rate Limit**: 5 free daily plan updates, or consumes a `planRefresh` power-up. Capped at 2 per hour.
+- **Response**: `{ success: true, weekId: "2026-W23" }`
 
-Curated list of ~120 exercises covering Indian gym realities.
+### 2.3 `POST /api/generateChallenge`
+- **Purpose**: Generates dynamic user challenges.
+- **Payload**: `{ type: "comeback" | "streak" }`
+- **Response**: `{ success: true, challengeId: string }`
 
----
+### 2.4 `POST /api/getPRStats`
+- **Purpose**: Fetches bodyweight-relative strength standards for an exercise.
+- **Payload**: `{ exerciseName: string, gender: "male" | "female" }`
+- **Response**: `{ data: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.3, elite: 1.6 } }`
+- **Caching**: Queries local pre-computed standard database first, then Firestore cache, then Groq/Gemini, and caches the result for 30 days.
 
-## 4. Cloud Functions Spec
+### 2.5 `POST /api/generateSquadChallenge`
+- **Purpose**: Generates PvE Titan boss.
+- **Payload**: `{ squadCode: string, isRegen: boolean }`
+- **Rules**: If `isRegen` is true, requires $>50\%$ of squad members to have voted, and has a 48-hour cooldown.
+- **Response**: `{ success: true, activeChallenge: object }`
 
-### `generatePlan` (callable)
+### 2.6 `POST /api/generateWeeklyMagazine`
+- **Purpose**: Formulates the weekly AI newspaper issue.
+- **Payload**: `{ weekId: string }`
+- **Rate Limit**: Capped at 1 reprint per week. Caches generated issues in Firestore.
+- **Response**: `{ success: true, issue: object }`
 
-```javascript
-// functions/src/generatePlan.js
+### 2.7 `POST /api/sendNotification`
+- **Purpose**: Squad-scoped messaging notifications.
+- **Payload**: `{ squadCode: string, recipientUids?: string[], title: string, body: string, data?: object }`
+- **Response**: `{ success: true }`
 
-exports.generatePlan = onCall(async (request) => {
-  const uid = request.auth.uid;  // Auto-verified by Firebase
-  if (!uid) throw new HttpsError('unauthenticated', 'Login required');
+### 2.8 `POST /api/scheduleRestNotification`
+- **Purpose**: Schedules a server-side timeout rest notification.
+- **Payload**: `{ seconds: number }` (Capped at 600s).
+- **Response**: `{ success: true, message: string }`
 
-  // 1. Fetch user profile
-  const userDoc = await db.doc(`users/${uid}`).get();
-  const { equipmentList, medicalFlags, userType } = userDoc.data();
+### 2.9 `POST /api/cancelRestNotification`
+- **Purpose**: Cancels an active server-side rest timeout.
+- **Payload**: `{}`
+- **Response**: `{ success: true }`
 
-  // 2. Fetch last 14 sessions
-  const sessionsSnap = await db
-    .collection(`users/${uid}/sessions`)
-    .orderBy('date', 'desc')
-    .limit(14)
-    .get();
-  const sessions = sessionsSnap.docs.map(d => d.data());
+### 2.10 `POST /api/openTreasureChest`
+- **Purpose**: Deducts keys to open a loot box.
+- **Payload**: `{ chestType: "common" | "rare" | "legendary" }`
+- **Response**: `{ success: true, tier: string, reward: object, nextKeys: number }`
 
-  // 3. Build prompt
-  const prompt = buildPlanPrompt({ userType, equipmentList, medicalFlags, sessions });
-
-  // 4. Call Gemini Flash
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-
-  // 5. Parse + validate JSON
-  const plan = JSON.parse(text);
-  validatePlan(plan, equipmentList, medicalFlags);  // Throws if invalid
-
-  // 6. Write to Firestore
-  const weekId = getISOWeek();  // e.g., "2026-W23"
-  await db.doc(`users/${uid}/weeklyPlans/${weekId}`).set({
-    weekId, generatedAt: FieldValue.serverTimestamp(),
-    source: 'gemini', plan
-  });
-
-  return { success: true, weekId };
-});
-```
-
----
-
-## 5. Firestore Security Rules (Full)
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    function isAuth() {
-      return request.auth != null;
-    }
-
-    function isOwner(uid) {
-      return isAuth() && request.auth.uid == uid;
-    }
-
-    // User top-level document
-    match /users/{uid} {
-      allow read, write: if isOwner(uid);
-
-      // All subcollections: sessions, prs, weeklyPlans, xpLog, measurements
-      match /{subcollection}/{docId} {
-        allow read, write: if isOwner(uid);
-
-        // exercises nested under sessions
-        match /{nestedDoc} {
-          allow read, write: if isOwner(uid);
-        }
-      }
-    }
-
-    // Challenges: readable by participants, writable by creator or participant
-    match /challenges/{challengeId} {
-      allow read: if isAuth() &&
-        request.auth.uid in resource.data.participants;
-      
-      allow create: if isAuth();
-      
-      allow update: if isAuth() && (
-        request.auth.uid == resource.data.creatorUid ||
-        request.auth.uid in resource.data.participants
-      );
-      
-      // No delete — challenges are permanent record
-      allow delete: if false;
-    }
-  }
-}
-```
-
----
-
-## 6. Required Firestore Indexes
-
-Composite indexes needed (set in `firestore.indexes.json`):
-
-```json
-{
-  "indexes": [
-    {
-      "collectionGroup": "sessions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "sessions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dateString", "order": "ASCENDING" },
-        { "fieldPath": "xpEarned", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "xpLog",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "timestamp", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "challenges",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "startDate", "order": "DESCENDING" }
-      ]
-    }
-  ]
-}
-```
-
----
-
-## 7. Write Patterns & Consistency Rules
-
-### Session Write (on session complete)
-All of these writes must complete atomically. Use a Firestore **batch write**:
-
-```
-Batch:
-  1. SET   users/{uid}/sessions/{sessionId}           ← session doc
-  2. SET   users/{uid}/sessions/{sessionId}/exercises  ← exercise docs (loop)
-  3. SET   users/{uid}/prs/{exerciseKey}               ← if PR broken (conditional)
-  4. ADD   users/{uid}/xpLog/{newId}                  ← XP entry
-  5. UPDATE users/{uid}                               ← increment xp, update streak, level
-```
-
-If any write fails, the batch rolls back entirely. User sees error toast: "Session couldn't save. Retry?"
-
-### Streak Update Logic (client-side, useXPEngine)
-```
-On session complete:
-  today = YYYY-MM-DD (local timezone)
-  
-  if streakLastDate == yesterday:
-    streak += 1
-  else if streakLastDate == today:
-    streak unchanged  (already logged today)
-  else:
-    streak = 1  (gap > 1 day, reset)
-  
-  streakLastDate = today
-  
-  if streak == 3: awardXP(30, 'streak_3')
-  if streak == 7: awardXP(100, 'streak_7')
-  if streak == 30: awardXP(500, 'streak_30')
-```
-
----
-
-## 8. Data Retention & Limits
-
-| Collection | Limit | Rationale |
-|---|---|---|
-| sessions | No limit | Core data, keep forever |
-| exercises (per session) | No limit | Typically 3–8 per session |
-| xpLog | No limit | Append-only, small docs |
-| weeklyPlans | Keep last 12 | Auto-cleanup via Cloud Function (post-MVP) |
-| prs | One per exercise | Always overwritten |
-| measurements | No limit | One per day, infrequent |
-
-**Estimated Firestore cost for active user:** ~5,000 reads/month, ~2,000 writes/month. Well within free tier (50k reads/day, 20k writes/day).
+### 2.11 `POST /api/summonNextTitan`
+- **Purpose**: Manually summons the next Titan boss.
+- **Payload**: `{ squadCode: string }`
+- **Cooldown**: Costs 2 keys if summoned within 24 hours of defeating the last Titan, otherwise costs 1 key.
+- **Response**: `{ success: true, activeChallenge: object, nextKeys: number }`

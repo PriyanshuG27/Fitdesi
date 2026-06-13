@@ -1,223 +1,107 @@
 # Zenkai — Environment Configuration
 
-**Version:** 1.0  
-**Date:** June 2026  
+This document lists all environment variables required to run Zenkai locally and in production.
 
 ---
 
-## 1. Complete Variable Registry
+## 1. Client Environment Configuration
 
-| Variable | Location | Who reads it | Required | What breaks if missing |
-|---|---|---|---|---|
-| `VITE_FIREBASE_API_KEY` | Client `.env` | Firebase client SDK | YES | App fails to initialise — white screen |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Client `.env` | Firebase Auth | YES | Login/signup fails |
-| `VITE_FIREBASE_PROJECT_ID` | Client `.env` | Firestore client SDK | YES | All Firestore reads/writes fail |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Client `.env` | Firebase Storage (post-MVP) | NO | Storage uploads fail (not MVP) |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Client `.env` | Firebase Cloud Messaging | NO | Push notifications fail (post-MVP) |
-| `VITE_FIREBASE_APP_ID` | Client `.env` | Firebase SDK init | YES | App fails to initialise |
-| `GEMINI_API_KEY` | Cloud Functions only | `generatePlan` function | YES | Plan generation fails with 500 error |
+The React frontend is built with Vite. Client variables must be prefixed with `VITE_` to be bundled into the client code.
 
----
-
-## 2. Local Development Setup
-
-### Step 1 — Create `.env` in project root
-```bash
-# .env (never commit this file)
-VITE_FIREBASE_API_KEY=AIzaSy...
-VITE_FIREBASE_AUTH_DOMAIN=zenkai-xyz.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=zenkai-xyz
-VITE_FIREBASE_STORAGE_BUCKET=zenkai-xyz.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
-```
-
-Get these values from: Firebase Console → Project Settings → Your apps → Web app → SDK setup and configuration.
-
-### Step 2 — Set Gemini key in Cloud Functions
-```bash
-# Never put this in a file. Set via CLI only.
-firebase functions:config:set gemini.key="YOUR_GEMINI_API_KEY"
-
-# Verify it's set:
-firebase functions:config:get
-# Expected output: { "gemini": { "key": "AIza..." } }
-```
-
-To use in Cloud Function code:
-```javascript
-// functions/src/generatePlan.js
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
-// Firebase Functions v2 (Gen 2): use process.env directly
-// The key is available because firebase functions:config:set sets it
-// OR: use Firebase Secret Manager for production (recommended)
-```
-
-### Step 3 — `.env` for local Functions testing
-```bash
-# functions/.env (only used with emulator, never deployed)
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-```
-
-### Step 4 — `.gitignore` verification
-```
-.env
-.env.local
-.env.*.local
-functions/.env
-functions/serviceAccountKey.json
-functions/.runtimeconfig.json
-```
-
-Check: `git status` after creating `.env` — if it appears, `.gitignore` is wrong.
-
----
-
-## 3. Vercel Environment Setup
-
-Set in Vercel Dashboard → Project → Settings → Environment Variables.
-
-| Variable | Environment | Value source |
-|---|---|---|
-| `VITE_FIREBASE_API_KEY` | Production + Preview | Firebase Console |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Production + Preview | Firebase Console |
-| `VITE_FIREBASE_PROJECT_ID` | Production + Preview | Firebase Console |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Production + Preview | Firebase Console |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Production + Preview | Firebase Console |
-| `VITE_FIREBASE_APP_ID` | Production + Preview | Firebase Console |
-
-**Do not set `GEMINI_API_KEY` in Vercel** — it only goes in Firebase Functions config.
-
-After setting, trigger a new Vercel deploy for variables to take effect.
-
----
-
-## 4. Firebase Project Setup Checklist
+Create a `.env` file in the project root directory:
 
 ```bash
-# 1. Login
-firebase login
-
-# 2. Init in project root (select: Functions, Firestore, Emulators)
-firebase init
-
-# 3. Enable services in Firebase Console manually:
-#    Authentication → Sign-in method → Enable: Email/Password + Google
-#    Firestore → Create database → Production mode
-#    Functions → Requires Blaze (pay-as-you-go) plan
-
-# 4. Set Gemini key
-firebase functions:config:set gemini.key="YOUR_KEY"
-
-# 5. Deploy Firestore rules
-firebase deploy --only firestore:rules
-
-# 6. Deploy functions (first deploy)
-firebase deploy --only functions
-
-# 7. Deploy Firestore indexes
-firebase deploy --only firestore:indexes
+# .env (Never commit this file to Git)
+VITE_FIREBASE_API_KEY=AIzaSyA1...
+VITE_FIREBASE_AUTH_DOMAIN=zenkai-fit.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=zenkai-fit
+VITE_FIREBASE_STORAGE_BUCKET=zenkai-fit.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=102938475610
+VITE_FIREBASE_APP_ID=1:102938475610:web:a1b2c3d4e5f6
+VITE_API_BASE_URL=http://localhost:10000  # Points to local Express server in dev
 ```
+
+### 1.1 Client Variables Registry
+- `VITE_FIREBASE_API_KEY`: Initialises the Firebase web client.
+- `VITE_FIREBASE_AUTH_DOMAIN` / `VITE_FIREBASE_PROJECT_ID` / `VITE_FIREBASE_APP_ID`: Firebase connection credentials.
+- `VITE_API_BASE_URL`: Base API route pointing to the Express server.
+  - In development: `http://localhost:10000`
+  - In production: URL of the hosted Render web service (e.g. `https://zenkai-backend.onrender.com`).
 
 ---
 
-## 5. Secret Manager (Recommended for Production)
+## 2. Backend Environment Configuration
 
-Firebase Secret Manager is more secure than `functions:config:set` for the Gemini key.
+The Express server runs as a separate service. Create a `.env` file inside the `backend/` folder:
 
 ```bash
-# Create secret
-echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create gemini-api-key --data-file=-
+# backend/.env (Never commit this file to Git)
+PORT=10000
+ALLOWED_ORIGINS=http://localhost:5173  # Comma-separated allowed origins (dev)
+GEMINI_API_KEY=AIzaSyB2...             # Primary Vision/AI model key
+GROQ_API_KEY=gsk_3c9d...               # Primary LLM / Fallback Vision key
 
-# Grant Cloud Functions access
-gcloud secrets add-iam-policy-binding gemini-api-key \
-  --member="serviceAccount:YOUR_PROJECT@appspot.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+# Firebase Admin SDK credentials
+FIREBASE_PROJECT_ID=zenkai-fit
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@zenkai-fit.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n"
 ```
 
-```javascript
-// functions/src/generatePlan.js (Secret Manager approach)
-import { defineSecret } from 'firebase-functions/params';
-const geminiKey = defineSecret('GEMINI_API_KEY');
-
-export const generatePlan = onCall({ secrets: [geminiKey] }, async (request) => {
-  const key = geminiKey.value();
-  // use key
-});
-```
-
-This is the production-grade approach. `functions:config:set` works fine for portfolio.
+### 2.2 Backend Variables Registry
+- `PORT`: Port the Express server listens on (defaults to `10000`).
+- `ALLOWED_ORIGINS`: Comma-separated client origins allowed by CORS.
+  - In production, set to your Vercel deployment URL (e.g. `https://zenkai.vercel.app`).
+- `GEMINI_API_KEY`: Key for Google AI Studio API (used for plan generation, image checks, and backups).
+- `GROQ_API_KEY`: Key for Groq Cloud API (used for Llama 3 models in challenges, weekly magazines, and standards).
+- `FIREBASE_PROJECT_ID`: Firebase project identifier.
+- `FIREBASE_CLIENT_EMAIL`: Service account email used by the Admin SDK.
+- `FIREBASE_PRIVATE_KEY`: Service account private key string.
+  - **Note**: Ensure line breaks (`\n`) are preserved. In hosting environments, wrap the string in double quotes.
 
 ---
 
-## 6. Environment Validation on Startup
+## 3. Local Development Startup Checklist
 
-Catch missing variables at startup, not at runtime.
+To run the full stack locally:
 
-```javascript
-// src/lib/validateEnv.js
-const REQUIRED_VARS = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_APP_ID',
-];
+```bash
+# 1. Install dependencies at root and backend
+npm install
+cd backend && npm install
+cd ..
 
-export const validateEnv = () => {
-  const missing = REQUIRED_VARS.filter(v => !import.meta.env[v]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables:\n${missing.join('\n')}\n\nCheck your .env file.`
-    );
-  }
-};
+# 2. Run the Frontend (Terminal 1)
+npm run dev
+# -> Opens on http://localhost:5173
 
-// Call in main.jsx before rendering
-validateEnv();
+# 3. Run the Express Backend (Terminal 2)
+cd backend
+npm start
+# -> Operational on port 10000
 ```
 
 ---
 
-## 7. Key Rotation Procedure
+## 4. Production Environment Mapping (Render & Vercel)
 
-### Rotating Gemini API Key
-1. Generate new key in Google AI Studio
-2. `firebase functions:config:set gemini.key="NEW_KEY"`
-3. `firebase deploy --only functions`
-4. Verify: trigger a plan generation manually
-5. Revoke old key in Google AI Studio
+When deploying, map these variables in the respective dashboard interfaces:
 
-### Rotating Firebase Config (if project is compromised)
-Firebase client config keys are NOT secrets (see SECURITY.md Section 2). Rotation is only needed if you're migrating to a new Firebase project.
-1. Create new Firebase project
-2. Update all `VITE_FIREBASE_*` vars in Vercel dashboard
-3. Migrate Firestore data (export → import)
-4. Update `firebase.json` project ID
-5. Redeploy
+### 4.1 Vercel Dashboard (Frontend)
+Set the following keys in Vercel project Settings $\rightarrow$ Environment Variables:
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_API_BASE_URL` (Points to Render backend URL)
 
----
-
-## 8. Emulator Config
-
-```json
-// firebase.json (emulators section)
-{
-  "emulators": {
-    "auth": { "port": 9099 },
-    "firestore": { "port": 8080 },
-    "functions": { "port": 5001 },
-    "ui": { "enabled": true, "port": 4000 }
-  }
-}
-```
-
-```javascript
-// src/lib/firebase.js — connect to emulators in dev
-if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://localhost:9099');
-  connectFirestoreEmulator(db, 'localhost', 8080);
-  connectFunctionsEmulator(functions, 'localhost', 5001);
-}
-```
-
-Add `VITE_USE_EMULATOR=true` to `.env.local` (not `.env`) for emulator development.
+### 4.2 Render Dashboard (Backend Web Service)
+Set the following keys in Render Environment configuration:
+- `PORT` = `10000`
+- `ALLOWED_ORIGINS` = `https://your-vercel-domain.vercel.app`
+- `GEMINI_API_KEY`
+- `GROQ_API_KEY`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY` (Paste the service account private key string directly)
